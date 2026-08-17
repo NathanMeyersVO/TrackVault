@@ -1,0 +1,74 @@
+import { invoke } from "@tauri-apps/api/core";
+
+export interface Track {
+  id: number;
+  path: string;
+  title: string;
+  artist: string;
+  album: string;
+  duration_ms: number;
+  track_number: number | null;
+  added_at: number;
+  has_peaks: boolean;
+}
+
+export interface Playlist {
+  id: number;
+  name: string;
+  created_at: number;
+  track_count: number;
+}
+
+export interface PlaybackState {
+  track_id: number | null;
+  position_ms: number;
+  duration_ms: number;
+  is_playing: boolean;
+}
+
+export interface WaveformPeaks {
+  peaks: number[];
+  duration_ms: number;
+}
+
+export interface ScanProgress {
+  scanned: number;
+  added: number;
+  done: boolean;
+}
+
+export const api = {
+  listTracks: () => invoke<Track[]>("list_tracks"),
+  listWatchFolders: () => invoke<string[]>("list_watch_folders"),
+  addWatchFolder: (path: string) =>
+    invoke<ScanProgress>("add_watch_folder", { path }),
+  scanLibrary: () => invoke<ScanProgress>("scan_library"),
+  createPlaylist: (name: string) =>
+    invoke<number>("create_playlist", { name }),
+  deletePlaylist: (id: number) => invoke<void>("delete_playlist", { id }),
+  listPlaylists: () => invoke<Playlist[]>("list_playlists"),
+  getPlaylistTracks: (playlistId: number) =>
+    invoke<Track[]>("get_playlist_tracks", { playlistId }),
+  addTrackToPlaylist: (playlistId: number, trackId: number) =>
+    invoke<void>("add_track_to_playlist", { playlistId, trackId }),
+  removeTrackFromPlaylist: (playlistId: number, trackId: number) =>
+    invoke<void>("remove_track_from_playlist", { playlistId, trackId }),
+  playTrack: (trackId: number, startMs?: number) =>
+    invoke<PlaybackState>("play_track", { trackId, startMs }),
+  pausePlayback: () => invoke<PlaybackState>("pause_playback"),
+  resumePlayback: () => invoke<PlaybackState>("resume_playback"),
+  stopPlayback: () => invoke<PlaybackState>("stop_playback"),
+  seekPlayback: (positionMs: number) =>
+    invoke<PlaybackState>("seek_playback", { positionMs }),
+  getPlaybackState: () => invoke<PlaybackState>("get_playback_state"),
+  getTrackPeaks: (trackId: number) =>
+    invoke<WaveformPeaks>("get_track_peaks", { trackId }),
+};
+
+export function formatDuration(ms: number): string {
+  if (!ms || ms < 0) return "0:00";
+  const totalSeconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+}

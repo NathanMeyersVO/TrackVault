@@ -1,0 +1,110 @@
+use std::path::{Path, PathBuf};
+
+use lofty::file::TaggedFileExt;
+use lofty::probe::Probe;
+use lofty::tag::Accessor;
+use walkdir::WalkDir;
+
+use crate::db::Database;
+use crate::models::ScanProgress;
+use crate::waveform::probe_duration_ms;
+
+const AUDIO_EXTENSIONS: &[&str] = &["mp3", "flac", "wav", "ogg", "m4a", "aac", "mp4", "aiff"];
+
+pub fn is_audio_file(path: &Path) -> bool {
+    path.extension()
+        .and_then(|e| e.to_str())
+        .map(|e| AUDIO_EXTENSIONS.contains(&e.to_lowercase().as_str()))
+        .unwrap_or(false)
+}
+
+pub fn read_tags(path: &Path) -> (String, String, String, Option<i32>, i64) {
+    let file_name = path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("Unknown")
+        .to_string();
+
+    let mut title = file_name.clone();
+    let mut artist = String::new();
+    let mut album = String::new();
+    let mut track_number = None;
+
+    if let Ok(tagged) = Probe::open(path).and_then(|p| p.read()) {
+        if let Some(tag) = tagged.primary_tag() {
+            if let Some(t) = tag.title().map(|s| s.to_string()) {
+                title = t;
+            }
+            if let Some(a) = tag.artist().map(|s| s.to_string()) {
+                artist = a;
+            }
+            if let Some(a) = tag.album().map(|s| s.to_string()) {
+                album = a;
+            }
+            track_number = tag.track().map(|n| n as i32);
+        }
+    }
+
+    let duration_ms = probe_duration_ms(path).unwrap_or(0);
+    (title, artist, album, track_number, duration_ms)
+}
+
+pub fn scan_folder(db: &Database, folder: &Path) -> Result<ScanProgress, String> {
+    let mut scanned = 0u32;
+    let mut added = 0u32;
+
+    for entry in WalkDir::new(folder)
+        .follow_links(false)
+        .into_iter()
+        .filter_map(|e| e.ok())
+    {
+        let path = entry.path();
+        if !path.is_file() || !is_audio_file(path) {
+            continue;
+        }
+
+        scanned += 1;
+        let path_str = path.to_string_lossy().to_string();
+        let (title, artist, album, track_number, duration_ms) = read_tags(path);
+
+        match db.upsert_track(
+            &path_str,
+            &title,
+            &artist,
+            &album,
+            duration_ms,
+            track_number,
+        ) {
+            Ok(true) => added += 1,
+            Ok(false) => {}
+            Err(e) => eprintln!("Failed to upsert {}: {}", path_str, e),
+        }
+    }
+
+    Ok(ScanProgress {
+        scanned,
+        added,
+        done: true,
+    })
+}
+
+pub fn scan_all_folders(db: &Database) -> Result<ScanProgress, String> {
+    let folders = db.list_watch_folders().map_err(|e| e.to_string())?;
+    let mut total = ScanProgress {
+        scanned: 0,
+        added: 0,
+        done: true,
+    };
+
+    for folder in folders {
+        let path = PathBuf::from(&folder);
+        if !path.exists() {
+            continue;
+        }
+        let progress = scan_folder(db, &path)?;
+        total.scanned += progress.scanned;
+        total.added += progress.added;
+    }
+
+    Ok(total)
+}
