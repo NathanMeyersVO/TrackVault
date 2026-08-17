@@ -66,6 +66,10 @@ impl Database {
                 ON playlist_tracks(playlist_id, position);
             ",
         )?;
+        let _ = self.conn.execute(
+            "ALTER TABLE tracks ADD COLUMN seek_index_json TEXT",
+            [],
+        );
         Ok(())
     }
 
@@ -160,6 +164,24 @@ impl Database {
         self.conn.execute(
             "UPDATE tracks SET peaks_json = ?1 WHERE id = ?2",
             params![peaks_json, id],
+        )?;
+        Ok(())
+    }
+
+    pub fn get_seek_index(&self, id: i64) -> Result<Option<String>, DbError> {
+        let mut stmt = self.conn.prepare("SELECT seek_index_json FROM tracks WHERE id = ?1")?;
+        let mut rows = stmt.query(params![id])?;
+        if let Some(row) = rows.next()? {
+            Ok(row.get(0)?)
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub fn set_seek_index(&self, id: i64, seek_index_json: &str) -> Result<(), DbError> {
+        self.conn.execute(
+            "UPDATE tracks SET seek_index_json = ?1 WHERE id = ?2",
+            params![seek_index_json, id],
         )?;
         Ok(())
     }

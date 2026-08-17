@@ -1,18 +1,39 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use parking_lot::Mutex;
 use tauri::{AppHandle, Emitter, Manager, State};
 
+use crate::audio_scan::scan_audio;
 use crate::db::Database;
 use crate::models::{PlaybackState, Playlist, ScanProgress, Track, WaveformPeaks};
 use crate::player::AudioPlayer;
 use crate::scanner;
-use crate::waveform;
+use crate::seek_index::{parse_seek_index, serialize_seek_index, SeekKeyframe};
 
 pub struct AppState {
     pub db: Mutex<Database>,
     pub player: Arc<AudioPlayer>,
+}
+
+fn load_or_build_seek_index(
+    db: &Database,
+    track_id: i64,
+    path: &Path,
+) -> Result<Vec<SeekKeyframe>, String> {
+    if let Some(json) = db.get_seek_index(track_id).map_err(|e| e.to_string())? {
+        if let Some(index) = parse_seek_index(&json) {
+            if !index.is_empty() {
+                return Ok(index);
+            }
+        }
+    }
+
+    let scan = scan_audio(path)?;
+    let json = serialize_seek_index(&scan.seek_index)?;
+    db.set_seek_index(track_id, &json)
+        .map_err(|e| e.to_string())?;
+    Ok(scan.seek_index)
 }
 
 #[tauri::command]
@@ -123,19 +144,28 @@ pub fn play_track(
     track_id: i64,
     start_ms: Option<u64>,
 ) -> Result<PlaybackState, String> {
-    let (path, duration_ms) = {
+    let (path, duration_ms, seek_index) = {
         let db = state.db.lock();
         let track = db
             .get_track(track_id)
             .map_err(|e| e.to_string())?
             .ok_or("Track not found")?;
-        (track.path, track.duration_ms as u64)
+        let seek_index = load_or_build_seek_index(
+            &db,
+            track_id,
+            Path::new(&track.path),
+        )?;
+        (track.path, track.duration_ms as u64, seek_index)
     };
 
     let start = start_ms.unwrap_or(0).min(duration_ms);
-    state
-        .player
-        .play(track_id, PathBuf::from(&path).as_path(), duration_ms, start)?;
+    state.player.play(
+        track_id,
+        PathBuf::from(&path).as_path(),
+        duration_ms,
+        start,
+        seek_index,
+    )?;
 
     Ok(state.player.state())
 }
@@ -178,31 +208,37 @@ pub fn get_track_peaks(state: State<'_, AppState>, track_id: i64) -> Result<Wave
     let cached = {
         let db = state.db.lock();
         let peaks = db.get_peaks(track_id).map_err(|e| e.to_string())?;
+        let seek_index = db.get_seek_index(track_id).map_err(|e| e.to_string())?;
         let track = db
             .get_track(track_id)
             .map_err(|e| e.to_string())?
             .ok_or("Track not found")?;
-        (peaks, track.path, track.duration_ms)
+        (peaks, seek_index, track.path, track.duration_ms)
     };
 
     if let Some(json) = cached.0 {
         if let Ok(peaks) = serde_json::from_str::<Vec<f32>>(&json) {
             return Ok(WaveformPeaks {
                 peaks,
-                duration_ms: cached.2,
+                duration_ms: cached.3,
             });
         }
     }
 
-    let generated = waveform::generate_peaks(PathBuf::from(&cached.1).as_path())?;
-    let json = serde_json::to_string(&generated.peaks).map_err(|e| e.to_string())?;
-    state
-        .db
-        .lock()
-        .set_peaks(track_id, &json)
-        .map_err(|e| e.to_string())?;
+    let scan = scan_audio(PathBuf::from(&cached.2).as_path())?;
+    let peaks_json = serde_json::to_string(&scan.peaks.peaks).map_err(|e| e.to_string())?;
+    let seek_index_json = serialize_seek_index(&scan.seek_index)?;
+    {
+        let db = state.db.lock();
+        db.set_peaks(track_id, &peaks_json)
+            .map_err(|e| e.to_string())?;
+        if cached.1.is_none() {
+            db.set_seek_index(track_id, &seek_index_json)
+                .map_err(|e| e.to_string())?;
+        }
+    }
 
-    Ok(generated)
+    Ok(scan.peaks)
 }
 
 pub fn init_state(app: &AppHandle) -> Result<AppState, String> {

@@ -1,8 +1,11 @@
+mod audio_scan;
 mod commands;
 mod db;
 mod models;
+mod playback;
 mod player;
 mod scanner;
+mod seek_index;
 mod waveform;
 
 use commands::{

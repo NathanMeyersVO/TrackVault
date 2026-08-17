@@ -1,16 +1,16 @@
-use std::fs::File;
-use std::io::BufReader;
 use std::path::PathBuf;
 use std::sync::mpsc::{self, Sender};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
-use parking_lot::Mutex;
-use rodio::{Decoder, OutputStream, Sink, Source};
+use parking_lot::Mutex as ParkingMutex;
+use rodio::{OutputStream, Sink};
 use tauri::{AppHandle, Emitter};
 
 use crate::models::PlaybackState;
+use crate::playback::{open_track_session, TrackSession};
+use crate::seek_index::SeekKeyframe;
 
 enum PlayerCommand {
     Play {
@@ -18,6 +18,7 @@ enum PlayerCommand {
         path: PathBuf,
         duration_ms: u64,
         start_ms: u64,
+        seek_index: Vec<SeekKeyframe>,
     },
     Pause,
     Resume,
@@ -30,12 +31,12 @@ enum PlayerCommand {
 struct PlayerRuntime {
     _stream: OutputStream,
     sink: Option<Sink>,
+    session: Option<Arc<Mutex<TrackSession>>>,
     track_id: Option<i64>,
     path: Option<PathBuf>,
     duration_ms: u64,
+    seek_index: Vec<SeekKeyframe>,
     position_ms: u64,
-    play_start: Option<Instant>,
-    play_start_offset_ms: u64,
     is_playing: bool,
 }
 
@@ -47,12 +48,12 @@ impl PlayerRuntime {
             Self {
                 _stream: stream,
                 sink: None,
+                session: None,
                 track_id: None,
                 path: None,
                 duration_ms: 0,
+                seek_index: Vec::new(),
                 position_ms: 0,
-                play_start: None,
-                play_start_offset_ms: 0,
                 is_playing: false,
             },
             stream_handle,
@@ -61,9 +62,10 @@ impl PlayerRuntime {
 
     fn current_position_ms(&self) -> u64 {
         if self.is_playing {
-            if let Some(start) = self.play_start {
-                let elapsed = start.elapsed().as_millis() as u64;
-                return (self.play_start_offset_ms + elapsed).min(self.duration_ms);
+            if let Some(session) = &self.session {
+                if let Ok(locked) = session.lock() {
+                    return locked.position_ms().min(self.duration_ms);
+                }
             }
         }
         self.position_ms.min(self.duration_ms)
@@ -85,30 +87,36 @@ impl PlayerRuntime {
         path: PathBuf,
         duration_ms: u64,
         start_ms: u64,
+        seek_index: Vec<SeekKeyframe>,
+        autoplay: bool,
     ) -> Result<(), String> {
         if let Some(sink) = self.sink.take() {
             sink.stop();
         }
 
+        let start = start_ms.min(duration_ms);
+        let (session, source) =
+            open_track_session(&path, duration_ms, seek_index.clone(), start)?;
+
         let sink = Sink::try_new(stream_handle)
             .map_err(|e| format!("Failed to create audio sink: {e}"))?;
-
-        let file = File::open(&path).map_err(|e| e.to_string())?;
-        let source = Decoder::new(BufReader::new(file)).map_err(|e| e.to_string())?;
-        let skip = Duration::from_millis(start_ms.min(duration_ms));
-        let source = source.skip_duration(skip);
-
         sink.append(source);
-        sink.play();
+
+        if autoplay {
+            sink.play();
+            self.is_playing = true;
+        } else {
+            sink.pause();
+            self.is_playing = false;
+            self.position_ms = start;
+        }
 
         self.sink = Some(sink);
+        self.session = Some(session);
         self.track_id = Some(track_id);
         self.path = Some(path);
         self.duration_ms = duration_ms;
-        self.position_ms = start_ms;
-        self.play_start_offset_ms = start_ms;
-        self.play_start = Some(Instant::now());
-        self.is_playing = true;
+        self.seek_index = seek_index;
         Ok(())
     }
 
@@ -117,7 +125,6 @@ impl PlayerRuntime {
             sink.pause();
         }
         self.position_ms = self.current_position_ms();
-        self.play_start = None;
         self.is_playing = false;
     }
 
@@ -126,7 +133,16 @@ impl PlayerRuntime {
         let path = self.path.clone().ok_or("Nothing to resume")?;
         let duration = self.duration_ms;
         let position = self.position_ms;
-        self.play_at(stream_handle, track_id, path, duration, position)
+        let seek_index = self.seek_index.clone();
+        self.play_at(
+            stream_handle,
+            track_id,
+            path,
+            duration,
+            position,
+            seek_index,
+            true,
+        )
     }
 
     fn stop(&mut self) {
@@ -134,10 +150,10 @@ impl PlayerRuntime {
             sink.stop();
         }
         self.sink = None;
+        self.session = None;
         self.is_playing = false;
-        self.play_start = None;
         self.position_ms = 0;
-        self.play_start_offset_ms = 0;
+        self.seek_index.clear();
     }
 
     fn seek(
@@ -145,30 +161,35 @@ impl PlayerRuntime {
         stream_handle: &rodio::OutputStreamHandle,
         position_ms: u64,
     ) -> Result<(), String> {
-        let track_id = self.track_id.ok_or("No track loaded")?;
         let path = self.path.clone().ok_or("No track loaded")?;
         let duration_ms = self.duration_ms;
+        let track_id = self.track_id.ok_or("No track loaded")?;
         let was_playing = self.is_playing;
         let target = position_ms.min(duration_ms);
+        let seek_index = self.seek_index.clone();
 
-        self.play_at(stream_handle, track_id, path, duration_ms, target)?;
-        if !was_playing {
-            self.pause();
-        }
-        Ok(())
+        self.play_at(
+            stream_handle,
+            track_id,
+            path,
+            duration_ms,
+            target,
+            seek_index,
+            was_playing,
+        )
     }
 }
 
 pub struct AudioPlayer {
     tx: Sender<PlayerCommand>,
-    shared_state: Arc<Mutex<PlaybackState>>,
+    shared_state: Arc<ParkingMutex<PlaybackState>>,
     _thread: JoinHandle<()>,
 }
 
 impl AudioPlayer {
     pub fn new() -> Result<Self, String> {
         let (cmd_tx, cmd_rx) = mpsc::channel::<PlayerCommand>();
-        let shared_state = Arc::new(Mutex::new(PlaybackState {
+        let shared_state = Arc::new(ParkingMutex::new(PlaybackState {
             track_id: None,
             position_ms: 0,
             duration_ms: 0,
@@ -190,12 +211,15 @@ impl AudioPlayer {
                                 path,
                                 duration_ms,
                                 start_ms,
+                                seek_index,
                             } => runtime.play_at(
                                 &stream_handle,
                                 track_id,
                                 path,
                                 duration_ms,
                                 start_ms,
+                                seek_index,
+                                true,
                             ),
                             PlayerCommand::Pause => {
                                 runtime.pause();
@@ -249,6 +273,7 @@ impl AudioPlayer {
         path: &std::path::Path,
         duration_ms: u64,
         start_ms: u64,
+        seek_index: Vec<SeekKeyframe>,
     ) -> Result<(), String> {
         self.tx
             .send(PlayerCommand::Play {
@@ -256,6 +281,7 @@ impl AudioPlayer {
                 path: path.to_path_buf(),
                 duration_ms,
                 start_ms,
+                seek_index,
             })
             .map_err(|e| e.to_string())?;
         self.wait_for_state(track_id)
@@ -303,8 +329,6 @@ impl AudioPlayer {
                 return Ok(());
             }
         }
-        // Seek command was already sent; decode may still be in progress on the
-        // audio thread. Return Ok so IPC does not spuriously fail on slow seeks.
         Ok(())
     }
 
