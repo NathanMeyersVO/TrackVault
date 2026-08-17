@@ -81,6 +81,10 @@ impl TrackSession {
             .min(self.duration_ms)
     }
 
+    pub fn is_eof(&self) -> bool {
+        self.eof
+    }
+
     pub fn seek_to(&mut self, target_ms: u64) -> Result<(), String> {
         let target_ms = target_ms.min(self.duration_ms);
         let target_frame = ms_to_frames(target_ms, self.sample_rate);

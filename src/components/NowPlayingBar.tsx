@@ -9,7 +9,7 @@ import { Waveform } from "./Waveform";
 
 export function NowPlayingBar() {
   const store = usePlayerStore();
-  const { tracks, playback, cursorTrackId, transportBusy } = store;
+  const { tracks, playback, cursorTrackId, transportBusy, transportMode } = store;
   const {
     togglePlayPause,
     seek,
@@ -23,12 +23,18 @@ export function NowPlayingBar() {
 
   const hasLoadedTrack = playback.track_id !== null;
   const isPlaying = playback.is_playing;
-  const displayTrackId = playback.track_id ?? cursorTrackId;
+  const displayTrackId =
+    transportMode === "load" && cursorTrackId != null
+      ? cursorTrackId
+      : playback.track_id ?? cursorTrackId;
   const displayTrack = tracks.find((t) => t.id === displayTrackId);
 
-  const durationMs = hasLoadedTrack
-    ? playback.duration_ms || peakDurationMs
-    : displayTrack?.duration_ms || peakDurationMs;
+  const durationMs =
+    transportMode === "load" && displayTrack
+      ? displayTrack.duration_ms
+      : hasLoadedTrack
+        ? playback.duration_ms || peakDurationMs
+        : displayTrack?.duration_ms || peakDurationMs;
 
   const displayPositionMs = hasLoadedTrack
     ? getDisplayPositionMs(store)

@@ -3,6 +3,7 @@ import { create } from "zustand";
 import type { PlaybackState, Playlist, Track } from "../lib/tauri";
 
 export type View = "library" | { playlistId: number };
+export type TransportMode = "idle" | "seek" | "load";
 
 const SEEK_CONFIRM_TOLERANCE_MS = 50;
 const POSITION_GUARD_TOLERANCE_MS = 100;
@@ -17,6 +18,7 @@ interface PlayerStore {
   playback: PlaybackState;
   scanning: boolean;
   transportBusy: boolean;
+  transportMode: TransportMode;
   lockedPositionMs: number | null;
   seekGeneration: number;
   positionGuardTargetMs: number | null;
@@ -28,6 +30,8 @@ interface PlayerStore {
   setPlayback: (playback: PlaybackState) => void;
   setScanning: (scanning: boolean) => void;
   beginTransport: (targetMs: number) => void;
+  beginTrackLoad: (targetMs: number) => void;
+  endTrackLoad: (result: PlaybackState) => void;
   releaseTransport: () => void;
   completeTransport: (result: PlaybackState, targetMs: number) => void;
   forceCompleteTransport: (targetMs: number) => void;
@@ -69,6 +73,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   },
   scanning: false,
   transportBusy: false,
+  transportMode: "idle",
   lockedPositionMs: null,
   seekGeneration: 0,
   positionGuardTargetMs: null,
@@ -82,18 +87,36 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   beginTransport: (targetMs) =>
     set((state) => ({
       transportBusy: true,
+      transportMode: "seek",
       lockedPositionMs: targetMs,
       seekGeneration: state.seekGeneration + 1,
       positionGuardTargetMs: null,
     })),
+  beginTrackLoad: (targetMs) =>
+    set((state) => ({
+      transportBusy: true,
+      transportMode: "load",
+      lockedPositionMs: targetMs,
+      seekGeneration: state.seekGeneration + 1,
+      positionGuardTargetMs: null,
+    })),
+  endTrackLoad: (result) =>
+    set({
+      transportBusy: false,
+      transportMode: "idle",
+      lockedPositionMs: null,
+      playback: result,
+    }),
   releaseTransport: () =>
     set({
       transportBusy: false,
+      transportMode: "idle",
       lockedPositionMs: null,
     }),
   completeTransport: (result, targetMs) =>
     set({
       transportBusy: false,
+      transportMode: "idle",
       lockedPositionMs: null,
       playback: { ...result, position_ms: targetMs },
       positionGuardTargetMs: targetMs,
@@ -105,7 +128,15 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   applyBackendPlayback: (incoming) => {
     const state = get();
 
-    if (state.transportBusy && state.lockedPositionMs != null) {
+    if (state.transportBusy && state.transportMode === "load") {
+      return;
+    }
+
+    if (
+      state.transportBusy &&
+      state.transportMode === "seek" &&
+      state.lockedPositionMs != null
+    ) {
       if (
         Math.abs(incoming.position_ms - state.lockedPositionMs) <=
         SEEK_CONFIRM_TOLERANCE_MS
@@ -133,15 +164,26 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   },
 }));
 
-let seekFallbackId = 0;
+let transportFallbackId = 0;
 
 export function scheduleSeekFallback(seekGeneration: number, targetMs: number) {
-  const id = ++seekFallbackId;
+  const id = ++transportFallbackId;
   window.setTimeout(() => {
-    if (id !== seekFallbackId) return;
+    if (id !== transportFallbackId) return;
     const state = usePlayerStore.getState();
-    if (!state.transportBusy) return;
+    if (!state.transportBusy || state.transportMode !== "seek") return;
     if (state.seekGeneration !== seekGeneration) return;
     state.forceCompleteTransport(targetMs);
+  }, SEEK_FALLBACK_MS);
+}
+
+export function scheduleTrackLoadFallback(loadGeneration: number) {
+  const id = ++transportFallbackId;
+  window.setTimeout(() => {
+    if (id !== transportFallbackId) return;
+    const state = usePlayerStore.getState();
+    if (!state.transportBusy || state.transportMode !== "load") return;
+    if (state.seekGeneration !== loadGeneration) return;
+    state.releaseTransport();
   }, SEEK_FALLBACK_MS);
 }

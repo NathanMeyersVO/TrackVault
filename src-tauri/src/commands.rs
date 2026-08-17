@@ -144,6 +144,8 @@ pub fn play_track(
     track_id: i64,
     start_ms: Option<u64>,
 ) -> Result<PlaybackState, String> {
+    state.player.interrupt();
+
     let (path, duration_ms, seek_index) = {
         let db = state.db.lock();
         let track = db

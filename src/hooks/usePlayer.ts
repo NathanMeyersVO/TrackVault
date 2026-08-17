@@ -2,7 +2,11 @@ import { useCallback, useEffect } from "react";
 import { listen } from "@tauri-apps/api/event";
 
 import { api } from "../lib/tauri";
-import { scheduleSeekFallback, usePlayerStore } from "../store/playerStore";
+import {
+  scheduleSeekFallback,
+  scheduleTrackLoadFallback,
+  usePlayerStore,
+} from "../store/playerStore";
 
 export function useLibrary() {
   const { setTracks, setPlaylists, setScanning } = usePlayerStore();
@@ -48,6 +52,9 @@ export function usePlayer() {
     setPlayback,
     setCursorTrackId,
     beginTransport,
+    beginTrackLoad,
+    endTrackLoad,
+    releaseTransport,
   } = usePlayerStore();
 
   useEffect(() => {
@@ -64,11 +71,34 @@ export function usePlayer() {
 
   const playTrack = useCallback(
     async (trackId: number, startMs?: number) => {
+      if (usePlayerStore.getState().transportBusy) return;
+
+      const start = startMs ?? 0;
+      beginTrackLoad(start);
       setCursorTrackId(trackId);
-      const state = await api.playTrack(trackId, startMs);
-      setPlayback(state);
+      setPlayback({
+        ...usePlayerStore.getState().playback,
+        is_playing: false,
+      });
+
+      const loadGeneration = usePlayerStore.getState().seekGeneration;
+
+      try {
+        const state = await api.playTrack(trackId, startMs);
+        endTrackLoad(state);
+      } catch {
+        releaseTransport();
+      } finally {
+        scheduleTrackLoadFallback(loadGeneration);
+      }
     },
-    [setPlayback, setCursorTrackId],
+    [
+      beginTrackLoad,
+      endTrackLoad,
+      releaseTransport,
+      setCursorTrackId,
+      setPlayback,
+    ],
   );
 
   const togglePlayPause = useCallback(

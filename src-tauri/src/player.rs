@@ -23,6 +23,7 @@ enum PlayerCommand {
     Pause,
     Resume,
     Stop,
+    Interrupt,
     Seek {
         position_ms: u64,
     },
@@ -90,9 +91,7 @@ impl PlayerRuntime {
         seek_index: Vec<SeekKeyframe>,
         autoplay: bool,
     ) -> Result<(), String> {
-        if let Some(sink) = self.sink.take() {
-            sink.stop();
-        }
+        self.interrupt();
 
         let start = start_ms.min(duration_ms);
         let (session, source) =
@@ -126,6 +125,45 @@ impl PlayerRuntime {
         }
         self.position_ms = self.current_position_ms();
         self.is_playing = false;
+    }
+
+    fn interrupt(&mut self) {
+        if let Some(sink) = self.sink.take() {
+            sink.stop();
+        }
+        self.sink = None;
+        self.session = None;
+        self.is_playing = false;
+    }
+
+    fn maybe_pause_at_end(&mut self) {
+        if !self.is_playing {
+            return;
+        }
+
+        let pos = self.current_position_ms();
+        let near_end = pos.saturating_add(50) >= self.duration_ms;
+
+        let sink_empty = self.sink.as_ref().map(|sink| sink.empty()).unwrap_or(true);
+        let session_eof = self
+            .session
+            .as_ref()
+            .and_then(|session| session.lock().ok())
+            .map(|session| session.is_eof())
+            .unwrap_or(false);
+
+        if near_end && (sink_empty || session_eof) {
+            if let Some(sink) = self.sink.as_ref() {
+                sink.pause();
+            }
+            self.position_ms = self.duration_ms;
+            self.is_playing = false;
+        }
+    }
+
+    fn sync_state(&mut self) -> PlaybackState {
+        self.maybe_pause_at_end();
+        self.state()
     }
 
     fn resume(&mut self, stream_handle: &rodio::OutputStreamHandle) -> Result<(), String> {
@@ -230,18 +268,22 @@ impl AudioPlayer {
                                 runtime.stop();
                                 Ok(())
                             }
+                            PlayerCommand::Interrupt => {
+                                runtime.interrupt();
+                                Ok(())
+                            }
                             PlayerCommand::Seek { position_ms } => {
                                 runtime.seek(&stream_handle, position_ms)
                             }
                         };
 
                         if result.is_ok() {
-                            *state_for_thread.lock() = runtime.state();
+                            *state_for_thread.lock() = runtime.sync_state();
                         }
                     }
                     Err(mpsc::RecvTimeoutError::Timeout) => {
                         if runtime.track_id.is_some() {
-                            *state_for_thread.lock() = runtime.state();
+                            *state_for_thread.lock() = runtime.sync_state();
                         }
                     }
                     Err(mpsc::RecvTimeoutError::Disconnected) => break,
@@ -265,6 +307,16 @@ impl AudioPlayer {
                 let _ = app.emit("playback-position", &state);
             }
         });
+    }
+
+    pub fn interrupt(&self) {
+        let _ = self.tx.send(PlayerCommand::Interrupt);
+        for _ in 0..20 {
+            thread::sleep(Duration::from_millis(10));
+            if !self.state().is_playing {
+                return;
+            }
+        }
     }
 
     pub fn play(
