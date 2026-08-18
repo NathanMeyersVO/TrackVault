@@ -10,9 +10,9 @@ mod waveform;
 
 use commands::{
     add_track_to_playlist, add_watch_folder, create_playlist, delete_playlist, get_playback_state,
-    get_playlist_tracks, get_track_peaks, init_state, list_playlists, list_tracks,
+    get_playlist_tracks, get_track_peaks, get_volume, init_state, list_playlists, list_tracks,
     list_watch_folders, pause_playback, play_track, remove_track_from_playlist, resume_playback,
-    scan_library, seek_playback, stop_playback,
+    scan_library, seek_playback, set_volume, stop_playback,
 };
 use tauri::Manager;
 
@@ -43,6 +43,8 @@ pub fn run() {
             stop_playback,
             seek_playback,
             get_playback_state,
+            get_volume,
+            set_volume,
             get_track_peaks,
         ])
         .run(tauri::generate_context!())

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 
+import { KeyboardShortcuts } from "./KeyboardShortcuts";
 import { api } from "../lib/tauri";
 import { useLibrary } from "../hooks/usePlayer";
 import { usePlayerStore, type View } from "../store/playerStore";
@@ -122,6 +123,7 @@ export function Sidebar() {
         >
           {scanning ? "Scanning…" : "Add music folder"}
         </button>
+        <KeyboardShortcuts />
       </div>
     </aside>
   );

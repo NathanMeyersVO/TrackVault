@@ -143,7 +143,9 @@ pub fn play_track(
     state: State<'_, AppState>,
     track_id: i64,
     start_ms: Option<u64>,
+    autoplay: Option<bool>,
 ) -> Result<PlaybackState, String> {
+    let autoplay = autoplay.unwrap_or(true);
     state.player.interrupt();
 
     let (path, duration_ms, seek_index) = {
@@ -167,6 +169,7 @@ pub fn play_track(
         duration_ms,
         start,
         seek_index,
+        autoplay,
     )?;
 
     Ok(state.player.state())
@@ -203,6 +206,16 @@ pub fn seek_playback(state: State<'_, AppState>, position_ms: u64) -> Result<Pla
 #[tauri::command]
 pub fn get_playback_state(state: State<'_, AppState>) -> Result<PlaybackState, String> {
     Ok(state.player.state())
+}
+
+#[tauri::command]
+pub fn get_volume(state: State<'_, AppState>) -> f32 {
+    state.player.get_volume()
+}
+
+#[tauri::command]
+pub fn set_volume(state: State<'_, AppState>, volume: f32) -> f32 {
+    state.player.set_volume(volume)
 }
 
 #[tauri::command]

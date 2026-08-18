@@ -53,14 +53,16 @@ export const api = {
     invoke<void>("add_track_to_playlist", { playlistId, trackId }),
   removeTrackFromPlaylist: (playlistId: number, trackId: number) =>
     invoke<void>("remove_track_from_playlist", { playlistId, trackId }),
-  playTrack: (trackId: number, startMs?: number) =>
-    invoke<PlaybackState>("play_track", { trackId, startMs }),
+  playTrack: (trackId: number, startMs?: number, autoplay = true) =>
+    invoke<PlaybackState>("play_track", { trackId, startMs, autoplay }),
   pausePlayback: () => invoke<PlaybackState>("pause_playback"),
   resumePlayback: () => invoke<PlaybackState>("resume_playback"),
   stopPlayback: () => invoke<PlaybackState>("stop_playback"),
   seekPlayback: (positionMs: number) =>
     invoke<PlaybackState>("seek_playback", { positionMs }),
   getPlaybackState: () => invoke<PlaybackState>("get_playback_state"),
+  getVolume: () => invoke<number>("get_volume"),
+  setVolume: (volume: number) => invoke<number>("set_volume", { volume }),
   getTrackPeaks: (trackId: number) =>
     invoke<WaveformPeaks>("get_track_peaks", { trackId }),
 };

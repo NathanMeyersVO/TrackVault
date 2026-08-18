@@ -2,7 +2,7 @@ import { Sidebar } from "./components/Sidebar";
 import { LibraryView } from "./components/LibraryView";
 import { PlaylistView } from "./components/PlaylistView";
 import { NowPlayingBar } from "./components/NowPlayingBar";
-import { useLibrary } from "./hooks/usePlayer";
+import { useLibrary, usePlayer } from "./hooks/usePlayer";
 import { useTrackCursor } from "./hooks/useTrackCursor";
 import { usePlayerStore } from "./store/playerStore";
 import { api } from "./lib/tauri";
@@ -51,7 +51,13 @@ function MainContent() {
 }
 
 export default function App() {
-  useTrackCursor();
+  const { selectTrack, playTrack, togglePlayPause, adjustVolume } = usePlayer();
+  useTrackCursor({
+    onSelectTrack: selectTrack,
+    onPlayTrack: playTrack,
+    onTogglePlayPause: togglePlayPause,
+    onAdjustVolume: adjustVolume,
+  });
 
   return (
     <div className="flex h-full flex-col">

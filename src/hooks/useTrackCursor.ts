@@ -1,6 +1,9 @@
 import { useEffect } from "react";
 
+import { VOLUME_STEP } from "./usePlayer";
 import { usePlayerStore } from "../store/playerStore";
+
+export const TRACK_LIST_ID = "track-list";
 
 function isEditableTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
@@ -8,16 +11,59 @@ function isEditableTarget(target: EventTarget | null): boolean {
   return tag === "INPUT" || tag === "TEXTAREA" || target.isContentEditable;
 }
 
-export function useTrackCursor() {
-  const { cursorTrackId, activeTrackIds, setCursorTrackId } = usePlayerStore();
+function focusTrackList(): void {
+  document.getElementById(TRACK_LIST_ID)?.focus({ preventScroll: true });
+}
+
+interface UseTrackCursorOptions {
+  onSelectTrack: (trackId: number) => void;
+  onPlayTrack: (trackId: number) => void;
+  onTogglePlayPause: () => void;
+  onAdjustVolume: (delta: number) => void;
+}
+
+export function useTrackCursor({
+  onSelectTrack,
+  onPlayTrack,
+  onTogglePlayPause,
+  onAdjustVolume,
+}: UseTrackCursorOptions) {
+  const { cursorTrackId, activeTrackIds } = usePlayerStore();
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
       if (isEditableTarget(event.target)) return;
+
+      if (event.key === "p" || event.key === "P") {
+        onTogglePlayPause();
+        return;
+      }
+
+      if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        onAdjustVolume(-VOLUME_STEP);
+        return;
+      }
+
+      if (event.key === "ArrowRight") {
+        event.preventDefault();
+        onAdjustVolume(VOLUME_STEP);
+        return;
+      }
+
+      if (event.key === "Enter") {
+        if (!cursorTrackId) return;
+
+        event.preventDefault();
+        onPlayTrack(cursorTrackId);
+        return;
+      }
+
+      if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
       if (activeTrackIds.length === 0) return;
 
       event.preventDefault();
+      focusTrackList();
 
       const currentIndex = cursorTrackId
         ? activeTrackIds.indexOf(cursorTrackId)
@@ -33,7 +79,7 @@ export function useTrackCursor() {
       }
 
       const nextId = activeTrackIds[nextIndex];
-      setCursorTrackId(nextId);
+      onSelectTrack(nextId);
 
       requestAnimationFrame(() => {
         document
@@ -44,5 +90,12 @@ export function useTrackCursor() {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [activeTrackIds, cursorTrackId, setCursorTrackId]);
+  }, [
+    activeTrackIds,
+    cursorTrackId,
+    onAdjustVolume,
+    onPlayTrack,
+    onSelectTrack,
+    onTogglePlayPause,
+  ]);
 }

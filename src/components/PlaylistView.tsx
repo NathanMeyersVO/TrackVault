@@ -14,10 +14,9 @@ export function PlaylistView({ playlistId }: PlaylistViewProps) {
     playlists,
     playback,
     cursorTrackId,
-    setCursorTrackId,
     setActiveTrackIds,
   } = usePlayerStore();
-  const { playTrack } = usePlayer();
+  const { playTrack, selectTrack } = usePlayer();
   const [tracks, setTracks] = useState<Track[]>([]);
 
   const playlist = playlists.find((p) => p.id === playlistId);
@@ -50,7 +49,7 @@ export function PlaylistView({ playlistId }: PlaylistViewProps) {
           tracks={tracks}
           playingTrackId={playback.track_id}
           cursorTrackId={cursorTrackId}
-          onCursorChange={setCursorTrackId}
+          onCursorChange={selectTrack}
           onPlay={playTrack}
           emptyMessage="No tracks in this playlist yet. Add tracks from the library."
         />

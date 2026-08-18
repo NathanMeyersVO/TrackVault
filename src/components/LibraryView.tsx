@@ -5,9 +5,8 @@ import { usePlayer } from "../hooks/usePlayer";
 import { TrackTable } from "./TrackTable";
 
 export function LibraryView() {
-  const { tracks, playback, cursorTrackId, setCursorTrackId, setActiveTrackIds } =
-    usePlayerStore();
-  const { playTrack } = usePlayer();
+  const { tracks, playback, cursorTrackId, setActiveTrackIds } = usePlayerStore();
+  const { playTrack, selectTrack } = usePlayer();
 
   useEffect(() => {
     setActiveTrackIds(tracks.map((track) => track.id));
@@ -26,7 +25,7 @@ export function LibraryView() {
           tracks={tracks}
           playingTrackId={playback.track_id}
           cursorTrackId={cursorTrackId}
-          onCursorChange={setCursorTrackId}
+          onCursorChange={selectTrack}
           onPlay={playTrack}
           emptyMessage="Add a music folder to get started."
         />

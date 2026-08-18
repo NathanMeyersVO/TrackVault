@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { listen } from "@tauri-apps/api/event";
 
 import { api } from "../lib/tauri";
@@ -45,20 +45,26 @@ export function useLibrary() {
   return { refresh, scanLibrary };
 }
 
+export const VOLUME_STEP = 0.05;
+
 export function usePlayer() {
   const {
     playback,
     cursorTrackId,
     setPlayback,
     setCursorTrackId,
+    setVolume: setStoreVolume,
     beginTransport,
     beginTrackLoad,
     endTrackLoad,
     releaseTransport,
+    setPendingPausedLoad,
+    clearPendingPausedLoad,
   } = usePlayerStore();
 
   useEffect(() => {
     api.getPlaybackState().then(setPlayback).catch(console.error);
+    api.getVolume().then(setStoreVolume).catch(console.error);
 
     const unlisten = listen<typeof playback>("playback-position", (event) => {
       usePlayerStore.getState().applyBackendPlayback(event.payload);
@@ -67,11 +73,30 @@ export function usePlayer() {
     return () => {
       unlisten.then((fn) => fn());
     };
-  }, [setPlayback]);
+  }, [setPlayback, setStoreVolume]);
 
-  const playTrack = useCallback(
-    async (trackId: number, startMs?: number) => {
+  const setVolume = useCallback(
+    (volume: number) => {
+      const clamped = Math.min(1, Math.max(0, volume));
+      setStoreVolume(clamped);
+      void api.setVolume(clamped);
+    },
+    [setStoreVolume],
+  );
+
+  const adjustVolume = useCallback(
+    (delta: number) => {
+      const next = Math.min(1, Math.max(0, usePlayerStore.getState().volume + delta));
+      setVolume(next);
+    },
+    [setVolume],
+  );
+
+  const loadTrack = useCallback(
+    async (trackId: number, startMs?: number, autoplay = true) => {
       if (usePlayerStore.getState().transportBusy) return;
+
+      clearPendingPausedLoad();
 
       const start = startMs ?? 0;
       beginTrackLoad(start);
@@ -84,7 +109,7 @@ export function usePlayer() {
       const loadGeneration = usePlayerStore.getState().seekGeneration;
 
       try {
-        const state = await api.playTrack(trackId, startMs);
+        const state = await api.playTrack(trackId, startMs, autoplay);
         endTrackLoad(state);
       } catch {
         releaseTransport();
@@ -94,11 +119,55 @@ export function usePlayer() {
     },
     [
       beginTrackLoad,
+      clearPendingPausedLoad,
       endTrackLoad,
       releaseTransport,
       setCursorTrackId,
       setPlayback,
     ],
+  );
+
+  const loadTrackRef = useRef(loadTrack);
+  loadTrackRef.current = loadTrack;
+
+  useEffect(() => {
+    const { playback: currentPlayback, pendingPausedLoadTrackId, transportBusy } =
+      usePlayerStore.getState();
+
+    if (currentPlayback.is_playing) return;
+    if (transportBusy) return;
+    if (pendingPausedLoadTrackId == null) return;
+
+    const trackId = pendingPausedLoadTrackId;
+    clearPendingPausedLoad();
+    void loadTrackRef.current(trackId, 0, false);
+  }, [playback.is_playing, clearPendingPausedLoad]);
+
+  const selectTrack = useCallback(
+    (trackId: number) => {
+      setCursorTrackId(trackId);
+
+      const { playback: currentPlayback, transportBusy } = usePlayerStore.getState();
+      if (transportBusy) return;
+
+      if (currentPlayback.is_playing) {
+        if (currentPlayback.track_id !== trackId) {
+          setPendingPausedLoad(trackId);
+        }
+        return;
+      }
+
+      if (currentPlayback.track_id === trackId) return;
+      void loadTrack(trackId, 0, false);
+    },
+    [loadTrack, setCursorTrackId, setPendingPausedLoad],
+  );
+
+  const playTrack = useCallback(
+    async (trackId: number, startMs?: number) => {
+      await loadTrack(trackId, startMs, true);
+    },
+    [loadTrack],
   );
 
   const togglePlayPause = useCallback(
@@ -167,7 +236,10 @@ export function usePlayer() {
   return {
     playback,
     playTrack,
+    selectTrack,
     togglePlayPause,
+    setVolume,
+    adjustVolume,
     seek,
     stop,
     seekToStart,

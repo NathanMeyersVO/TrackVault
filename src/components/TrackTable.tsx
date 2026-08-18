@@ -2,6 +2,7 @@ import type { CSSProperties } from "react";
 import type { Track } from "../lib/tauri";
 import { formatDuration } from "../lib/tauri";
 import { appearance } from "../lib/appearance";
+import { TRACK_LIST_ID } from "../hooks/useTrackCursor";
 
 interface TrackTableProps {
   tracks: Track[];
@@ -43,8 +44,16 @@ export function TrackTable({
     );
   }
 
+  const focusTrackList = () => {
+    document.getElementById(TRACK_LIST_ID)?.focus({ preventScroll: true });
+  };
+
   return (
-    <div className="h-full overflow-auto">
+    <div
+      id={TRACK_LIST_ID}
+      tabIndex={0}
+      className="h-full overflow-auto outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-neutral-600"
+    >
       <table className="w-full min-w-[640px] text-sm">
         <thead className="sticky top-0 bg-neutral-950/95 text-left text-xs uppercase tracking-wide text-neutral-500">
           <tr>
@@ -65,7 +74,10 @@ export function TrackTable({
               <tr
                 key={track.id}
                 id={`track-row-${track.id}`}
-                onClick={() => onCursorChange(track.id)}
+                onClick={() => {
+                  onCursorChange(track.id);
+                  focusTrackList();
+                }}
                 onDoubleClick={() => onPlay(track.id)}
                 style={style}
                 className="cursor-pointer border-b border-neutral-900 text-neutral-200 hover:bg-neutral-900/70"

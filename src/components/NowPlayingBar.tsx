@@ -4,14 +4,16 @@ import { api, formatDuration } from "../lib/tauri";
 import { usePlayer } from "../hooks/usePlayer";
 import { usePlayerStore, getDisplayPositionMs, isDisplayPositionPinned } from "../store/playerStore";
 import { TransportControls } from "./TransportControls";
+import { VolumeControl } from "./VolumeControl";
 import { SeekIndicator } from "./SeekIndicator";
 import { Waveform } from "./Waveform";
 
 export function NowPlayingBar() {
   const store = usePlayerStore();
-  const { tracks, playback, cursorTrackId, transportBusy, transportMode } = store;
+  const { tracks, playback, cursorTrackId, transportBusy, transportMode, volume } = store;
   const {
     togglePlayPause,
+    setVolume,
     seek,
     stop,
     seekToStart,
@@ -140,6 +142,7 @@ export function NowPlayingBar() {
           onTogglePlayPause={handleTogglePlayPause}
           onSeekToEnd={handleSeekToEnd}
         />
+        <VolumeControl volume={volume} onChange={setVolume} />
         <div className="flex w-36 shrink-0 items-center justify-end gap-1.5 text-xs tabular-nums text-neutral-400">
           {transportBusy && <SeekIndicator />}
           <span>

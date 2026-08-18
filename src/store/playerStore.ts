@@ -22,6 +22,8 @@ interface PlayerStore {
   lockedPositionMs: number | null;
   seekGeneration: number;
   positionGuardTargetMs: number | null;
+  pendingPausedLoadTrackId: number | null;
+  volume: number;
   setTracks: (tracks: Track[]) => void;
   setPlaylists: (playlists: Playlist[]) => void;
   setView: (view: View) => void;
@@ -35,7 +37,10 @@ interface PlayerStore {
   releaseTransport: () => void;
   completeTransport: (result: PlaybackState, targetMs: number) => void;
   forceCompleteTransport: (targetMs: number) => void;
+  setPendingPausedLoad: (trackId: number | null) => void;
+  clearPendingPausedLoad: () => void;
   applyBackendPlayback: (incoming: PlaybackState) => void;
+  setVolume: (volume: number) => void;
 }
 
 export function getDisplayPositionMs(
@@ -77,6 +82,8 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   lockedPositionMs: null,
   seekGeneration: 0,
   positionGuardTargetMs: null,
+  pendingPausedLoadTrackId: null,
+  volume: 1,
   setTracks: (tracks) => set({ tracks }),
   setPlaylists: (playlists) => set({ playlists }),
   setView: (view) => set({ view }),
@@ -125,6 +132,8 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     const { playback } = get();
     get().completeTransport(playback, targetMs);
   },
+  setPendingPausedLoad: (trackId) => set({ pendingPausedLoadTrackId: trackId }),
+  clearPendingPausedLoad: () => set({ pendingPausedLoadTrackId: null }),
   applyBackendPlayback: (incoming) => {
     const state = get();
 
@@ -162,6 +171,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
     set({ playback: incoming });
   },
+  setVolume: (volume) => set({ volume: Math.min(1, Math.max(0, volume)) }),
 }));
 
 let transportFallbackId = 0;

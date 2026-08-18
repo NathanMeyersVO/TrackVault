@@ -19,6 +19,7 @@ enum PlayerCommand {
         duration_ms: u64,
         start_ms: u64,
         seek_index: Vec<SeekKeyframe>,
+        autoplay: bool,
     },
     Pause,
     Resume,
@@ -26,6 +27,9 @@ enum PlayerCommand {
     Interrupt,
     Seek {
         position_ms: u64,
+    },
+    SetVolume {
+        volume: f32,
     },
 }
 
@@ -39,6 +43,7 @@ struct PlayerRuntime {
     seek_index: Vec<SeekKeyframe>,
     position_ms: u64,
     is_playing: bool,
+    volume: f32,
 }
 
 impl PlayerRuntime {
@@ -56,6 +61,7 @@ impl PlayerRuntime {
                 seek_index: Vec::new(),
                 position_ms: 0,
                 is_playing: false,
+                volume: 1.0,
             },
             stream_handle,
         ))
@@ -99,6 +105,7 @@ impl PlayerRuntime {
 
         let sink = Sink::try_new(stream_handle)
             .map_err(|e| format!("Failed to create audio sink: {e}"))?;
+        sink.set_volume(self.volume);
         sink.append(source);
 
         if autoplay {
@@ -216,11 +223,19 @@ impl PlayerRuntime {
             was_playing,
         )
     }
+
+    fn set_volume(&mut self, volume: f32) {
+        self.volume = volume.clamp(0.0, 1.0);
+        if let Some(sink) = self.sink.as_ref() {
+            sink.set_volume(self.volume);
+        }
+    }
 }
 
 pub struct AudioPlayer {
     tx: Sender<PlayerCommand>,
     shared_state: Arc<ParkingMutex<PlaybackState>>,
+    volume: Arc<ParkingMutex<f32>>,
     _thread: JoinHandle<()>,
 }
 
@@ -233,6 +248,7 @@ impl AudioPlayer {
             duration_ms: 0,
             is_playing: false,
         }));
+        let volume = Arc::new(ParkingMutex::new(1.0_f32));
         let state_for_thread = Arc::clone(&shared_state);
 
         let thread = thread::spawn(move || {
@@ -250,6 +266,7 @@ impl AudioPlayer {
                                 duration_ms,
                                 start_ms,
                                 seek_index,
+                                autoplay,
                             } => runtime.play_at(
                                 &stream_handle,
                                 track_id,
@@ -257,7 +274,7 @@ impl AudioPlayer {
                                 duration_ms,
                                 start_ms,
                                 seek_index,
-                                true,
+                                autoplay,
                             ),
                             PlayerCommand::Pause => {
                                 runtime.pause();
@@ -274,6 +291,10 @@ impl AudioPlayer {
                             }
                             PlayerCommand::Seek { position_ms } => {
                                 runtime.seek(&stream_handle, position_ms)
+                            }
+                            PlayerCommand::SetVolume { volume } => {
+                                runtime.set_volume(volume);
+                                Ok(())
                             }
                         };
 
@@ -294,6 +315,7 @@ impl AudioPlayer {
         Ok(Self {
             tx: cmd_tx,
             shared_state,
+            volume,
             _thread: thread,
         })
     }
@@ -326,6 +348,7 @@ impl AudioPlayer {
         duration_ms: u64,
         start_ms: u64,
         seek_index: Vec<SeekKeyframe>,
+        autoplay: bool,
     ) -> Result<(), String> {
         self.tx
             .send(PlayerCommand::Play {
@@ -334,6 +357,7 @@ impl AudioPlayer {
                 duration_ms,
                 start_ms,
                 seek_index,
+                autoplay,
             })
             .map_err(|e| e.to_string())?;
         self.wait_for_state(track_id)
@@ -370,6 +394,17 @@ impl AudioPlayer {
 
     pub fn state(&self) -> PlaybackState {
         self.shared_state.lock().clone()
+    }
+
+    pub fn get_volume(&self) -> f32 {
+        *self.volume.lock()
+    }
+
+    pub fn set_volume(&self, volume: f32) -> f32 {
+        let clamped = volume.clamp(0.0, 1.0);
+        *self.volume.lock() = clamped;
+        let _ = self.tx.send(PlayerCommand::SetVolume { volume: clamped });
+        clamped
     }
 
     fn wait_for_position(&self, position_ms: u64) -> Result<(), String> {
