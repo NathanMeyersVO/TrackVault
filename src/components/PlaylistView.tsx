@@ -3,8 +3,10 @@ import { listen } from "@tauri-apps/api/event";
 
 import { api, type Track } from "../lib/tauri";
 import { usePlayer } from "../hooks/usePlayer";
+import { useTrackSearch } from "../hooks/useTrackSearch";
 import { usePlayerStore } from "../store/playerStore";
 import { TagEditorModal } from "./TagEditorModal";
+import { TrackSearchInput } from "./TrackSearchInput";
 import { TrackTable } from "./TrackTable";
 
 interface PlaylistViewProps {
@@ -21,6 +23,7 @@ export function PlaylistView({ playlistId }: PlaylistViewProps) {
   const { playTrack, selectTrack } = usePlayer();
   const [tracks, setTracks] = useState<Track[]>([]);
   const [editingTrackId, setEditingTrackId] = useState<number | null>(null);
+  const { query, setQuery, filteredTracks, isSearching } = useTrackSearch(tracks);
 
   const playlist = playlists.find((p) => p.id === playlistId);
 
@@ -42,8 +45,8 @@ export function PlaylistView({ playlistId }: PlaylistViewProps) {
   }, [refreshTracks]);
 
   useEffect(() => {
-    setActiveTrackIds(tracks.map((track) => track.id));
-  }, [tracks, setActiveTrackIds]);
+    setActiveTrackIds(filteredTracks.map((track) => track.id));
+  }, [filteredTracks, setActiveTrackIds]);
 
   const removeTrack = async (trackId: number) => {
     await api.removeTrackFromPlaylist(playlistId, trackId);
@@ -57,19 +60,28 @@ export function PlaylistView({ playlistId }: PlaylistViewProps) {
           {playlist?.name ?? "Playlist"}
         </h2>
         <p className="text-xs text-neutral-500">
-          {tracks.length} track{tracks.length === 1 ? "" : "s"}
+          {isSearching
+            ? `${filteredTracks.length} of ${tracks.length} track${tracks.length === 1 ? "" : "s"}`
+            : `${tracks.length} track${tracks.length === 1 ? "" : "s"}`}
         </p>
+      </div>
+      <div className="border-b border-neutral-800 px-4 py-2">
+        <TrackSearchInput value={query} onChange={setQuery} />
       </div>
       <div className="min-h-0 flex-1">
         <TrackTable
-          tracks={tracks}
+          tracks={filteredTracks}
           playingTrackId={playback.track_id}
           cursorTrackId={cursorTrackId}
           onCursorChange={selectTrack}
           onPlay={playTrack}
           onEditTags={setEditingTrackId}
           onRemoveTrackFromPlaylist={removeTrack}
-          emptyMessage="No tracks in this playlist yet. Add tracks from the library."
+          emptyMessage={
+            isSearching
+              ? "No tracks match your search."
+              : "No tracks in this playlist yet. Add tracks from the library."
+          }
         />
       </div>
       {editingTrackId != null && (
