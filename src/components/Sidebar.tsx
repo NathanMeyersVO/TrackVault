@@ -1,16 +1,33 @@
-import { useState } from "react";
+import { useState, type DragEvent, type KeyboardEvent } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 
 import { KeyboardShortcuts } from "./KeyboardShortcuts";
 import { api } from "../lib/tauri";
+import { getTrackDragData } from "../lib/dragDrop";
 import { useLibrary } from "../hooks/usePlayer";
 import { usePlayerStore, type View } from "../store/playerStore";
 
 export function Sidebar() {
-  const { playlists, view, setView, scanning } = usePlayerStore();
+  const { playlists, view, setView, scanning, draggingTrackId, setDraggingTrackId } =
+    usePlayerStore();
   const { refresh } = useLibrary();
   const [newPlaylistName, setNewPlaylistName] = useState("");
   const [creating, setCreating] = useState(false);
+  const [dragOverPlaylistId, setDragOverPlaylistId] = useState<number | null>(null);
+
+  const isTrackDragging = draggingTrackId != null;
+
+  const handlePlaylistDrop = async (playlistId: number, event: DragEvent) => {
+    event.preventDefault();
+    setDragOverPlaylistId(null);
+    setDraggingTrackId(null);
+
+    const trackId = draggingTrackId ?? getTrackDragData(event.dataTransfer);
+    if (trackId == null) return;
+
+    await api.addTrackToPlaylist(playlistId, trackId);
+    await refresh();
+  };
 
   const addFolder = async () => {
     const selected = await open({
@@ -55,25 +72,65 @@ export function Sidebar() {
         </button>
 
         <div className="mb-2 mt-4 px-3 text-xs font-medium uppercase tracking-wide text-neutral-500">
-          Playlists
+          {isTrackDragging ? "Drop on a playlist" : "Playlists"}
         </div>
 
         {playlists.map((playlist) => {
           const active =
             typeof view === "object" && view.playlistId === playlist.id;
+          const isDragOver = dragOverPlaylistId === playlist.id;
+
+          const handleNavigate = () => {
+            setView({ playlistId: playlist.id } as View);
+          };
+
+          const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              handleNavigate();
+            }
+          };
+
           return (
-            <button
+            <div
               key={playlist.id}
-              onClick={() => setView({ playlistId: playlist.id } as View)}
-              className={`mb-1 w-full rounded-md px-3 py-2 text-left text-sm ${
-                active
-                  ? "bg-neutral-800 text-white"
-                  : "text-neutral-300 hover:bg-neutral-800/60"
+              role="button"
+              tabIndex={0}
+              onClick={handleNavigate}
+              onKeyDown={handleKeyDown}
+              onDragOver={(event) => {
+                if (!isTrackDragging) return;
+                event.preventDefault();
+                event.dataTransfer.dropEffect = "copy";
+                setDragOverPlaylistId(playlist.id);
+              }}
+              onDragEnter={(event) => {
+                if (!isTrackDragging) return;
+                event.preventDefault();
+                setDragOverPlaylistId(playlist.id);
+              }}
+              onDragLeave={(event) => {
+                if (event.currentTarget.contains(event.relatedTarget as Node)) return;
+                setDragOverPlaylistId((current) =>
+                  current === playlist.id ? null : current,
+                );
+              }}
+              onDrop={(event) => {
+                void handlePlaylistDrop(playlist.id, event);
+              }}
+              className={`mb-1 w-full rounded-md px-3 py-2 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-neutral-500 ${
+                isDragOver
+                  ? "border-2 border-blue-500 bg-blue-950/40 text-white ring-2 ring-blue-500"
+                  : isTrackDragging
+                    ? "border border-dashed border-neutral-600 bg-neutral-800/50 text-neutral-200"
+                    : active
+                      ? "border border-transparent bg-neutral-800 text-white"
+                      : "border border-transparent text-neutral-300 hover:bg-neutral-800/60"
               }`}
             >
               <span className="truncate">{playlist.name}</span>
               <span className="ml-1 text-neutral-500">({playlist.track_count})</span>
-            </button>
+            </div>
           );
         })}
 

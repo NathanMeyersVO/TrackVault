@@ -23,6 +23,7 @@ interface PlayerStore {
   seekGeneration: number;
   positionGuardTargetMs: number | null;
   pendingPausedLoadTrackId: number | null;
+  draggingTrackId: number | null;
   volume: number;
   setTracks: (tracks: Track[]) => void;
   setPlaylists: (playlists: Playlist[]) => void;
@@ -39,6 +40,7 @@ interface PlayerStore {
   forceCompleteTransport: (targetMs: number) => void;
   setPendingPausedLoad: (trackId: number | null) => void;
   clearPendingPausedLoad: () => void;
+  setDraggingTrackId: (id: number | null) => void;
   applyBackendPlayback: (incoming: PlaybackState) => void;
   setVolume: (volume: number) => void;
   patchTrack: (track: Track) => void;
@@ -84,6 +86,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   seekGeneration: 0,
   positionGuardTargetMs: null,
   pendingPausedLoadTrackId: null,
+  draggingTrackId: null,
   volume: 1,
   setTracks: (tracks) => set({ tracks }),
   setPlaylists: (playlists) => set({ playlists }),
@@ -135,6 +138,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   },
   setPendingPausedLoad: (trackId) => set({ pendingPausedLoadTrackId: trackId }),
   clearPendingPausedLoad: () => set({ pendingPausedLoadTrackId: null }),
+  setDraggingTrackId: (draggingTrackId) => set({ draggingTrackId }),
   applyBackendPlayback: (incoming) => {
     const state = get();
 

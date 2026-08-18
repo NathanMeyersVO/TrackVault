@@ -1,8 +1,10 @@
 import type { CSSProperties } from "react";
 
+import { setTrackDragData } from "../lib/dragDrop";
 import type { Playlist, Track } from "../lib/tauri";
 import { formatDuration } from "../lib/tauri";
 import { appearance } from "../lib/appearance";
+import { usePlayerStore } from "../store/playerStore";
 import { TrackRowMenu } from "./TrackRowMenu";
 import { useTrackTooltip } from "./TrackTooltip";
 
@@ -17,6 +19,7 @@ interface TrackTableRowProps {
   playlists?: Playlist[];
   onAddTrackToPlaylist?: (trackId: number, playlistId: number) => void;
   onRemoveTrackFromPlaylist?: (trackId: number) => void;
+  draggable?: boolean;
 }
 
 function rowStyle(isPlaying: boolean, isCursor: boolean): CSSProperties | undefined {
@@ -43,7 +46,9 @@ export function TrackTableRow({
   playlists,
   onAddTrackToPlaylist,
   onRemoveTrackFromPlaylist,
+  draggable = true,
 }: TrackTableRowProps) {
+  const setDraggingTrackId = usePlayerStore((state) => state.setDraggingTrackId);
   const { onMouseEnter, onMouseLeave, tooltip } = useTrackTooltip(track.id);
   const style = rowStyle(isPlaying, isCursor);
 
@@ -51,13 +56,24 @@ export function TrackTableRow({
     <>
       <tr
         id={`track-row-${track.id}`}
+        draggable={draggable}
+        onDragStart={(event) => {
+          if (!draggable) return;
+          setTrackDragData(event.dataTransfer, track.id);
+          setDraggingTrackId(track.id);
+        }}
+        onDragEnd={() => {
+          setDraggingTrackId(null);
+        }}
         onClick={() => {
           onCursorChange(track.id);
           onFocusList();
         }}
         onDoubleClick={() => onPlay(track.id)}
         style={style}
-        className="cursor-pointer border-b border-neutral-900 text-neutral-200 hover:bg-neutral-900/70"
+        className={`border-b border-neutral-900 text-neutral-200 hover:bg-neutral-900/70 ${
+          draggable ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"
+        }`}
       >
         <td
           className="px-4 py-2"

@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Sidebar } from "./components/Sidebar";
 import { LibraryView } from "./components/LibraryView";
 import { PlaylistView } from "./components/PlaylistView";
@@ -31,12 +32,21 @@ function MainContent() {
 
 export default function App() {
   const { selectTrack, playTrack, togglePlayPause, adjustVolume } = usePlayer();
+  const setDraggingTrackId = usePlayerStore((state) => state.setDraggingTrackId);
   useTrackCursor({
     onSelectTrack: selectTrack,
     onPlayTrack: playTrack,
     onTogglePlayPause: togglePlayPause,
     onAdjustVolume: adjustVolume,
   });
+
+  useEffect(() => {
+    const clearDragState = () => {
+      setDraggingTrackId(null);
+    };
+    window.addEventListener("dragend", clearDragState);
+    return () => window.removeEventListener("dragend", clearDragState);
+  }, [setDraggingTrackId]);
 
   return (
     <div className="flex h-full flex-col">

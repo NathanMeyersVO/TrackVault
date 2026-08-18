@@ -13,6 +13,7 @@ interface TrackTableProps {
   onAddTrackToPlaylist?: (trackId: number, playlistId: number) => void;
   onRemoveTrackFromPlaylist?: (trackId: number) => void;
   emptyMessage: string;
+  draggable?: boolean;
 }
 
 export function TrackTable({
@@ -26,6 +27,7 @@ export function TrackTable({
   onAddTrackToPlaylist,
   onRemoveTrackFromPlaylist,
   emptyMessage,
+  draggable = true,
 }: TrackTableProps) {
   if (tracks.length === 0) {
     return (
@@ -69,6 +71,7 @@ export function TrackTable({
               playlists={playlists}
               onAddTrackToPlaylist={onAddTrackToPlaylist}
               onRemoveTrackFromPlaylist={onRemoveTrackFromPlaylist}
+              draggable={draggable}
             />
           ))}
         </tbody>
