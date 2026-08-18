@@ -150,6 +150,23 @@ impl Database {
         }
     }
 
+    pub fn update_track_metadata(
+        &self,
+        id: i64,
+        title: &str,
+        artist: &str,
+        album: &str,
+        track_number: Option<i32>,
+    ) -> Result<Track, DbError> {
+        self.conn.execute(
+            "UPDATE tracks SET title = ?1, artist = ?2, album = ?3, track_number = ?4 WHERE id = ?5",
+            params![title, artist, album, track_number, id],
+        )?;
+        self.get_track(id)?.ok_or_else(|| {
+            rusqlite::Error::QueryReturnedNoRows.into()
+        })
+    }
+
     pub fn get_peaks(&self, id: i64) -> Result<Option<String>, DbError> {
         let mut stmt = self.conn.prepare("SELECT peaks_json FROM tracks WHERE id = ?1")?;
         let mut rows = stmt.query(params![id])?;

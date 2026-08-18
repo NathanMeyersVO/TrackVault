@@ -1,12 +1,14 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 import { usePlayerStore } from "../store/playerStore";
 import { usePlayer } from "../hooks/usePlayer";
+import { TagEditorModal } from "./TagEditorModal";
 import { TrackTable } from "./TrackTable";
 
 export function LibraryView() {
   const { tracks, playback, cursorTrackId, setActiveTrackIds } = usePlayerStore();
   const { playTrack, selectTrack } = usePlayer();
+  const [editingTrackId, setEditingTrackId] = useState<number | null>(null);
 
   useEffect(() => {
     setActiveTrackIds(tracks.map((track) => track.id));
@@ -27,9 +29,16 @@ export function LibraryView() {
           cursorTrackId={cursorTrackId}
           onCursorChange={selectTrack}
           onPlay={playTrack}
+          onEditTags={setEditingTrackId}
           emptyMessage="Add a music folder to get started."
         />
       </div>
+      {editingTrackId != null && (
+        <TagEditorModal
+          trackId={editingTrackId}
+          onClose={() => setEditingTrackId(null)}
+        />
+      )}
     </div>
   );
 }

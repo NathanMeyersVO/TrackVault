@@ -256,6 +256,57 @@ pub fn get_track_peaks(state: State<'_, AppState>, track_id: i64) -> Result<Wave
     Ok(scan.peaks)
 }
 
+#[tauri::command]
+pub fn get_track_tags(state: State<'_, AppState>, track_id: i64) -> Result<crate::tags::TrackTagInfo, String> {
+    let path = {
+        let db = state.db.lock();
+        let track = db
+            .get_track(track_id)
+            .map_err(|e| e.to_string())?
+            .ok_or("Track not found")?;
+        track.path
+    };
+
+    crate::tags::read_track_tags(Path::new(&path))
+}
+
+#[tauri::command]
+pub fn update_track_tags(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    track_id: i64,
+    fields: Vec<crate::tags::TagFieldInput>,
+) -> Result<Track, String> {
+    let path = {
+        let db = state.db.lock();
+        let track = db
+            .get_track(track_id)
+            .map_err(|e| e.to_string())?
+            .ok_or("Track not found")?;
+        track.path
+    };
+
+    let metadata = {
+        let db = state.db.lock();
+        crate::tags::write_track_tags(&db, Path::new(&path), &fields)?
+    };
+
+    let track = {
+        let db = state.db.lock();
+        db.update_track_metadata(
+            track_id,
+            &metadata.title,
+            &metadata.artist,
+            &metadata.album,
+            metadata.track_number,
+        )
+        .map_err(|e| e.to_string())?
+    };
+
+    let _ = app.emit("library-updated", ());
+    Ok(track)
+}
+
 pub fn init_state(app: &AppHandle) -> Result<AppState, String> {
     let data_dir = app
         .path()

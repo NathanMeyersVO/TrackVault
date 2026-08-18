@@ -6,13 +6,14 @@ mod playback;
 mod player;
 mod scanner;
 mod seek_index;
+mod tags;
 mod waveform;
 
 use commands::{
     add_track_to_playlist, add_watch_folder, create_playlist, delete_playlist, get_playback_state,
-    get_playlist_tracks, get_track_peaks, get_volume, init_state, list_playlists, list_tracks,
-    list_watch_folders, pause_playback, play_track, remove_track_from_playlist, resume_playback,
-    scan_library, seek_playback, set_volume, stop_playback,
+    get_playlist_tracks, get_track_peaks, get_track_tags, get_volume, init_state, list_playlists,
+    list_tracks, list_watch_folders, pause_playback, play_track, remove_track_from_playlist,
+    resume_playback, scan_library, seek_playback, set_volume, stop_playback, update_track_tags,
 };
 use tauri::Manager;
 
@@ -46,6 +47,8 @@ pub fn run() {
             get_volume,
             set_volume,
             get_track_peaks,
+            get_track_tags,
+            update_track_tags,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

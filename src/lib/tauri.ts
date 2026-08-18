@@ -37,6 +37,31 @@ export interface ScanProgress {
   done: boolean;
 }
 
+export interface TagField {
+  key: string;
+  value: string;
+  editable: boolean;
+}
+
+export interface TrackTagInfo {
+  file_name: string;
+  path: string;
+  tag_type: string | null;
+  fields: TagField[];
+}
+
+export const COMMON_TAG_KEYS = [
+  "Track Title",
+  "Track Artist",
+  "Album Title",
+  "Album Artist",
+  "Track Number",
+  "Genre",
+  "Year",
+  "Comment",
+  "Composer",
+] as const;
+
 export const api = {
   listTracks: () => invoke<Track[]>("list_tracks"),
   listWatchFolders: () => invoke<string[]>("list_watch_folders"),
@@ -65,6 +90,12 @@ export const api = {
   setVolume: (volume: number) => invoke<number>("set_volume", { volume }),
   getTrackPeaks: (trackId: number) =>
     invoke<WaveformPeaks>("get_track_peaks", { trackId }),
+  getTrackTags: (trackId: number) =>
+    invoke<TrackTagInfo>("get_track_tags", { trackId }),
+  updateTrackTags: (
+    trackId: number,
+    fields: { key: string; value: string }[],
+  ) => invoke<Track>("update_track_tags", { trackId, fields }),
 };
 
 export function formatDuration(ms: number): string {

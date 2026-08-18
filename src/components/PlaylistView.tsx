@@ -1,8 +1,10 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { listen } from "@tauri-apps/api/event";
 
 import { api, type Track } from "../lib/tauri";
 import { usePlayer } from "../hooks/usePlayer";
 import { usePlayerStore } from "../store/playerStore";
+import { TagEditorModal } from "./TagEditorModal";
 import { TrackTable } from "./TrackTable";
 
 interface PlaylistViewProps {
@@ -18,12 +20,26 @@ export function PlaylistView({ playlistId }: PlaylistViewProps) {
   } = usePlayerStore();
   const { playTrack, selectTrack } = usePlayer();
   const [tracks, setTracks] = useState<Track[]>([]);
+  const [editingTrackId, setEditingTrackId] = useState<number | null>(null);
 
   const playlist = playlists.find((p) => p.id === playlistId);
 
-  useEffect(() => {
+  const refreshTracks = useCallback(() => {
     api.getPlaylistTracks(playlistId).then(setTracks).catch(console.error);
-  }, [playlistId, playlists]);
+  }, [playlistId]);
+
+  useEffect(() => {
+    refreshTracks();
+  }, [refreshTracks, playlists]);
+
+  useEffect(() => {
+    const unlisten = listen("library-updated", () => {
+      refreshTracks();
+    });
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, [refreshTracks]);
 
   useEffect(() => {
     setActiveTrackIds(tracks.map((track) => track.id));
@@ -51,6 +67,7 @@ export function PlaylistView({ playlistId }: PlaylistViewProps) {
           cursorTrackId={cursorTrackId}
           onCursorChange={selectTrack}
           onPlay={playTrack}
+          onEditTags={setEditingTrackId}
           emptyMessage="No tracks in this playlist yet. Add tracks from the library."
         />
       </div>
@@ -63,6 +80,12 @@ export function PlaylistView({ playlistId }: PlaylistViewProps) {
             Remove cursor track from playlist
           </button>
         </div>
+      )}
+      {editingTrackId != null && (
+        <TagEditorModal
+          trackId={editingTrackId}
+          onClose={() => setEditingTrackId(null)}
+        />
       )}
     </div>
   );

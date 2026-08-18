@@ -41,6 +41,7 @@ interface PlayerStore {
   clearPendingPausedLoad: () => void;
   applyBackendPlayback: (incoming: PlaybackState) => void;
   setVolume: (volume: number) => void;
+  patchTrack: (track: Track) => void;
 }
 
 export function getDisplayPositionMs(
@@ -172,6 +173,12 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     set({ playback: incoming });
   },
   setVolume: (volume) => set({ volume: Math.min(1, Math.max(0, volume)) }),
+  patchTrack: (track) =>
+    set((state) => ({
+      tracks: state.tracks.map((existing) =>
+        existing.id === track.id ? track : existing,
+      ),
+    })),
 }));
 
 let transportFallbackId = 0;
