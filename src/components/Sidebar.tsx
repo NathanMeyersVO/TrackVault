@@ -8,9 +8,16 @@ import { useLibrary } from "../hooks/usePlayer";
 import { usePlayerStore, type View } from "../store/playerStore";
 
 export function Sidebar() {
-  const { playlists, view, setView, scanning, draggingTrackId, setDraggingTrackId } =
-    usePlayerStore();
-  const { refresh } = useLibrary();
+  const {
+    playlists,
+    view,
+    setView,
+    scanning,
+    setScanning,
+    draggingTrackId,
+    setDraggingTrackId,
+  } = usePlayerStore();
+  const { refresh, scanLibrary } = useLibrary();
   const [newPlaylistName, setNewPlaylistName] = useState("");
   const [creating, setCreating] = useState(false);
   const [dragOverPlaylistId, setDragOverPlaylistId] = useState<number | null>(null);
@@ -35,9 +42,14 @@ export function Sidebar() {
       multiple: false,
       title: "Choose a music folder",
     });
-    if (typeof selected === "string") {
+    if (typeof selected !== "string") return;
+
+    setScanning(true);
+    try {
       await api.addWatchFolder(selected);
       await refresh();
+    } finally {
+      setScanning(false);
     }
   };
 
@@ -178,7 +190,15 @@ export function Sidebar() {
           disabled={scanning}
           className="w-full rounded-md bg-neutral-800 px-3 py-2 text-sm text-white hover:bg-neutral-700 disabled:opacity-50"
         >
-          {scanning ? "Scanning…" : "Add music folder"}
+          Add music folder
+        </button>
+        <button
+          type="button"
+          onClick={() => void scanLibrary()}
+          disabled={scanning}
+          className="w-full rounded-md bg-neutral-800 px-3 py-2 text-sm text-white hover:bg-neutral-700 disabled:opacity-50"
+        >
+          {scanning ? "Scanning…" : "Rescan library"}
         </button>
         <KeyboardShortcuts />
       </div>

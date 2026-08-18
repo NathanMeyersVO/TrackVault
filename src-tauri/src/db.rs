@@ -21,6 +21,7 @@ impl Database {
             std::fs::create_dir_all(parent).ok();
         }
         let conn = Connection::open(path)?;
+        conn.pragma_update(None, "foreign_keys", true)?;
         let db = Self { conn };
         db.migrate()?;
         Ok(db)
@@ -105,7 +106,15 @@ impl Database {
                artist = excluded.artist,
                album = excluded.album,
                duration_ms = excluded.duration_ms,
-               track_number = excluded.track_number
+               track_number = excluded.track_number,
+               peaks_json = CASE
+                 WHEN tracks.duration_ms != excluded.duration_ms THEN NULL
+                 ELSE tracks.peaks_json
+               END,
+               seek_index_json = CASE
+                 WHEN tracks.duration_ms != excluded.duration_ms THEN NULL
+                 ELSE tracks.seek_index_json
+               END
              WHERE tracks.title != excluded.title
                 OR tracks.artist != excluded.artist
                 OR tracks.album != excluded.album
@@ -114,6 +123,25 @@ impl Database {
             params![path, title, artist, album, duration_ms, track_number, now],
         )?;
         Ok(changed > 0)
+    }
+
+    pub fn list_track_paths(&self) -> Result<Vec<String>, DbError> {
+        let mut stmt = self.conn.prepare("SELECT path FROM tracks")?;
+        let rows = stmt.query_map([], |row| row.get(0))?;
+        Ok(rows.filter_map(Result::ok).collect())
+    }
+
+    pub fn delete_tracks_by_paths(&self, paths: &[String]) -> Result<u32, DbError> {
+        if paths.is_empty() {
+            return Ok(0);
+        }
+
+        let mut stmt = self.conn.prepare("DELETE FROM tracks WHERE path = ?1")?;
+        let mut removed = 0u32;
+        for path in paths {
+            removed += stmt.execute(params![path])? as u32;
+        }
+        Ok(removed)
     }
 
     pub fn list_tracks(&self) -> Result<Vec<Track>, DbError> {

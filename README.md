@@ -56,6 +56,7 @@ npm run tauri build
 3. Double-click a track (or select and press play) to start playback.
 4. Create playlists from the sidebar and add tracks from the library.
 5. Click the waveform to seek within the current track.
+6. Click **Rescan library** in the sidebar to pick up files added, changed, or deleted outside the app.
 
 ## Project structure
 

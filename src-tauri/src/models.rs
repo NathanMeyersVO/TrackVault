@@ -39,5 +39,6 @@ pub struct WaveformPeaks {
 pub struct ScanProgress {
     pub scanned: u32,
     pub added: u32,
+    pub removed: u32,
     pub done: bool,
 }

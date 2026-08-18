@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use lofty::file::TaggedFileExt;
@@ -49,7 +50,11 @@ pub fn read_tags(path: &Path) -> (String, String, String, Option<i32>, i64) {
     (title, artist, album, track_number, duration_ms)
 }
 
-pub fn scan_folder(db: &Database, folder: &Path) -> Result<ScanProgress, String> {
+pub fn scan_folder(
+    db: &Database,
+    folder: &Path,
+    seen: &mut HashSet<String>,
+) -> Result<ScanProgress, String> {
     let mut scanned = 0u32;
     let mut added = 0u32;
 
@@ -65,6 +70,7 @@ pub fn scan_folder(db: &Database, folder: &Path) -> Result<ScanProgress, String>
 
         scanned += 1;
         let path_str = path.to_string_lossy().to_string();
+        seen.insert(path_str.clone());
         let (title, artist, album, track_number, duration_ms) = read_tags(path);
 
         match db.upsert_track(
@@ -84,15 +90,18 @@ pub fn scan_folder(db: &Database, folder: &Path) -> Result<ScanProgress, String>
     Ok(ScanProgress {
         scanned,
         added,
+        removed: 0,
         done: true,
     })
 }
 
 pub fn scan_all_folders(db: &Database) -> Result<ScanProgress, String> {
     let folders = db.list_watch_folders().map_err(|e| e.to_string())?;
+    let mut seen = HashSet::new();
     let mut total = ScanProgress {
         scanned: 0,
         added: 0,
+        removed: 0,
         done: true,
     };
 
@@ -101,10 +110,19 @@ pub fn scan_all_folders(db: &Database) -> Result<ScanProgress, String> {
         if !path.exists() {
             continue;
         }
-        let progress = scan_folder(db, &path)?;
+        let progress = scan_folder(db, &path, &mut seen)?;
         total.scanned += progress.scanned;
         total.added += progress.added;
     }
+
+    let existing = db.list_track_paths().map_err(|e| e.to_string())?;
+    let missing: Vec<String> = existing
+        .into_iter()
+        .filter(|path| !seen.contains(path))
+        .collect();
+    total.removed = db
+        .delete_tracks_by_paths(&missing)
+        .map_err(|e| e.to_string())?;
 
     Ok(total)
 }

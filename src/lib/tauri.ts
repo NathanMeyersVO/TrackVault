@@ -34,6 +34,7 @@ export interface WaveformPeaks {
 export interface ScanProgress {
   scanned: number;
   added: number;
+  removed: number;
   done: boolean;
 }
 
