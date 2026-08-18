@@ -56,10 +56,17 @@ export const COMMON_TAG_KEYS = [
   "Album Title",
   "Album Artist",
   "Track Number",
+  "Track Total",
+  "Disc Number",
+  "Disc Total",
   "Genre",
-  "Year",
   "Comment",
+  "Recording Date",
+  "Year",
   "Composer",
+  "Conductor",
+  "Label",
+  "Copyright",
 ] as const;
 
 export const api = {

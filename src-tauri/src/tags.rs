@@ -52,40 +52,13 @@ pub fn read_track_tags(path: &Path) -> Result<TrackTagInfo, String> {
         .read()
         .map_err(|e| format!("Failed to read tags: {e}"))?;
 
-    let multi_tag = tagged.tags().len() > 1;
     let primary_type = tagged
         .primary_tag()
         .map(|tag| format!("{:?}", tag.tag_type()));
 
     let mut fields = Vec::new();
-    for tag in tagged.tags() {
-        let tag_label = format!("{:?}", tag.tag_type());
-        for item in tag.items() {
-            let base_key = item_key_label(item.key());
-            let key = if multi_tag {
-                format!("{tag_label}: {base_key}")
-            } else {
-                base_key
-            };
-
-            match item.value() {
-                ItemValue::Text(text) => fields.push(TagField {
-                    key,
-                    value: text.clone(),
-                    editable: true,
-                }),
-                ItemValue::Locator(loc) => fields.push(TagField {
-                    key,
-                    value: loc.clone(),
-                    editable: true,
-                }),
-                _ => fields.push(TagField {
-                    key,
-                    value: "[Binary data]".to_string(),
-                    editable: false,
-                }),
-            }
-        }
+    if let Some(tag) = tagged.primary_tag() {
+        collect_human_tag_fields(tag, &mut fields);
     }
 
     Ok(TrackTagInfo {
@@ -194,18 +167,50 @@ fn verify_written_tags(path: &Path, expected: &HashMap<String, String>) -> Resul
     }
 
     for (key, value) in expected {
-        match actual.get(key) {
-            Some(actual_value) if actual_value == value => {}
-            _ => {
-                return Err(
-                    "Tags were written but could not be verified. Try rescanning the library."
-                        .to_string(),
-                );
-            }
+        if !field_value_matches(value, actual.get(key).map(String::as_str)) {
+            return Err(
+                "Tags were written but could not be verified. Try rescanning the library."
+                    .to_string(),
+            );
         }
     }
 
     Ok(())
+}
+
+fn collect_human_tag_fields(tag: &Tag, fields: &mut Vec<TagField>) {
+    for item in tag.items() {
+        let key = item_key_label(item.key());
+        if !is_human_tag_key(&key) {
+            continue;
+        }
+
+        match item.value() {
+            ItemValue::Text(text) => fields.push(TagField {
+                key,
+                value: text.clone(),
+                editable: true,
+            }),
+            ItemValue::Locator(loc) => fields.push(TagField {
+                key,
+                value: loc.clone(),
+                editable: true,
+            }),
+            _ => fields.push(TagField {
+                key,
+                value: "[Binary data]".to_string(),
+                editable: false,
+            }),
+        }
+    }
+}
+
+fn field_value_matches(expected: &str, actual: Option<&str>) -> bool {
+    if expected.trim().is_empty() {
+        actual.map(|value| value.trim().is_empty()).unwrap_or(true)
+    } else {
+        actual == Some(expected)
+    }
 }
 
 fn check_file_writable(path: &Path) -> Result<(), String> {
@@ -269,6 +274,10 @@ fn item_key_label(key: &ItemKey) -> String {
     }
 }
 
+fn is_human_tag_key(key: &str) -> bool {
+    parse_item_key(key).is_some()
+}
+
 fn parse_item_key(key: &str) -> Option<ItemKey> {
     let base = key
         .rsplit_once(": ")
@@ -306,5 +315,46 @@ mod tests {
             parse_item_key("Id3v2: Track Title"),
             Some(ItemKey::TrackTitle)
         );
+    }
+
+    #[test]
+    fn human_tag_key_includes_all_labels() {
+        for label in [
+            "Track Title",
+            "Track Artist",
+            "Album Title",
+            "Album Artist",
+            "Track Number",
+            "Track Total",
+            "Disc Number",
+            "Disc Total",
+            "Genre",
+            "Comment",
+            "Recording Date",
+            "Year",
+            "Composer",
+            "Conductor",
+            "Label",
+            "Copyright",
+        ] {
+            assert!(is_human_tag_key(label), "{label}");
+            assert!(is_human_tag_key(&format!("Id3v2: {label}")), "Id3v2: {label}");
+        }
+    }
+
+    #[test]
+    fn human_tag_key_excludes_advanced_tags() {
+        assert!(!is_human_tag_key("ContentGroup"));
+        assert!(!is_human_tag_key("Id3v2: ContentGroup"));
+        assert!(!is_human_tag_key("MusicBrainzRecordingId"));
+    }
+
+    #[test]
+    fn field_value_matches_empty_expected_as_removed() {
+        assert!(field_value_matches("", None));
+        assert!(field_value_matches("  ", None));
+        assert!(field_value_matches("", Some("")));
+        assert!(!field_value_matches("Title", None));
+        assert!(field_value_matches("Title", Some("Title")));
     }
 }
