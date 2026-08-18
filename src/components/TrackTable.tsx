@@ -1,5 +1,5 @@
 import { TRACK_LIST_ID } from "../hooks/useTrackCursor";
-import type { Track } from "../lib/tauri";
+import type { Playlist, Track } from "../lib/tauri";
 import { TrackTableRow } from "./TrackTableRow";
 
 interface TrackTableProps {
@@ -9,7 +9,9 @@ interface TrackTableProps {
   onCursorChange: (trackId: number) => void;
   onPlay: (trackId: number) => void;
   onEditTags: (trackId: number) => void;
-  onAddToPlaylist?: (trackId: number) => void;
+  playlists?: Playlist[];
+  onAddTrackToPlaylist?: (trackId: number, playlistId: number) => void;
+  onRemoveTrackFromPlaylist?: (trackId: number) => void;
   emptyMessage: string;
 }
 
@@ -20,7 +22,9 @@ export function TrackTable({
   onCursorChange,
   onPlay,
   onEditTags,
-  onAddToPlaylist,
+  playlists,
+  onAddTrackToPlaylist,
+  onRemoveTrackFromPlaylist,
   emptyMessage,
 }: TrackTableProps) {
   if (tracks.length === 0) {
@@ -48,7 +52,6 @@ export function TrackTable({
             <th className="px-4 py-2 font-medium">Artist</th>
             <th className="px-4 py-2 font-medium">Album</th>
             <th className="px-4 py-2 text-right font-medium">Time</th>
-            {onAddToPlaylist && <th className="px-4 py-2 font-medium" />}
             <th className="w-12 px-2 py-2" aria-label="Actions" />
           </tr>
         </thead>
@@ -63,8 +66,9 @@ export function TrackTable({
               onPlay={onPlay}
               onEditTags={onEditTags}
               onFocusList={focusTrackList}
-              showAddColumn={onAddToPlaylist != null}
-              onAddToPlaylist={onAddToPlaylist}
+              playlists={playlists}
+              onAddTrackToPlaylist={onAddTrackToPlaylist}
+              onRemoveTrackFromPlaylist={onRemoveTrackFromPlaylist}
             />
           ))}
         </tbody>

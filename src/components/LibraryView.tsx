@@ -1,18 +1,29 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
+import { api } from "../lib/tauri";
+import { useLibrary, usePlayer } from "../hooks/usePlayer";
 import { usePlayerStore } from "../store/playerStore";
-import { usePlayer } from "../hooks/usePlayer";
 import { TagEditorModal } from "./TagEditorModal";
 import { TrackTable } from "./TrackTable";
 
 export function LibraryView() {
-  const { tracks, playback, cursorTrackId, setActiveTrackIds } = usePlayerStore();
+  const { tracks, playlists, playback, cursorTrackId, setActiveTrackIds } =
+    usePlayerStore();
   const { playTrack, selectTrack } = usePlayer();
+  const { refresh } = useLibrary();
   const [editingTrackId, setEditingTrackId] = useState<number | null>(null);
 
   useEffect(() => {
     setActiveTrackIds(tracks.map((track) => track.id));
   }, [tracks, setActiveTrackIds]);
+
+  const handleAddToPlaylist = useCallback(
+    async (trackId: number, playlistId: number) => {
+      await api.addTrackToPlaylist(playlistId, trackId);
+      await refresh();
+    },
+    [refresh],
+  );
 
   return (
     <div className="flex h-full flex-col">
@@ -30,6 +41,8 @@ export function LibraryView() {
           onCursorChange={selectTrack}
           onPlay={playTrack}
           onEditTags={setEditingTrackId}
+          playlists={playlists}
+          onAddTrackToPlaylist={handleAddToPlaylist}
           emptyMessage="Add a music folder to get started."
         />
       </div>

@@ -19,7 +19,7 @@ export function useTrackTooltip(trackId: number) {
     };
   }, []);
 
-  const onMouseEnter = (event: React.MouseEvent<HTMLTableRowElement>) => {
+  const onMouseEnter = (event: React.MouseEvent<HTMLElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
     setPosition({
       top: rect.top + window.scrollY,

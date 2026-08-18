@@ -68,19 +68,10 @@ export function PlaylistView({ playlistId }: PlaylistViewProps) {
           onCursorChange={selectTrack}
           onPlay={playTrack}
           onEditTags={setEditingTrackId}
+          onRemoveTrackFromPlaylist={removeTrack}
           emptyMessage="No tracks in this playlist yet. Add tracks from the library."
         />
       </div>
-      {tracks.length > 0 && cursorTrackId && tracks.some((t) => t.id === cursorTrackId) && (
-        <div className="border-t border-neutral-800 px-4 py-2">
-          <button
-            onClick={() => removeTrack(cursorTrackId)}
-            className="text-xs text-red-400 hover:text-red-300"
-          >
-            Remove cursor track from playlist
-          </button>
-        </div>
-      )}
       {editingTrackId != null && (
         <TagEditorModal
           trackId={editingTrackId}

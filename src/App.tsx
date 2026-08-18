@@ -5,16 +5,10 @@ import { NowPlayingBar } from "./components/NowPlayingBar";
 import { useLibrary, usePlayer } from "./hooks/usePlayer";
 import { useTrackCursor } from "./hooks/useTrackCursor";
 import { usePlayerStore } from "./store/playerStore";
-import { api } from "./lib/tauri";
 
 function MainContent() {
-  const { view, tracks, playlists, cursorTrackId } = usePlayerStore();
+  const { view, tracks } = usePlayerStore();
   useLibrary();
-
-  const addCursorToPlaylist = async (playlistId: number) => {
-    if (!cursorTrackId) return;
-    await api.addTrackToPlaylist(playlistId, cursorTrackId);
-  };
 
   return (
     <main className="flex min-w-0 flex-1 flex-col">
@@ -25,21 +19,6 @@ function MainContent() {
           <PlaylistView playlistId={view.playlistId} />
         )}
       </div>
-
-      {view === "library" && playlists.length > 0 && cursorTrackId && (
-        <div className="flex items-center gap-2 border-t border-neutral-800 px-4 py-2">
-          <span className="text-xs text-neutral-500">Add to playlist:</span>
-          {playlists.map((playlist) => (
-            <button
-              key={playlist.id}
-              onClick={() => addCursorToPlaylist(playlist.id)}
-              className="rounded-md bg-neutral-800 px-2 py-1 text-xs text-neutral-200 hover:bg-neutral-700"
-            >
-              {playlist.name}
-            </button>
-          ))}
-        </div>
-      )}
 
       {view === "library" && tracks.length === 0 && (
         <div className="border-t border-neutral-800 px-4 py-2 text-xs text-neutral-500">
