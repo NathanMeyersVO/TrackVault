@@ -4,6 +4,7 @@ import { VOLUME_STEP } from "./usePlayer";
 import { usePlayerStore } from "../store/playerStore";
 
 export const TRACK_LIST_ID = "track-list";
+export const TAGLIST_FOOTER_ROW_ID = "track-row-taglist-footer";
 
 function isEditableTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
@@ -13,6 +14,14 @@ function isEditableTarget(target: EventTarget | null): boolean {
 
 function focusTrackList(): void {
   document.getElementById(TRACK_LIST_ID)?.focus({ preventScroll: true });
+}
+
+function scrollToTaglistFooter(): void {
+  requestAnimationFrame(() => {
+    document
+      .getElementById(TAGLIST_FOOTER_ROW_ID)
+      ?.scrollIntoView({ block: "nearest" });
+  });
 }
 
 interface UseTrackCursorOptions {
@@ -28,7 +37,13 @@ export function useTrackCursor({
   onTogglePlayPause,
   onAdjustVolume,
 }: UseTrackCursorOptions) {
-  const { cursorTrackId, activeTrackIds } = usePlayerStore();
+  const {
+    cursorTrackId,
+    activeTrackIds,
+    taglistNav,
+    cursorTaglistFooter,
+    setCursorTaglistFooter,
+  } = usePlayerStore();
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -52,6 +67,12 @@ export function useTrackCursor({
       }
 
       if (event.key === "Enter") {
+        if (cursorTaglistFooter && taglistNav?.hasNextSublist) {
+          event.preventDefault();
+          taglistNav.activateNextSublist();
+          return;
+        }
+
         if (!cursorTrackId) return;
 
         event.preventDefault();
@@ -60,14 +81,44 @@ export function useTrackCursor({
       }
 
       if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
-      if (activeTrackIds.length === 0) return;
+
+      const hasFooter = taglistNav?.hasNextSublist ?? false;
+      if (activeTrackIds.length === 0 && !hasFooter) return;
 
       event.preventDefault();
       focusTrackList();
 
+      if (cursorTaglistFooter) {
+        if (event.key === "ArrowUp" && activeTrackIds.length > 0) {
+          setCursorTaglistFooter(false);
+          const lastId = activeTrackIds[activeTrackIds.length - 1];
+          onSelectTrack(lastId);
+          requestAnimationFrame(() => {
+            document
+              .getElementById(`track-row-${lastId}`)
+              ?.scrollIntoView({ block: "nearest" });
+          });
+        }
+        return;
+      }
+
       const currentIndex = cursorTrackId
         ? activeTrackIds.indexOf(cursorTrackId)
         : -1;
+
+      if (event.key === "ArrowDown") {
+        const atLastTrack =
+          currentIndex === activeTrackIds.length - 1 ||
+          (currentIndex === -1 && activeTrackIds.length === 0);
+
+        if (atLastTrack && hasFooter) {
+          setCursorTaglistFooter(true);
+          scrollToTaglistFooter();
+          return;
+        }
+      }
+
+      if (activeTrackIds.length === 0) return;
 
       let nextIndex: number;
       if (currentIndex === -1) {
@@ -92,10 +143,13 @@ export function useTrackCursor({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [
     activeTrackIds,
+    cursorTaglistFooter,
     cursorTrackId,
     onAdjustVolume,
     onPlayTrack,
     onSelectTrack,
     onTogglePlayPause,
+    setCursorTaglistFooter,
+    taglistNav,
   ]);
 }

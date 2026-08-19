@@ -8,6 +8,11 @@ export type View =
   | { taglistId: number; value: string | null };
 export type TransportMode = "idle" | "seek" | "load";
 
+export interface TaglistNav {
+  hasNextSublist: boolean;
+  activateNextSublist: () => void;
+}
+
 const SEEK_CONFIRM_TOLERANCE_MS = 50;
 const POSITION_GUARD_TOLERANCE_MS = 100;
 export const SEEK_FALLBACK_MS = 15_000;
@@ -30,6 +35,8 @@ interface PlayerStore {
   pendingPausedLoadTrackId: number | null;
   draggingTrackId: number | null;
   volume: number;
+  taglistNav: TaglistNav | null;
+  cursorTaglistFooter: boolean;
   setTracks: (tracks: Track[]) => void;
   setPlaylists: (playlists: Playlist[]) => void;
   setTaglists: (taglists: Taglist[]) => void;
@@ -51,6 +58,8 @@ interface PlayerStore {
   applyBackendPlayback: (incoming: PlaybackState) => void;
   setVolume: (volume: number) => void;
   patchTrack: (track: Track) => void;
+  setTaglistNav: (nav: TaglistNav | null) => void;
+  setCursorTaglistFooter: (active: boolean) => void;
 }
 
 export function getDisplayPositionMs(
@@ -97,11 +106,18 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   pendingPausedLoadTrackId: null,
   draggingTrackId: null,
   volume: 1,
+  taglistNav: null,
+  cursorTaglistFooter: false,
   setTracks: (tracks) => set({ tracks }),
   setPlaylists: (playlists) => set({ playlists }),
   setTaglists: (taglists) => set({ taglists }),
   setView: (view) => set({ view }),
-  setCursorTrackId: (cursorTrackId) => set({ cursorTrackId }),
+  setCursorTrackId: (cursorTrackId) =>
+    set((state) => ({
+      cursorTrackId,
+      cursorTaglistFooter:
+        cursorTrackId != null ? false : state.cursorTaglistFooter,
+    })),
   setActiveTrackIds: (activeTrackIds) => set({ activeTrackIds }),
   setPlayback: (playback) => set({ playback }),
   setScanning: (scanning) => set({ scanning }),
@@ -193,6 +209,12 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       tracks: state.tracks.map((existing) =>
         existing.id === track.id ? track : existing,
       ),
+    })),
+  setTaglistNav: (taglistNav) => set({ taglistNav }),
+  setCursorTaglistFooter: (active) =>
+    set((state) => ({
+      cursorTaglistFooter: active,
+      cursorTrackId: active ? null : state.cursorTrackId,
     })),
 }));
 

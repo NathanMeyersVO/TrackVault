@@ -1,9 +1,17 @@
-import { useCallback, useState } from "react";
+import { useCallback, useState, type CSSProperties } from "react";
 
-import { TRACK_LIST_ID } from "../hooks/useTrackCursor";
+import { TAGLIST_FOOTER_ROW_ID, TRACK_LIST_ID } from "../hooks/useTrackCursor";
 import { getReorderDragData, setReorderDragData } from "../lib/dragDrop";
+import { appearance } from "../lib/appearance";
 import type { Playlist, Track } from "../lib/tauri";
 import { TrackTableRow } from "./TrackTableRow";
+
+interface TrackTableFooterRow {
+  label: string;
+  isSelected: boolean;
+  onSelect: () => void;
+  onActivate: () => void;
+}
 
 interface TrackTableProps {
   tracks: Track[];
@@ -18,6 +26,7 @@ interface TrackTableProps {
   onReorderTracks?: (orderedIds: number[]) => void;
   emptyMessage: string;
   draggable?: boolean;
+  footerRow?: TrackTableFooterRow;
 }
 
 function reorderTrackIds(
@@ -35,6 +44,11 @@ function reorderTrackIds(
   return next;
 }
 
+function footerRowStyle(isSelected: boolean): CSSProperties | undefined {
+  if (!isSelected) return undefined;
+  return { backgroundColor: appearance.cursorBackgroundColor };
+}
+
 export function TrackTable({
   tracks,
   playingTrackId,
@@ -48,6 +62,7 @@ export function TrackTable({
   onReorderTracks,
   emptyMessage,
   draggable = true,
+  footerRow,
 }: TrackTableProps) {
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dropTarget, setDropTarget] = useState<{
@@ -93,13 +108,15 @@ export function TrackTable({
     [clearReorderState, dragIndex, onReorderTracks, tracks],
   );
 
-  if (tracks.length === 0) {
+  if (tracks.length === 0 && !footerRow) {
     return (
       <div className="flex h-full items-center justify-center text-neutral-500">
         {emptyMessage}
       </div>
     );
   }
+
+  const footerStyle = footerRow ? footerRowStyle(footerRow.isSelected) : undefined;
 
   return (
     <div
@@ -119,6 +136,15 @@ export function TrackTable({
           </tr>
         </thead>
         <tbody>
+          {tracks.length === 0 && (
+            <tr className="border-b border-neutral-900 text-neutral-500">
+              {reorderable && <td className="px-1 py-2" />}
+              <td colSpan={4} className="px-4 py-6 text-center">
+                {emptyMessage}
+              </td>
+              <td className="px-2 py-2" />
+            </tr>
+          )}
           {tracks.map((track, index) => (
             <TrackTableRow
               key={track.id}
@@ -154,6 +180,29 @@ export function TrackTable({
               onReorderDrop={(event) => handleDrop(index, event)}
             />
           ))}
+          {footerRow && (
+            <tr
+              id={TAGLIST_FOOTER_ROW_ID}
+              onClick={() => {
+                footerRow.onSelect();
+                focusTrackList();
+              }}
+              onDoubleClick={() => footerRow.onActivate()}
+              style={footerStyle}
+              className="cursor-pointer border-b border-neutral-900 text-neutral-200 hover:bg-neutral-900/70"
+            >
+              {reorderable && <td className="px-1 py-2" />}
+              <td className="px-4 py-2">
+                <div className="truncate font-medium italic text-neutral-400">
+                  {footerRow.label}
+                </div>
+              </td>
+              <td className="px-4 py-2 text-neutral-500">—</td>
+              <td className="px-4 py-2 text-neutral-500">—</td>
+              <td className="px-4 py-2 text-right text-neutral-500">—</td>
+              <td className="px-2 py-2" />
+            </tr>
+          )}
         </tbody>
       </table>
     </div>

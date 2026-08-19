@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 
 import { api, type TaglistValue, type Track } from "../lib/tauri";
@@ -16,8 +16,17 @@ interface TaglistViewProps {
 }
 
 export function TaglistView({ taglistId, value }: TaglistViewProps) {
-  const { taglists, playback, cursorTrackId, setActiveTrackIds } =
-    usePlayerStore();
+  const {
+    taglists,
+    playback,
+    cursorTrackId,
+    cursorTaglistFooter,
+    setActiveTrackIds,
+    setView,
+    setTaglistNav,
+    setCursorTaglistFooter,
+    setCursorTrackId,
+  } = usePlayerStore();
   const { playTrack, selectTrack } = usePlayer();
   const [tracks, setTracks] = useState<Track[]>([]);
   const [values, setValues] = useState<TaglistValue[]>([]);
@@ -28,6 +37,16 @@ export function TaglistView({ taglistId, value }: TaglistViewProps) {
   const currentValue = values.find((entry) => entry.value === value);
   const displayName = formatTaglistLabel(value, currentValue?.display_title);
 
+  const currentIndex = useMemo(
+    () => values.findIndex((entry) => entry.value === value),
+    [values, value],
+  );
+  const nextSublist =
+    currentIndex >= 0 && currentIndex < values.length - 1
+      ? values[currentIndex + 1]
+      : null;
+  const hasNextSublist = nextSublist != null && !isSearching;
+
   const refreshTracks = useCallback(() => {
     api.getTaglistTracks(taglistId, value).then(setTracks).catch(console.error);
   }, [taglistId, value]);
@@ -35,6 +54,27 @@ export function TaglistView({ taglistId, value }: TaglistViewProps) {
   const refreshValues = useCallback(() => {
     api.listTaglistValues(taglistId).then(setValues).catch(console.error);
   }, [taglistId]);
+
+  const activateNextSublist = useCallback(() => {
+    if (!nextSublist) return;
+    setCursorTaglistFooter(false);
+    const nextValue = nextSublist.value;
+    setView({ taglistId, value: nextValue });
+    void api
+      .getTaglistTracks(taglistId, nextValue)
+      .then((loaded) => {
+        if (loaded[0]) selectTrack(loaded[0].id);
+        else setCursorTrackId(null);
+      })
+      .catch(console.error);
+  }, [
+    nextSublist,
+    selectTrack,
+    setCursorTaglistFooter,
+    setCursorTrackId,
+    setView,
+    taglistId,
+  ]);
 
   useEffect(() => {
     refreshTracks();
@@ -55,6 +95,27 @@ export function TaglistView({ taglistId, value }: TaglistViewProps) {
     setActiveTrackIds(filteredTracks.map((track) => track.id));
   }, [filteredTracks, setActiveTrackIds]);
 
+  useEffect(() => {
+    if (hasNextSublist) {
+      setTaglistNav({ hasNextSublist: true, activateNextSublist });
+    } else {
+      setTaglistNav(null);
+      setCursorTaglistFooter(false);
+    }
+  }, [
+    activateNextSublist,
+    hasNextSublist,
+    setCursorTaglistFooter,
+    setTaglistNav,
+  ]);
+
+  useEffect(() => {
+    return () => {
+      setTaglistNav(null);
+      setCursorTaglistFooter(false);
+    };
+  }, [setCursorTaglistFooter, setTaglistNav]);
+
   const reorderTracks = async (orderedIds: number[]) => {
     const byId = new Map(tracks.map((track) => [track.id, track]));
     setTracks(
@@ -68,6 +129,10 @@ export function TaglistView({ taglistId, value }: TaglistViewProps) {
       console.error(error);
       refreshTracks();
     }
+  };
+
+  const selectFooter = () => {
+    setCursorTaglistFooter(true);
   };
 
   return (
@@ -99,6 +164,16 @@ export function TaglistView({ taglistId, value }: TaglistViewProps) {
               : value == null
                 ? "No tracks without this tag."
                 : "No tracks with this tag."
+          }
+          footerRow={
+            hasNextSublist
+              ? {
+                  label: "Next taglist",
+                  isSelected: cursorTaglistFooter,
+                  onSelect: selectFooter,
+                  onActivate: activateNextSublist,
+                }
+              : undefined
           }
         />
       </div>
