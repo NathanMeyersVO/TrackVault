@@ -21,6 +21,7 @@ interface PlayerStore {
   activeTrackIds: number[];
   playback: PlaybackState;
   scanning: boolean;
+  libraryFolder: string | null;
   transportBusy: boolean;
   transportMode: TransportMode;
   lockedPositionMs: number | null;
@@ -37,6 +38,7 @@ interface PlayerStore {
   setActiveTrackIds: (ids: number[]) => void;
   setPlayback: (playback: PlaybackState) => void;
   setScanning: (scanning: boolean) => void;
+  setLibraryFolder: (libraryFolder: string | null) => void;
   beginTransport: (targetMs: number) => void;
   beginTrackLoad: (targetMs: number) => void;
   endTrackLoad: (result: PlaybackState) => void;
@@ -86,6 +88,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     is_playing: false,
   },
   scanning: false,
+  libraryFolder: null,
   transportBusy: false,
   transportMode: "idle",
   lockedPositionMs: null,
@@ -102,6 +105,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   setActiveTrackIds: (activeTrackIds) => set({ activeTrackIds }),
   setPlayback: (playback) => set({ playback }),
   setScanning: (scanning) => set({ scanning }),
+  setLibraryFolder: (libraryFolder) => set({ libraryFolder }),
   beginTransport: (targetMs) =>
     set((state) => ({
       transportBusy: true,

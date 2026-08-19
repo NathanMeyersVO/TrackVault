@@ -103,21 +103,43 @@ impl Database {
             "ALTER TABLE tracks ADD COLUMN tags_indexed INTEGER NOT NULL DEFAULT 0",
             [],
         );
+        self.migrate_single_library_folder()?;
         Ok(())
     }
 
-    pub fn add_watch_folder(&self, path: &str) -> Result<(), DbError> {
-        self.conn.execute(
-            "INSERT OR IGNORE INTO watch_folders (path) VALUES (?1)",
+    fn migrate_single_library_folder(&self) -> Result<(), DbError> {
+        let keep_id: Option<i64> = self
+            .conn
+            .query_row(
+                "SELECT id FROM watch_folders ORDER BY id LIMIT 1",
+                [],
+                |row| row.get(0),
+            )
+            .ok();
+        if let Some(id) = keep_id {
+            self.conn.execute(
+                "DELETE FROM watch_folders WHERE id != ?1",
+                params![id],
+            )?;
+        }
+        Ok(())
+    }
+
+    pub fn get_library_folder(&self) -> Result<Option<String>, DbError> {
+        let mut stmt = self.conn.prepare("SELECT path FROM watch_folders LIMIT 1")?;
+        let mut rows = stmt.query_map([], |row| row.get(0))?;
+        Ok(rows.next().transpose()?)
+    }
+
+    pub fn set_library_folder(&self, path: &str) -> Result<(), DbError> {
+        let tx = self.conn.unchecked_transaction()?;
+        tx.execute("DELETE FROM watch_folders", [])?;
+        tx.execute(
+            "INSERT INTO watch_folders (path) VALUES (?1)",
             params![path],
         )?;
+        tx.commit()?;
         Ok(())
-    }
-
-    pub fn list_watch_folders(&self) -> Result<Vec<String>, DbError> {
-        let mut stmt = self.conn.prepare("SELECT path FROM watch_folders ORDER BY path")?;
-        let rows = stmt.query_map([], |row| row.get(0))?;
-        Ok(rows.filter_map(Result::ok).collect())
     }
 
     pub fn upsert_track(

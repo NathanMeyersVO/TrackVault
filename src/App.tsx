@@ -36,7 +36,7 @@ function MainContent() {
 
       {view === "library" && tracks.length === 0 && (
         <div className="border-t border-neutral-800 px-4 py-2 text-xs text-neutral-500">
-          Tip: use &quot;Add music folder&quot; in the sidebar to scan MP3, FLAC, WAV, OGG, and M4A files.
+          Tip: use &quot;Choose library folder&quot; in the sidebar to scan MP3, FLAC, WAV, OGG, and M4A files.
         </div>
       )}
     </main>

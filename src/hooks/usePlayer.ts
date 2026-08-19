@@ -9,18 +9,21 @@ import {
 } from "../store/playerStore";
 
 export function useLibrary() {
-  const { setTracks, setPlaylists, setTaglists, setScanning } = usePlayerStore();
+  const { setTracks, setPlaylists, setTaglists, setScanning, setLibraryFolder } =
+    usePlayerStore();
 
   const refresh = useCallback(async () => {
-    const [tracks, playlists, taglists] = await Promise.all([
+    const [tracks, playlists, taglists, libraryFolder] = await Promise.all([
       api.listTracks(),
       api.listPlaylists(),
       api.listTaglists(),
+      api.getLibraryFolder(),
     ]);
     setTracks(tracks);
     setPlaylists(playlists);
     setTaglists(taglists);
-  }, [setTracks, setPlaylists, setTaglists]);
+    setLibraryFolder(libraryFolder);
+  }, [setTracks, setPlaylists, setTaglists, setLibraryFolder]);
 
   useEffect(() => {
     refresh().catch(console.error);

@@ -54,7 +54,7 @@ export function LibraryView() {
           emptyMessage={
             isSearching
               ? "No tracks match your search."
-              : "Add a music folder to get started."
+              : "Choose a library folder to get started."
           }
         />
       </div>

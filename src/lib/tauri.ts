@@ -85,9 +85,9 @@ export const COMMON_TAG_KEYS = [
 
 export const api = {
   listTracks: () => invoke<Track[]>("list_tracks"),
-  listWatchFolders: () => invoke<string[]>("list_watch_folders"),
-  addWatchFolder: (path: string) =>
-    invoke<ScanProgress>("add_watch_folder", { path }),
+  getLibraryFolder: () => invoke<string | null>("get_library_folder"),
+  setLibraryFolder: (path: string) =>
+    invoke<ScanProgress>("set_library_folder", { path }),
   scanLibrary: () => invoke<ScanProgress>("scan_library"),
   createPlaylist: (name: string) =>
     invoke<number>("create_playlist", { name }),

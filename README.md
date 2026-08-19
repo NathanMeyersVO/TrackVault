@@ -51,7 +51,7 @@ npm run tauri build
 
 ## Usage
 
-1. Click **Add music folder** in the sidebar.
+1. Click **Choose library folder** in the sidebar and select your main music directory.
 2. TrackVault scans for MP3, FLAC, WAV, OGG, and M4A files and reads tags.
 3. Double-click a track (or select and press play) to start playback.
 4. Create playlists from the sidebar and add tracks from the library.

@@ -144,6 +144,7 @@ export function Sidebar() {
     setView,
     scanning,
     setScanning,
+    libraryFolder,
     draggingTrackId,
     setDraggingTrackId,
   } = usePlayerStore();
@@ -169,17 +170,17 @@ export function Sidebar() {
     await refresh();
   };
 
-  const addFolder = async () => {
+  const chooseLibraryFolder = async () => {
     const selected = await open({
       directory: true,
       multiple: false,
-      title: "Choose a music folder",
+      title: "Choose library folder",
     });
     if (typeof selected !== "string") return;
 
     setScanning(true);
     try {
-      await api.addWatchFolder(selected);
+      await api.setLibraryFolder(selected);
       await refresh();
     } finally {
       setScanning(false);
@@ -390,17 +391,23 @@ export function Sidebar() {
       </nav>
 
       <div className="space-y-2 border-t border-neutral-800 p-3">
+        <p
+          className="truncate text-xs text-neutral-400"
+          title={libraryFolder ?? undefined}
+        >
+          {libraryFolder ?? "No library folder chosen"}
+        </p>
         <button
-          onClick={addFolder}
+          onClick={() => void chooseLibraryFolder()}
           disabled={scanning}
           className="w-full rounded-md bg-neutral-800 px-3 py-2 text-sm text-white hover:bg-neutral-700 disabled:opacity-50"
         >
-          Add music folder
+          Choose library folder
         </button>
         <button
           type="button"
           onClick={() => void scanLibrary()}
-          disabled={scanning}
+          disabled={scanning || !libraryFolder}
           className="w-full rounded-md bg-neutral-800 px-3 py-2 text-sm text-white hover:bg-neutral-700 disabled:opacity-50"
         >
           {scanning ? "Scanning…" : "Rescan library"}

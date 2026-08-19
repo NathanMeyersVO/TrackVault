@@ -101,8 +101,7 @@ pub fn scan_folder(
     })
 }
 
-pub fn scan_all_folders(db: &Database) -> Result<ScanProgress, String> {
-    let folders = db.list_watch_folders().map_err(|e| e.to_string())?;
+pub fn scan_library_folder(db: &Database) -> Result<ScanProgress, String> {
     let mut seen = HashSet::new();
     let mut total = ScanProgress {
         scanned: 0,
@@ -111,11 +110,13 @@ pub fn scan_all_folders(db: &Database) -> Result<ScanProgress, String> {
         done: true,
     };
 
-    for folder in folders {
-        let path = PathBuf::from(&folder);
-        if !path.exists() {
-            continue;
-        }
+    let folder = db.get_library_folder().map_err(|e| e.to_string())?;
+    let Some(folder) = folder else {
+        return Ok(total);
+    };
+
+    let path = PathBuf::from(&folder);
+    if path.exists() {
         let progress = scan_folder(db, &path, &mut seen)?;
         total.scanned += progress.scanned;
         total.added += progress.added;

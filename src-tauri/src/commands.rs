@@ -42,23 +42,23 @@ pub fn list_tracks(state: State<'_, AppState>) -> Result<Vec<Track>, String> {
 }
 
 #[tauri::command]
-pub fn list_watch_folders(state: State<'_, AppState>) -> Result<Vec<String>, String> {
+pub fn get_library_folder(state: State<'_, AppState>) -> Result<Option<String>, String> {
     state
         .db
         .lock()
-        .list_watch_folders()
+        .get_library_folder()
         .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub fn add_watch_folder(
+pub fn set_library_folder(
     app: AppHandle,
     state: State<'_, AppState>,
     path: String,
 ) -> Result<ScanProgress, String> {
     {
         let db = state.db.lock();
-        db.add_watch_folder(&path).map_err(|e| e.to_string())?;
+        db.set_library_folder(&path).map_err(|e| e.to_string())?;
     }
 
     let progress = scan_library(app.clone(), state)?;
@@ -70,7 +70,7 @@ pub fn add_watch_folder(
 pub fn scan_library(app: AppHandle, state: State<'_, AppState>) -> Result<ScanProgress, String> {
     let progress = {
         let db = state.db.lock();
-        scanner::scan_all_folders(&db)?
+        scanner::scan_library_folder(&db)?
     };
     let _ = app.emit("library-updated", ());
     Ok(progress)

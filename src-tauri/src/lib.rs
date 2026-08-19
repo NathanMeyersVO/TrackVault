@@ -12,13 +12,12 @@ mod title_map;
 mod waveform;
 
 use commands::{
-    add_track_to_playlist, add_watch_folder, create_playlist, create_taglist, delete_playlist,
-    delete_taglist, get_playback_state, get_playlist_tracks, get_taglist_tracks,
+    add_track_to_playlist, create_playlist, create_taglist, delete_playlist, delete_taglist,
+    get_library_folder, get_playback_state, get_playlist_tracks, get_taglist_tracks,
     get_track_peaks, get_track_tags, get_volume, import_taglist_titles, init_state,
-    list_playlists, list_taglist_values,
-    list_taglists, list_tracks, list_watch_folders, pause_playback, play_track,
-    remove_track_from_playlist, resume_playback, scan_library, seek_playback, set_volume,
-    stop_playback, update_track_tags,
+    list_playlists, list_taglist_values, list_taglists, list_tracks, pause_playback, play_track,
+    remove_track_from_playlist, resume_playback, scan_library, seek_playback, set_library_folder,
+    set_volume, stop_playback, update_track_tags,
 };
 use tauri::Manager;
 
@@ -34,8 +33,8 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             list_tracks,
-            list_watch_folders,
-            add_watch_folder,
+            get_library_folder,
+            set_library_folder,
             scan_library,
             create_playlist,
             delete_playlist,

@@ -257,22 +257,19 @@ fn check_file_writable(path: &Path) -> Result<(), String> {
 
 fn ensure_writable_watch_path(db: &Database, path: &Path) -> Result<(), String> {
     let canonical = std::fs::canonicalize(path).map_err(|e| format!("Invalid track path: {e}"))?;
-    let folders = db
-        .list_watch_folders()
-        .map_err(|e| format!("Database error: {e}"))?;
+    let folder = db
+        .get_library_folder()
+        .map_err(|e| format!("Database error: {e}"))?
+        .ok_or("No library folder configured.")?;
 
-    for folder in folders {
-        let folder_path = PathBuf::from(&folder);
-        let canonical_folder = match std::fs::canonicalize(&folder_path) {
-            Ok(value) => value,
-            Err(_) => continue,
-        };
-        if canonical.starts_with(&canonical_folder) {
-            return Ok(());
-        }
+    let folder_path = PathBuf::from(&folder);
+    let canonical_folder = std::fs::canonicalize(&folder_path)
+        .map_err(|e| format!("Invalid library folder path: {e}"))?;
+    if canonical.starts_with(&canonical_folder) {
+        return Ok(());
     }
 
-    Err("Track path is not under a registered watch folder.".to_string())
+    Err("Track path is not under the library folder.".to_string())
 }
 
 fn item_key_label(key: &ItemKey) -> String {
