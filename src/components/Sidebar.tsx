@@ -4,6 +4,7 @@ import { listen } from "@tauri-apps/api/event";
 
 import { KeyboardShortcuts } from "./KeyboardShortcuts";
 import { api, COMMON_TAG_KEYS, type Taglist, type TaglistValue } from "../lib/tauri";
+import { formatTaglistLabel } from "../lib/taglistLabels";
 import { getTrackDragData } from "../lib/dragDrop";
 import { useLibrary } from "../hooks/usePlayer";
 import { usePlayerStore, type View } from "../store/playerStore";
@@ -50,23 +51,52 @@ function TaglistGroup({
     await refresh();
   };
 
+  const importTitles = async (event: MouseEvent) => {
+    event.stopPropagation();
+    const selected = await open({
+      multiple: false,
+      title: "Choose event schedule",
+      filters: [{ name: "Schedule", extensions: ["xls", "xlsx", "csv"] }],
+    });
+    if (typeof selected !== "string") return;
+
+    try {
+      const count = await api.importTaglistTitles(taglist.id, selected);
+      loadValues();
+      console.info(`Imported ${count} title mappings`);
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
   return (
     <div className="mb-2">
       <div className="group flex items-center justify-between px-3 py-1">
         <span className="truncate text-xs font-medium text-neutral-400">
           {taglist.name}
         </span>
-        <button
-          type="button"
-          onClick={(event) => void deleteTaglist(event)}
-          className="hidden rounded px-1 text-xs text-neutral-500 hover:text-red-400 group-hover:inline"
-          title="Delete taglist"
-        >
-          ×
-        </button>
+        <div className="hidden group-hover:inline">
+          <button
+            type="button"
+            onClick={(event) => void importTitles(event)}
+            className="rounded px-1 text-xs text-neutral-500 hover:text-white"
+            title="Import titles"
+          >
+            Titles
+          </button>
+          <button
+            type="button"
+            onClick={(event) => void deleteTaglist(event)}
+            className="rounded px-1 text-xs text-neutral-500 hover:text-red-400"
+            title="Delete taglist"
+          >
+            ×
+          </button>
+        </div>
       </div>
       {values.map((entry) => {
-        const label = entry.value ?? "NO-TAG";
+        const label = formatTaglistLabel(entry.value, entry.display_title);
+        const rowKey = entry.value ?? "NO-TAG";
         const active =
           typeof view === "object" &&
           "taglistId" in view &&
@@ -86,7 +116,7 @@ function TaglistGroup({
 
         return (
           <div
-            key={label}
+            key={rowKey}
             role="button"
             tabIndex={0}
             onClick={handleNavigate}

@@ -33,6 +33,7 @@ pub struct Taglist {
 pub struct TaglistValue {
     pub value: Option<String>,
     pub track_count: i64,
+    pub display_title: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

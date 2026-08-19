@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 
-import { api, type Track } from "../lib/tauri";
+import { api, type TaglistValue, type Track } from "../lib/tauri";
+import { formatTaglistLabel } from "../lib/taglistLabels";
 import { usePlayer } from "../hooks/usePlayer";
 import { useTrackSearch } from "../hooks/useTrackSearch";
 import { usePlayerStore } from "../store/playerStore";
@@ -19,28 +20,36 @@ export function TaglistView({ taglistId, value }: TaglistViewProps) {
     usePlayerStore();
   const { playTrack, selectTrack } = usePlayer();
   const [tracks, setTracks] = useState<Track[]>([]);
+  const [values, setValues] = useState<TaglistValue[]>([]);
   const [editingTrackId, setEditingTrackId] = useState<number | null>(null);
   const { query, setQuery, filteredTracks, isSearching } = useTrackSearch(tracks);
 
   const taglist = taglists.find((entry) => entry.id === taglistId);
-  const displayName = value ?? "NO-TAG";
+  const currentValue = values.find((entry) => entry.value === value);
+  const displayName = formatTaglistLabel(value, currentValue?.display_title);
 
   const refreshTracks = useCallback(() => {
     api.getTaglistTracks(taglistId, value).then(setTracks).catch(console.error);
   }, [taglistId, value]);
 
+  const refreshValues = useCallback(() => {
+    api.listTaglistValues(taglistId).then(setValues).catch(console.error);
+  }, [taglistId]);
+
   useEffect(() => {
     refreshTracks();
-  }, [refreshTracks, taglists]);
+    refreshValues();
+  }, [refreshTracks, refreshValues, taglists]);
 
   useEffect(() => {
     const unlisten = listen("library-updated", () => {
       refreshTracks();
+      refreshValues();
     });
     return () => {
       unlisten.then((fn) => fn());
     };
-  }, [refreshTracks]);
+  }, [refreshTracks, refreshValues]);
 
   useEffect(() => {
     setActiveTrackIds(filteredTracks.map((track) => track.id));

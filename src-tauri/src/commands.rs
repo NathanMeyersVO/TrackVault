@@ -170,19 +170,40 @@ pub fn list_taglist_values(
     state: State<'_, AppState>,
     taglist_id: i64,
 ) -> Result<Vec<TaglistValue>, String> {
-    let tag_key = {
+    let (tag_key, taglist_id) = {
         let db = state.db.lock();
         crate::tag_index::backfill_unindexed_tracks(&db)?;
         let taglist = db
             .get_taglist(taglist_id)
             .map_err(|e| e.to_string())?
             .ok_or("Taglist not found")?;
-        taglist.tag_key
+        (taglist.tag_key, taglist.id)
     };
     state
         .db
         .lock()
-        .list_taglist_values(&tag_key)
+        .list_taglist_values(&tag_key, taglist_id)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn import_taglist_titles(
+    state: State<'_, AppState>,
+    taglist_id: i64,
+    path: String,
+) -> Result<u32, String> {
+    {
+        let db = state.db.lock();
+        if db.get_taglist(taglist_id).map_err(|e| e.to_string())?.is_none() {
+            return Err("Taglist not found".to_string());
+        }
+    }
+
+    let mappings = crate::title_map::parse_title_map(Path::new(&path))?;
+    state
+        .db
+        .lock()
+        .import_taglist_titles(taglist_id, &mappings)
         .map_err(|e| e.to_string())
 }
 

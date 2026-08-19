@@ -29,6 +29,7 @@ export interface Taglist {
 export interface TaglistValue {
   value: string | null;
   track_count: number;
+  display_title?: string | null;
 }
 
 export interface PlaybackState {
@@ -104,6 +105,8 @@ export const api = {
   listTaglists: () => invoke<Taglist[]>("list_taglists"),
   listTaglistValues: (taglistId: number) =>
     invoke<TaglistValue[]>("list_taglist_values", { taglistId }),
+  importTaglistTitles: (taglistId: number, path: string) =>
+    invoke<number>("import_taglist_titles", { taglistId, path }),
   getTaglistTracks: (taglistId: number, value: string | null) =>
     invoke<Track[]>("get_taglist_tracks", { taglistId, value }),
   playTrack: (trackId: number, startMs?: number, autoplay = true) =>

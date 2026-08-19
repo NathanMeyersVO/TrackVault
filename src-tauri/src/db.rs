@@ -85,6 +85,14 @@ impl Database {
                 ON track_tags(tag_key, tag_value);
             CREATE INDEX IF NOT EXISTS idx_track_tags_track_id
                 ON track_tags(track_id);
+
+            CREATE TABLE IF NOT EXISTS taglist_value_titles (
+                taglist_id INTEGER NOT NULL,
+                tag_value TEXT NOT NULL,
+                display_title TEXT NOT NULL,
+                PRIMARY KEY (taglist_id, tag_value),
+                FOREIGN KEY (taglist_id) REFERENCES taglists(id) ON DELETE CASCADE
+            );
             ",
         )?;
         let _ = self.conn.execute(
@@ -410,7 +418,46 @@ impl Database {
         }
     }
 
-    pub fn list_taglist_values(&self, tag_key: &str) -> Result<Vec<TaglistValue>, DbError> {
+    pub fn import_taglist_titles(
+        &self,
+        taglist_id: i64,
+        mappings: &std::collections::HashMap<String, String>,
+    ) -> Result<u32, DbError> {
+        let tx = self.conn.unchecked_transaction()?;
+        tx.execute(
+            "DELETE FROM taglist_value_titles WHERE taglist_id = ?1",
+            params![taglist_id],
+        )?;
+        for (tag_value, display_title) in mappings {
+            tx.execute(
+                "INSERT INTO taglist_value_titles (taglist_id, tag_value, display_title)
+                 VALUES (?1, ?2, ?3)",
+                params![taglist_id, tag_value, display_title],
+            )?;
+        }
+        tx.commit()?;
+        Ok(mappings.len() as u32)
+    }
+
+    fn get_taglist_titles(
+        &self,
+        taglist_id: i64,
+    ) -> Result<std::collections::HashMap<String, String>, DbError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT tag_value, display_title FROM taglist_value_titles WHERE taglist_id = ?1",
+        )?;
+        let rows = stmt.query_map(params![taglist_id], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })?;
+        Ok(rows.filter_map(Result::ok).collect())
+    }
+
+    pub fn list_taglist_values(
+        &self,
+        tag_key: &str,
+        taglist_id: i64,
+    ) -> Result<Vec<TaglistValue>, DbError> {
+        let titles = self.get_taglist_titles(taglist_id)?;
         let mut values = Vec::new();
 
         let mut stmt = self.conn.prepare(
@@ -421,9 +468,11 @@ impl Database {
              ORDER BY tag_value COLLATE NOCASE",
         )?;
         let rows = stmt.query_map(params![tag_key], |row| {
+            let value: String = row.get(0)?;
             Ok(TaglistValue {
-                value: Some(row.get(0)?),
+                value: Some(value.clone()),
                 track_count: row.get(1)?,
+                display_title: titles.get(&value).cloned(),
             })
         })?;
         values.extend(rows.filter_map(Result::ok));
@@ -440,6 +489,7 @@ impl Database {
         values.push(TaglistValue {
             value: None,
             track_count: no_tag_count,
+            display_title: None,
         });
 
         Ok(values)
@@ -543,7 +593,7 @@ mod tests {
         .unwrap();
         db.replace_track_tags(track_c, &[]).unwrap();
 
-        let values = db.list_taglist_values("Composer").unwrap();
+        let values = db.list_taglist_values("Composer", 1).unwrap();
         assert_eq!(values.len(), 3);
         assert_eq!(values[0].value.as_deref(), Some("Bach"));
         assert_eq!(values[0].track_count, 1);
@@ -595,5 +645,31 @@ mod tests {
         assert_eq!(rock.len(), 1);
         assert_eq!(pop.len(), 1);
         assert_eq!(rock[0].id, track_id);
+    }
+
+    #[test]
+    fn taglist_values_include_imported_display_titles() {
+        let db = test_db();
+        let taglist_id = db.create_taglist("Events", "Comment").unwrap();
+        let track_id = insert_track(&db, "Event Track");
+        db.replace_track_tags(
+            track_id,
+            &[("Comment".to_string(), "01".to_string())],
+        )
+        .unwrap();
+
+        let mut mappings = std::collections::HashMap::new();
+        mappings.insert(
+            "01".to_string(),
+            "Showcase: Pre-Preliminary".to_string(),
+        );
+        db.import_taglist_titles(taglist_id, &mappings).unwrap();
+
+        let values = db.list_taglist_values("Comment", taglist_id).unwrap();
+        assert_eq!(values[0].value.as_deref(), Some("01"));
+        assert_eq!(
+            values[0].display_title.as_deref(),
+            Some("Showcase: Pre-Preliminary")
+        );
     }
 }
