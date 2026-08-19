@@ -22,6 +22,20 @@ pub struct Playlist {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Taglist {
+    pub id: i64,
+    pub name: String,
+    pub tag_key: String,
+    pub created_at: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TaglistValue {
+    pub value: Option<String>,
+    pub track_count: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlaybackState {
     pub track_id: Option<i64>,
     pub position_ms: u64,

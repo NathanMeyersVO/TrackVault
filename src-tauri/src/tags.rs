@@ -119,6 +119,30 @@ pub fn write_track_tags(
     Ok(extract_metadata(path)?)
 }
 
+pub fn read_human_tag_pairs(path: &Path) -> Result<Vec<(String, String)>, String> {
+    let tagged = Probe::open(path)
+        .map_err(|e| format!("Failed to open file: {e}"))?
+        .read()
+        .map_err(|e| format!("Failed to read tags: {e}"))?;
+
+    let mut fields = Vec::new();
+    if let Some(tag) = tagged.primary_tag() {
+        collect_human_tag_fields(tag, &mut fields);
+    }
+
+    Ok(fields
+        .into_iter()
+        .filter_map(|field| {
+            let value = field.value.trim();
+            if value.is_empty() {
+                None
+            } else {
+                Some((field.key, value.to_string()))
+            }
+        })
+        .collect())
+}
+
 pub fn extract_metadata(path: &Path) -> Result<TrackMetadata, String> {
     let tagged = Probe::open(path)
         .map_err(|e| format!("Failed to open file: {e}"))?

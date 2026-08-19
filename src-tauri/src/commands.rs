@@ -6,7 +6,7 @@ use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::audio_scan::scan_audio;
 use crate::db::Database;
-use crate::models::{PlaybackState, Playlist, ScanProgress, Track, WaveformPeaks};
+use crate::models::{PlaybackState, Playlist, ScanProgress, Taglist, TaglistValue, Track, WaveformPeaks};
 use crate::player::AudioPlayer;
 use crate::scanner;
 use crate::seek_index::{parse_seek_index, serialize_seek_index, SeekKeyframe};
@@ -135,6 +135,76 @@ pub fn remove_track_from_playlist(
         .db
         .lock()
         .remove_track_from_playlist(playlist_id, track_id)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn create_taglist(
+    state: State<'_, AppState>,
+    name: String,
+    tag_key: String,
+) -> Result<i64, String> {
+    state
+        .db
+        .lock()
+        .create_taglist(&name, &tag_key)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn delete_taglist(state: State<'_, AppState>, id: i64) -> Result<(), String> {
+    state
+        .db
+        .lock()
+        .delete_taglist(id)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn list_taglists(state: State<'_, AppState>) -> Result<Vec<Taglist>, String> {
+    state.db.lock().list_taglists().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn list_taglist_values(
+    state: State<'_, AppState>,
+    taglist_id: i64,
+) -> Result<Vec<TaglistValue>, String> {
+    let tag_key = {
+        let db = state.db.lock();
+        crate::tag_index::backfill_unindexed_tracks(&db)?;
+        let taglist = db
+            .get_taglist(taglist_id)
+            .map_err(|e| e.to_string())?
+            .ok_or("Taglist not found")?;
+        taglist.tag_key
+    };
+    state
+        .db
+        .lock()
+        .list_taglist_values(&tag_key)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_taglist_tracks(
+    state: State<'_, AppState>,
+    taglist_id: i64,
+    value: Option<String>,
+) -> Result<Vec<Track>, String> {
+    let tag_key = {
+        let db = state.db.lock();
+        crate::tag_index::backfill_unindexed_tracks(&db)?;
+        let taglist = db
+            .get_taglist(taglist_id)
+            .map_err(|e| e.to_string())?
+            .ok_or("Taglist not found")?;
+        taglist.tag_key
+    };
+    state
+        .db
+        .lock()
+        .list_taglist_tracks(&tag_key, value.as_deref())
         .map_err(|e| e.to_string())
 }
 
@@ -302,6 +372,11 @@ pub fn update_track_tags(
         )
         .map_err(|e| e.to_string())?
     };
+
+    {
+        let db = state.db.lock();
+        crate::tag_index::index_track_tags_from_fields(&db, track_id, &fields)?;
+    }
 
     let _ = app.emit("library-updated", ());
     Ok(track)

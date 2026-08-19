@@ -19,6 +19,18 @@ export interface Playlist {
   track_count: number;
 }
 
+export interface Taglist {
+  id: number;
+  name: string;
+  tag_key: string;
+  created_at: number;
+}
+
+export interface TaglistValue {
+  value: string | null;
+  track_count: number;
+}
+
 export interface PlaybackState {
   track_id: number | null;
   position_ms: number;
@@ -86,6 +98,14 @@ export const api = {
     invoke<void>("add_track_to_playlist", { playlistId, trackId }),
   removeTrackFromPlaylist: (playlistId: number, trackId: number) =>
     invoke<void>("remove_track_from_playlist", { playlistId, trackId }),
+  createTaglist: (name: string, tagKey: string) =>
+    invoke<number>("create_taglist", { name, tagKey }),
+  deleteTaglist: (id: number) => invoke<void>("delete_taglist", { id }),
+  listTaglists: () => invoke<Taglist[]>("list_taglists"),
+  listTaglistValues: (taglistId: number) =>
+    invoke<TaglistValue[]>("list_taglist_values", { taglistId }),
+  getTaglistTracks: (taglistId: number, value: string | null) =>
+    invoke<Track[]>("get_taglist_tracks", { taglistId, value }),
   playTrack: (trackId: number, startMs?: number, autoplay = true) =>
     invoke<PlaybackState>("play_track", { trackId, startMs, autoplay }),
   pausePlayback: () => invoke<PlaybackState>("pause_playback"),

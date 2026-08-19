@@ -1,8 +1,11 @@
 import { create } from "zustand";
 
-import type { PlaybackState, Playlist, Track } from "../lib/tauri";
+import type { PlaybackState, Playlist, Taglist, Track } from "../lib/tauri";
 
-export type View = "library" | { playlistId: number };
+export type View =
+  | "library"
+  | { playlistId: number }
+  | { taglistId: number; value: string | null };
 export type TransportMode = "idle" | "seek" | "load";
 
 const SEEK_CONFIRM_TOLERANCE_MS = 50;
@@ -12,6 +15,7 @@ export const SEEK_FALLBACK_MS = 15_000;
 interface PlayerStore {
   tracks: Track[];
   playlists: Playlist[];
+  taglists: Taglist[];
   view: View;
   cursorTrackId: number | null;
   activeTrackIds: number[];
@@ -27,6 +31,7 @@ interface PlayerStore {
   volume: number;
   setTracks: (tracks: Track[]) => void;
   setPlaylists: (playlists: Playlist[]) => void;
+  setTaglists: (taglists: Taglist[]) => void;
   setView: (view: View) => void;
   setCursorTrackId: (id: number | null) => void;
   setActiveTrackIds: (ids: number[]) => void;
@@ -70,6 +75,7 @@ export function isDisplayPositionPinned(
 export const usePlayerStore = create<PlayerStore>((set, get) => ({
   tracks: [],
   playlists: [],
+  taglists: [],
   view: "library",
   cursorTrackId: null,
   activeTrackIds: [],
@@ -90,6 +96,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   volume: 1,
   setTracks: (tracks) => set({ tracks }),
   setPlaylists: (playlists) => set({ playlists }),
+  setTaglists: (taglists) => set({ taglists }),
   setView: (view) => set({ view }),
   setCursorTrackId: (cursorTrackId) => set({ cursorTrackId }),
   setActiveTrackIds: (activeTrackIds) => set({ activeTrackIds }),

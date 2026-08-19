@@ -2,10 +2,21 @@ import { useEffect } from "react";
 import { Sidebar } from "./components/Sidebar";
 import { LibraryView } from "./components/LibraryView";
 import { PlaylistView } from "./components/PlaylistView";
+import { TaglistView } from "./components/TaglistView";
 import { NowPlayingBar } from "./components/NowPlayingBar";
 import { useLibrary, usePlayer } from "./hooks/usePlayer";
 import { useTrackCursor } from "./hooks/useTrackCursor";
-import { usePlayerStore } from "./store/playerStore";
+import { usePlayerStore, type View } from "./store/playerStore";
+
+function isPlaylistView(view: View): view is { playlistId: number } {
+  return typeof view === "object" && "playlistId" in view;
+}
+
+function isTaglistView(
+  view: View,
+): view is { taglistId: number; value: string | null } {
+  return typeof view === "object" && "taglistId" in view;
+}
 
 function MainContent() {
   const { view, tracks } = usePlayerStore();
@@ -16,9 +27,11 @@ function MainContent() {
       <div className="min-h-0 flex-1">
         {view === "library" ? (
           <LibraryView />
-        ) : (
+        ) : isTaglistView(view) ? (
+          <TaglistView taglistId={view.taglistId} value={view.value} />
+        ) : isPlaylistView(view) ? (
           <PlaylistView playlistId={view.playlistId} />
-        )}
+        ) : null}
       </div>
 
       {view === "library" && tracks.length === 0 && (

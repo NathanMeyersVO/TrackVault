@@ -81,8 +81,14 @@ pub fn scan_folder(
             duration_ms,
             track_number,
         ) {
-            Ok(true) => added += 1,
-            Ok(false) => {}
+            Ok((track_id, is_new)) => {
+                if is_new {
+                    added += 1;
+                }
+                if let Err(e) = crate::tag_index::index_track_tags(db, track_id, path) {
+                    eprintln!("Failed to index tags for {}: {}", path_str, e);
+                }
+            }
             Err(e) => eprintln!("Failed to upsert {}: {}", path_str, e),
         }
     }

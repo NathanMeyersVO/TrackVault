@@ -3,7 +3,7 @@ use std::path::Path;
 use rusqlite::{params, Connection};
 use thiserror::Error;
 
-use crate::models::{Playlist, Track};
+use crate::models::{Playlist, Taglist, TaglistValue, Track};
 
 #[derive(Debug, Error)]
 pub enum DbError {
@@ -65,10 +65,34 @@ impl Database {
             CREATE INDEX IF NOT EXISTS idx_tracks_title ON tracks(title);
             CREATE INDEX IF NOT EXISTS idx_playlist_tracks_position
                 ON playlist_tracks(playlist_id, position);
+
+            CREATE TABLE IF NOT EXISTS taglists (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                tag_key TEXT NOT NULL,
+                created_at INTEGER NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS track_tags (
+                track_id INTEGER NOT NULL,
+                tag_key TEXT NOT NULL,
+                tag_value TEXT NOT NULL,
+                PRIMARY KEY (track_id, tag_key, tag_value),
+                FOREIGN KEY (track_id) REFERENCES tracks(id) ON DELETE CASCADE
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_track_tags_key_value
+                ON track_tags(tag_key, tag_value);
+            CREATE INDEX IF NOT EXISTS idx_track_tags_track_id
+                ON track_tags(track_id);
             ",
         )?;
         let _ = self.conn.execute(
             "ALTER TABLE tracks ADD COLUMN seek_index_json TEXT",
+            [],
+        );
+        let _ = self.conn.execute(
+            "ALTER TABLE tracks ADD COLUMN tags_indexed INTEGER NOT NULL DEFAULT 0",
             [],
         );
         Ok(())
@@ -96,9 +120,15 @@ impl Database {
         album: &str,
         duration_ms: i64,
         track_number: Option<i32>,
-    ) -> Result<bool, DbError> {
+    ) -> Result<(i64, bool), DbError> {
+        let exists: bool = self.conn.query_row(
+            "SELECT 1 FROM tracks WHERE path = ?1",
+            params![path],
+            |_| Ok(()),
+        ).is_ok();
+
         let now = chrono_now();
-        let changed = self.conn.execute(
+        self.conn.execute(
             "INSERT INTO tracks (path, title, artist, album, duration_ms, track_number, added_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
              ON CONFLICT(path) DO UPDATE SET
@@ -114,15 +144,48 @@ impl Database {
                seek_index_json = CASE
                  WHEN tracks.duration_ms != excluded.duration_ms THEN NULL
                  ELSE tracks.seek_index_json
-               END
-             WHERE tracks.title != excluded.title
-                OR tracks.artist != excluded.artist
-                OR tracks.album != excluded.album
-                OR tracks.duration_ms != excluded.duration_ms
-                OR tracks.track_number IS NOT excluded.track_number",
+               END",
             params![path, title, artist, album, duration_ms, track_number, now],
         )?;
-        Ok(changed > 0)
+        let track_id: i64 = self.conn.query_row(
+            "SELECT id FROM tracks WHERE path = ?1",
+            params![path],
+            |row| row.get(0),
+        )?;
+        Ok((track_id, !exists))
+    }
+
+    pub fn list_unindexed_track_ids(&self) -> Result<Vec<i64>, DbError> {
+        let mut stmt = self.conn.prepare("SELECT id FROM tracks WHERE tags_indexed = 0")?;
+        let rows = stmt.query_map([], |row| row.get(0))?;
+        Ok(rows.filter_map(Result::ok).collect())
+    }
+
+    pub fn replace_track_tags(
+        &self,
+        track_id: i64,
+        tags: &[(String, String)],
+    ) -> Result<(), DbError> {
+        self.conn.execute(
+            "DELETE FROM track_tags WHERE track_id = ?1",
+            params![track_id],
+        )?;
+        for (key, value) in tags {
+            self.conn.execute(
+                "INSERT INTO track_tags (track_id, tag_key, tag_value) VALUES (?1, ?2, ?3)",
+                params![track_id, key, value],
+            )?;
+        }
+        self.conn.execute(
+            "UPDATE tracks SET tags_indexed = 1 WHERE id = ?1",
+            params![track_id],
+        )?;
+        Ok(())
+    }
+
+    pub fn mark_all_tracks_unindexed(&self) -> Result<(), DbError> {
+        self.conn.execute("UPDATE tracks SET tags_indexed = 0", [])?;
+        Ok(())
     }
 
     pub fn list_track_paths(&self) -> Result<Vec<String>, DbError> {
@@ -299,6 +362,123 @@ impl Database {
         let rows = stmt.query_map(params![playlist_id], map_track_row)?;
         Ok(rows.filter_map(Result::ok).collect())
     }
+
+    pub fn create_taglist(&self, name: &str, tag_key: &str) -> Result<i64, DbError> {
+        let now = chrono_now();
+        self.conn.execute(
+            "INSERT INTO taglists (name, tag_key, created_at) VALUES (?1, ?2, ?3)",
+            params![name, tag_key, now],
+        )?;
+        Ok(self.conn.last_insert_rowid())
+    }
+
+    pub fn delete_taglist(&self, id: i64) -> Result<(), DbError> {
+        self.conn
+            .execute("DELETE FROM taglists WHERE id = ?1", params![id])?;
+        Ok(())
+    }
+
+    pub fn list_taglists(&self) -> Result<Vec<Taglist>, DbError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, name, tag_key, created_at FROM taglists ORDER BY name COLLATE NOCASE",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok(Taglist {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                tag_key: row.get(2)?,
+                created_at: row.get(3)?,
+            })
+        })?;
+        Ok(rows.filter_map(Result::ok).collect())
+    }
+
+    pub fn get_taglist(&self, id: i64) -> Result<Option<Taglist>, DbError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, name, tag_key, created_at FROM taglists WHERE id = ?1",
+        )?;
+        let mut rows = stmt.query(params![id])?;
+        if let Some(row) = rows.next()? {
+            Ok(Some(Taglist {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                tag_key: row.get(2)?,
+                created_at: row.get(3)?,
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub fn list_taglist_values(&self, tag_key: &str) -> Result<Vec<TaglistValue>, DbError> {
+        let mut values = Vec::new();
+
+        let mut stmt = self.conn.prepare(
+            "SELECT tag_value, COUNT(DISTINCT track_id)
+             FROM track_tags
+             WHERE tag_key = ?1
+             GROUP BY tag_value
+             ORDER BY tag_value COLLATE NOCASE",
+        )?;
+        let rows = stmt.query_map(params![tag_key], |row| {
+            Ok(TaglistValue {
+                value: Some(row.get(0)?),
+                track_count: row.get(1)?,
+            })
+        })?;
+        values.extend(rows.filter_map(Result::ok));
+
+        let no_tag_count: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM tracks t
+             WHERE NOT EXISTS (
+               SELECT 1 FROM track_tags tt
+               WHERE tt.track_id = t.id AND tt.tag_key = ?1
+             )",
+            params![tag_key],
+            |row| row.get(0),
+        )?;
+        values.push(TaglistValue {
+            value: None,
+            track_count: no_tag_count,
+        });
+
+        Ok(values)
+    }
+
+    pub fn list_taglist_tracks(
+        &self,
+        tag_key: &str,
+        value: Option<&str>,
+    ) -> Result<Vec<Track>, DbError> {
+        if let Some(tag_value) = value {
+            let mut stmt = self.conn.prepare(
+                "SELECT DISTINCT t.id, t.path, t.title, t.artist, t.album, t.duration_ms,
+                        t.track_number, t.added_at,
+                        CASE WHEN t.peaks_json IS NOT NULL THEN 1 ELSE 0 END
+                 FROM tracks t
+                 JOIN track_tags tt ON tt.track_id = t.id
+                 WHERE tt.tag_key = ?1 AND tt.tag_value = ?2
+                 ORDER BY t.artist COLLATE NOCASE, t.album COLLATE NOCASE,
+                          t.track_number, t.title",
+            )?;
+            let rows = stmt.query_map(params![tag_key, tag_value], map_track_row)?;
+            Ok(rows.filter_map(Result::ok).collect())
+        } else {
+            let mut stmt = self.conn.prepare(
+                "SELECT t.id, t.path, t.title, t.artist, t.album, t.duration_ms, t.track_number,
+                        t.added_at, CASE WHEN t.peaks_json IS NOT NULL THEN 1 ELSE 0 END
+                 FROM tracks t
+                 WHERE NOT EXISTS (
+                   SELECT 1 FROM track_tags tt
+                   WHERE tt.track_id = t.id AND tt.tag_key = ?1
+                 )
+                 ORDER BY t.artist COLLATE NOCASE, t.album COLLATE NOCASE,
+                          t.track_number, t.title",
+            )?;
+            let rows = stmt.query_map(params![tag_key], map_track_row)?;
+            Ok(rows.filter_map(Result::ok).collect())
+        }
+    }
 }
 
 fn map_track_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Track> {
@@ -320,4 +500,100 @@ fn chrono_now() -> i64 {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs() as i64)
         .unwrap_or(0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_db() -> Database {
+        Database::open(std::path::Path::new(":memory:")).expect("in-memory db")
+    }
+
+    fn insert_track(db: &Database, title: &str) -> i64 {
+        let (track_id, _) = db
+            .upsert_track(
+                &format!("/music/{title}.mp3"),
+                title,
+                "Artist",
+                "Album",
+                1000,
+                None,
+            )
+            .expect("insert track");
+        track_id
+    }
+
+    #[test]
+    fn taglist_values_sorted_with_no_tag_last() {
+        let db = test_db();
+        let track_a = insert_track(&db, "A");
+        let track_b = insert_track(&db, "B");
+        let track_c = insert_track(&db, "C");
+
+        db.replace_track_tags(
+            track_a,
+            &[("Composer".to_string(), "Mozart".to_string())],
+        )
+        .unwrap();
+        db.replace_track_tags(
+            track_b,
+            &[("Composer".to_string(), "Bach".to_string())],
+        )
+        .unwrap();
+        db.replace_track_tags(track_c, &[]).unwrap();
+
+        let values = db.list_taglist_values("Composer").unwrap();
+        assert_eq!(values.len(), 3);
+        assert_eq!(values[0].value.as_deref(), Some("Bach"));
+        assert_eq!(values[0].track_count, 1);
+        assert_eq!(values[1].value.as_deref(), Some("Mozart"));
+        assert_eq!(values[2].value, None);
+        assert_eq!(values[2].track_count, 1);
+    }
+
+    #[test]
+    fn taglist_tracks_filters_by_value_and_no_tag() {
+        let db = test_db();
+        let track_a = insert_track(&db, "A");
+        let track_b = insert_track(&db, "B");
+
+        db.replace_track_tags(
+            track_a,
+            &[("Genre".to_string(), "Classical".to_string())],
+        )
+        .unwrap();
+        db.replace_track_tags(track_b, &[]).unwrap();
+
+        let classical = db
+            .list_taglist_tracks("Genre", Some("Classical"))
+            .unwrap();
+        assert_eq!(classical.len(), 1);
+        assert_eq!(classical[0].id, track_a);
+
+        let no_tag = db.list_taglist_tracks("Genre", None).unwrap();
+        assert_eq!(no_tag.len(), 1);
+        assert_eq!(no_tag[0].id, track_b);
+    }
+
+    #[test]
+    fn multi_value_tag_appears_in_each_sublists() {
+        let db = test_db();
+        let track_id = insert_track(&db, "Multi");
+
+        db.replace_track_tags(
+            track_id,
+            &[
+                ("Genre".to_string(), "Rock".to_string()),
+                ("Genre".to_string(), "Pop".to_string()),
+            ],
+        )
+        .unwrap();
+
+        let rock = db.list_taglist_tracks("Genre", Some("Rock")).unwrap();
+        let pop = db.list_taglist_tracks("Genre", Some("Pop")).unwrap();
+        assert_eq!(rock.len(), 1);
+        assert_eq!(pop.len(), 1);
+        assert_eq!(rock[0].id, track_id);
+    }
 }
