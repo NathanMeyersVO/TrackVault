@@ -221,6 +221,30 @@ pub fn import_taglist_titles(
 }
 
 #[tauri::command]
+pub fn set_taglist_value_title(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    taglist_id: i64,
+    tag_value: String,
+    display_title: Option<String>,
+) -> Result<(), String> {
+    {
+        let db = state.db.lock();
+        if db.get_taglist(taglist_id).map_err(|e| e.to_string())?.is_none() {
+            return Err("Taglist not found".to_string());
+        }
+        db.set_taglist_value_title(
+            taglist_id,
+            &tag_value,
+            display_title.as_deref(),
+        )
+        .map_err(|e| e.to_string())?;
+    }
+    let _ = app.emit("library-updated", ());
+    Ok(())
+}
+
+#[tauri::command]
 pub fn get_taglist_tracks(
     state: State<'_, AppState>,
     taglist_id: i64,

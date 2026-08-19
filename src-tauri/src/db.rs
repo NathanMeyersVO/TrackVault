@@ -513,6 +513,32 @@ impl Database {
         Ok(mappings.len() as u32)
     }
 
+    pub fn set_taglist_value_title(
+        &self,
+        taglist_id: i64,
+        tag_value: &str,
+        display_title: Option<&str>,
+    ) -> Result<(), DbError> {
+        match display_title.map(str::trim).filter(|s| !s.is_empty()) {
+            Some(title) => {
+                self.conn.execute(
+                    "INSERT INTO taglist_value_titles (taglist_id, tag_value, display_title)
+                     VALUES (?1, ?2, ?3)
+                     ON CONFLICT(taglist_id, tag_value) DO UPDATE SET
+                       display_title = excluded.display_title",
+                    params![taglist_id, tag_value, title],
+                )?;
+            }
+            None => {
+                self.conn.execute(
+                    "DELETE FROM taglist_value_titles WHERE taglist_id = ?1 AND tag_value = ?2",
+                    params![taglist_id, tag_value],
+                )?;
+            }
+        }
+        Ok(())
+    }
+
     fn get_taglist_titles(
         &self,
         taglist_id: i64,
@@ -803,6 +829,42 @@ mod tests {
             values[0].display_title.as_deref(),
             Some("Showcase: Pre-Preliminary")
         );
+    }
+
+    #[test]
+    fn set_taglist_value_title_upserts_updates_and_clears() {
+        let db = test_db();
+        let taglist_id = db.create_taglist("Events", "Comment").unwrap();
+        let track_id = insert_track(&db, "Event Track");
+        db.replace_track_tags(
+            track_id,
+            &[("Comment".to_string(), "01".to_string())],
+        )
+        .unwrap();
+
+        db.set_taglist_value_title(taglist_id, "01", Some("First Session"))
+            .unwrap();
+        let values = db.list_taglist_values("Comment", taglist_id).unwrap();
+        assert_eq!(
+            values[0].display_title.as_deref(),
+            Some("First Session")
+        );
+
+        db.set_taglist_value_title(taglist_id, "01", Some("Updated Session"))
+            .unwrap();
+        let values = db.list_taglist_values("Comment", taglist_id).unwrap();
+        assert_eq!(
+            values[0].display_title.as_deref(),
+            Some("Updated Session")
+        );
+
+        db.set_taglist_value_title(taglist_id, "01", None).unwrap();
+        let values = db.list_taglist_values("Comment", taglist_id).unwrap();
+        assert!(values[0].display_title.is_none());
+
+        db.set_taglist_value_title(taglist_id, "01", Some("   ")).unwrap();
+        let values = db.list_taglist_values("Comment", taglist_id).unwrap();
+        assert!(values[0].display_title.is_none());
     }
 
     #[test]

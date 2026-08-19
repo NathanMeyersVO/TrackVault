@@ -109,6 +109,16 @@ export const api = {
     invoke<TaglistValue[]>("list_taglist_values", { taglistId }),
   importTaglistTitles: (taglistId: number, path: string) =>
     invoke<number>("import_taglist_titles", { taglistId, path }),
+  setTaglistValueTitle: (
+    taglistId: number,
+    tagValue: string,
+    displayTitle: string | null,
+  ) =>
+    invoke<void>("set_taglist_value_title", {
+      taglistId,
+      tagValue,
+      displayTitle,
+    }),
   getTaglistTracks: (taglistId: number, value: string | null) =>
     invoke<Track[]>("get_taglist_tracks", { taglistId, value }),
   reorderTaglistTracks: (

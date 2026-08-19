@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type DragEvent, type KeyboardEvent, type MouseEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type DragEvent, type KeyboardEvent, type MouseEvent } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { listen } from "@tauri-apps/api/event";
 
@@ -20,6 +20,9 @@ function TaglistGroup({
 }) {
   const { refresh } = useLibrary();
   const [values, setValues] = useState<TaglistValue[]>([]);
+  const [editingValue, setEditingValue] = useState<string | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const skipBlurSaveRef = useRef(false);
 
   const loadValues = useCallback(() => {
     api.listTaglistValues(taglist.id).then(setValues).catch(console.error);
@@ -37,6 +40,30 @@ function TaglistGroup({
       unlisten.then((fn) => fn());
     };
   }, [loadValues]);
+
+  const startEditing = (event: MouseEvent, tagValue: string, displayTitle?: string | null) => {
+    event.stopPropagation();
+    setEditingValue(tagValue);
+    setEditTitle(displayTitle ?? "");
+  };
+
+  const cancelEditing = () => {
+    skipBlurSaveRef.current = true;
+    setEditingValue(null);
+    setEditTitle("");
+  };
+
+  const saveTitle = async (tagValue: string) => {
+    const trimmed = editTitle.trim();
+    try {
+      await api.setTaglistValueTitle(taglist.id, tagValue, trimmed || null);
+      loadValues();
+    } catch (error) {
+      console.error(error);
+    } finally {
+      cancelEditing();
+    }
+  };
 
   const deleteTaglist = async (event: MouseEvent) => {
     event.stopPropagation();
@@ -102,17 +129,56 @@ function TaglistGroup({
           "taglistId" in view &&
           view.taglistId === taglist.id &&
           view.value === entry.value;
+        const isEditing = entry.value != null && editingValue === entry.value;
 
         const handleNavigate = () => {
+          if (isEditing) return;
           setView({ taglistId: taglist.id, value: entry.value });
         };
 
         const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+          if (isEditing) return;
           if (event.key === "Enter" || event.key === " ") {
             event.preventDefault();
             handleNavigate();
           }
         };
+
+        if (isEditing && entry.value != null) {
+          return (
+            <div
+              key={rowKey}
+              className="mb-0.5 flex items-center gap-1 rounded-md py-1 pl-6 pr-2"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <span className="shrink-0 text-sm text-neutral-400">{entry.value} -</span>
+              <input
+                autoFocus
+                value={editTitle}
+                onChange={(event) => setEditTitle(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    void saveTitle(entry.value!);
+                  }
+                  if (event.key === "Escape") {
+                    event.preventDefault();
+                    cancelEditing();
+                  }
+                }}
+                onBlur={() => {
+                  if (skipBlurSaveRef.current) {
+                    skipBlurSaveRef.current = false;
+                    return;
+                  }
+                  void saveTitle(entry.value!);
+                }}
+                placeholder="Display title"
+                className="min-w-0 flex-1 rounded-md border border-neutral-700 bg-neutral-950 px-2 py-1 text-sm text-neutral-100"
+              />
+            </div>
+          );
+        }
 
         return (
           <div
@@ -121,7 +187,7 @@ function TaglistGroup({
             tabIndex={0}
             onClick={handleNavigate}
             onKeyDown={handleKeyDown}
-            className={`mb-0.5 w-full rounded-md py-1.5 pl-6 pr-3 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-neutral-500 ${
+            className={`group/sublist mb-0.5 w-full rounded-md py-1.5 pl-6 pr-3 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-neutral-500 ${
               active
                 ? "bg-neutral-800 text-white"
                 : "text-neutral-300 hover:bg-neutral-800/60"
@@ -129,6 +195,16 @@ function TaglistGroup({
           >
             <span className="truncate">{label}</span>
             <span className="ml-1 text-neutral-500">({entry.track_count})</span>
+            {entry.value != null && (
+              <button
+                type="button"
+                onClick={(event) => startEditing(event, entry.value!, entry.display_title)}
+                className="ml-1 hidden rounded px-1 text-xs text-neutral-500 hover:text-white group-hover/sublist:inline"
+                title="Edit title"
+              >
+                ✎
+              </button>
+            )}
           </div>
         );
       })}
