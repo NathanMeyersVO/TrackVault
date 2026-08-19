@@ -53,6 +53,21 @@ export function PlaylistView({ playlistId }: PlaylistViewProps) {
     setTracks((prev) => prev.filter((t) => t.id !== trackId));
   };
 
+  const reorderTracks = async (orderedIds: number[]) => {
+    const byId = new Map(tracks.map((track) => [track.id, track]));
+    setTracks(
+      orderedIds
+        .map((id) => byId.get(id))
+        .filter((track): track is Track => track != null),
+    );
+    try {
+      await api.reorderPlaylistTracks(playlistId, orderedIds);
+    } catch (error) {
+      console.error(error);
+      refreshTracks();
+    }
+  };
+
   return (
     <div className="flex h-full flex-col">
       <div className="border-b border-neutral-800 px-4 py-3">
@@ -77,6 +92,7 @@ export function PlaylistView({ playlistId }: PlaylistViewProps) {
           onPlay={playTrack}
           onEditTags={setEditingTrackId}
           onRemoveTrackFromPlaylist={removeTrack}
+          onReorderTracks={isSearching ? undefined : reorderTracks}
           emptyMessage={
             isSearching
               ? "No tracks match your search."

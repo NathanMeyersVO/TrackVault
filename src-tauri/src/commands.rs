@@ -139,6 +139,19 @@ pub fn remove_track_from_playlist(
 }
 
 #[tauri::command]
+pub fn reorder_playlist_tracks(
+    state: State<'_, AppState>,
+    playlist_id: i64,
+    track_ids: Vec<i64>,
+) -> Result<(), String> {
+    state
+        .db
+        .lock()
+        .reorder_playlist_tracks(playlist_id, &track_ids)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub fn create_taglist(
     state: State<'_, AppState>,
     name: String,
@@ -225,7 +238,21 @@ pub fn get_taglist_tracks(
     state
         .db
         .lock()
-        .list_taglist_tracks(&tag_key, value.as_deref())
+        .list_taglist_tracks(taglist_id, &tag_key, value.as_deref())
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn reorder_taglist_tracks(
+    state: State<'_, AppState>,
+    taglist_id: i64,
+    value: Option<String>,
+    track_ids: Vec<i64>,
+) -> Result<(), String> {
+    state
+        .db
+        .lock()
+        .reorder_taglist_tracks(taglist_id, value.as_deref(), &track_ids)
         .map_err(|e| e.to_string())
 }
 

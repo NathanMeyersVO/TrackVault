@@ -1,4 +1,4 @@
-import type { CSSProperties } from "react";
+import type { CSSProperties, DragEvent } from "react";
 
 import { setTrackDragData } from "../lib/dragDrop";
 import type { Playlist, Track } from "../lib/tauri";
@@ -20,6 +20,13 @@ interface TrackTableRowProps {
   onAddTrackToPlaylist?: (trackId: number, playlistId: number) => void;
   onRemoveTrackFromPlaylist?: (trackId: number) => void;
   draggable?: boolean;
+  reorderable?: boolean;
+  isDragging?: boolean;
+  dropIndicator?: "before" | "after" | null;
+  onReorderDragStart?: (event: DragEvent<HTMLButtonElement>) => void;
+  onReorderDragEnd?: () => void;
+  onReorderDragOver?: (event: DragEvent<HTMLTableRowElement>) => void;
+  onReorderDrop?: (event: DragEvent<HTMLTableRowElement>) => void;
 }
 
 function rowStyle(isPlaying: boolean, isCursor: boolean): CSSProperties | undefined {
@@ -35,6 +42,23 @@ function rowStyle(isPlaying: boolean, isCursor: boolean): CSSProperties | undefi
   };
 }
 
+function GripIcon() {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      aria-hidden="true"
+      className="h-4 w-4 fill-current"
+    >
+      <circle cx="5" cy="4" r="1.2" />
+      <circle cx="11" cy="4" r="1.2" />
+      <circle cx="5" cy="8" r="1.2" />
+      <circle cx="11" cy="8" r="1.2" />
+      <circle cx="5" cy="12" r="1.2" />
+      <circle cx="11" cy="12" r="1.2" />
+    </svg>
+  );
+}
+
 export function TrackTableRow({
   track,
   isPlaying,
@@ -47,6 +71,13 @@ export function TrackTableRow({
   onAddTrackToPlaylist,
   onRemoveTrackFromPlaylist,
   draggable = true,
+  reorderable = false,
+  isDragging = false,
+  dropIndicator = null,
+  onReorderDragStart,
+  onReorderDragEnd,
+  onReorderDragOver,
+  onReorderDrop,
 }: TrackTableRowProps) {
   const setDraggingTrackId = usePlayerStore((state) => state.setDraggingTrackId);
   const { onMouseEnter, onMouseLeave, tooltip } = useTrackTooltip(track.id);
@@ -65,6 +96,8 @@ export function TrackTableRow({
         onDragEnd={() => {
           setDraggingTrackId(null);
         }}
+        onDragOver={reorderable ? onReorderDragOver : undefined}
+        onDrop={reorderable ? onReorderDrop : undefined}
         onClick={() => {
           onCursorChange(track.id);
           onFocusList();
@@ -73,8 +106,31 @@ export function TrackTableRow({
         style={style}
         className={`border-b border-neutral-900 text-neutral-200 hover:bg-neutral-900/70 ${
           draggable ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"
-        }`}
+        } ${isDragging ? "opacity-40" : ""} ${
+          dropIndicator === "before" ? "border-t-2 border-t-sky-400" : ""
+        } ${dropIndicator === "after" ? "border-b-2 border-b-sky-400" : ""}`}
       >
+        {reorderable && (
+          <td className="w-8 px-1 py-2 text-neutral-500">
+            <button
+              type="button"
+              draggable
+              aria-label={`Reorder ${track.title}`}
+              className="flex cursor-grab items-center justify-center rounded p-1 hover:bg-neutral-800 hover:text-neutral-300 active:cursor-grabbing"
+              onClick={(event) => event.stopPropagation()}
+              onDragStart={(event) => {
+                event.stopPropagation();
+                onReorderDragStart?.(event);
+              }}
+              onDragEnd={(event) => {
+                event.stopPropagation();
+                onReorderDragEnd?.();
+              }}
+            >
+              <GripIcon />
+            </button>
+          </td>
+        )}
         <td
           className="px-4 py-2"
           onMouseEnter={onMouseEnter}

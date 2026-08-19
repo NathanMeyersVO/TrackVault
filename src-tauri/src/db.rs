@@ -93,6 +93,19 @@ impl Database {
                 PRIMARY KEY (taglist_id, tag_value),
                 FOREIGN KEY (taglist_id) REFERENCES taglists(id) ON DELETE CASCADE
             );
+
+            CREATE TABLE IF NOT EXISTS taglist_track_order (
+                taglist_id INTEGER NOT NULL,
+                tag_value TEXT NOT NULL,
+                track_id INTEGER NOT NULL,
+                position INTEGER NOT NULL,
+                PRIMARY KEY (taglist_id, tag_value, track_id),
+                FOREIGN KEY (taglist_id) REFERENCES taglists(id) ON DELETE CASCADE,
+                FOREIGN KEY (track_id) REFERENCES tracks(id) ON DELETE CASCADE
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_taglist_track_order_position
+                ON taglist_track_order(taglist_id, tag_value, position);
             ",
         )?;
         let _ = self.conn.execute(
@@ -380,6 +393,45 @@ impl Database {
         Ok(())
     }
 
+    pub fn reorder_playlist_tracks(
+        &self,
+        playlist_id: i64,
+        track_ids: &[i64],
+    ) -> Result<(), DbError> {
+        let tx = self.conn.unchecked_transaction()?;
+
+        let mut existing: Vec<i64> = {
+            let mut stmt = tx.prepare(
+                "SELECT track_id FROM playlist_tracks
+                 WHERE playlist_id = ?1 ORDER BY position",
+            )?;
+            let rows = stmt.query_map(params![playlist_id], |row| row.get(0))?;
+            rows.filter_map(Result::ok).collect()
+        };
+
+        let mut ordered: Vec<i64> = track_ids
+            .iter()
+            .copied()
+            .filter(|id| existing.contains(id))
+            .collect();
+        for id in existing.drain(..) {
+            if !ordered.contains(&id) {
+                ordered.push(id);
+            }
+        }
+
+        for (position, track_id) in ordered.iter().enumerate() {
+            tx.execute(
+                "UPDATE playlist_tracks SET position = ?1
+                 WHERE playlist_id = ?2 AND track_id = ?3",
+                params![position as i64, playlist_id, track_id],
+            )?;
+        }
+
+        tx.commit()?;
+        Ok(())
+    }
+
     pub fn list_playlist_tracks(&self, playlist_id: i64) -> Result<Vec<Track>, DbError> {
         let mut stmt = self.conn.prepare(
             "SELECT t.id, t.path, t.title, t.artist, t.album, t.duration_ms, t.track_number,
@@ -519,9 +571,11 @@ impl Database {
 
     pub fn list_taglist_tracks(
         &self,
+        taglist_id: i64,
         tag_key: &str,
         value: Option<&str>,
     ) -> Result<Vec<Track>, DbError> {
+        let tag_value_key = value.unwrap_or("");
         if let Some(tag_value) = value {
             let mut stmt = self.conn.prepare(
                 "SELECT DISTINCT t.id, t.path, t.title, t.artist, t.album, t.duration_ms,
@@ -529,27 +583,83 @@ impl Database {
                         CASE WHEN t.peaks_json IS NOT NULL THEN 1 ELSE 0 END
                  FROM tracks t
                  JOIN track_tags tt ON tt.track_id = t.id
-                 WHERE tt.tag_key = ?1 AND tt.tag_value = ?2
-                 ORDER BY t.artist COLLATE NOCASE, t.album COLLATE NOCASE,
+                 LEFT JOIN taglist_track_order o
+                   ON o.taglist_id = ?1 AND o.tag_value = ?2 AND o.track_id = t.id
+                 WHERE tt.tag_key = ?3 AND tt.tag_value = ?4
+                 ORDER BY CASE WHEN o.position IS NULL THEN 1 ELSE 0 END,
+                          o.position,
+                          t.artist COLLATE NOCASE, t.album COLLATE NOCASE,
                           t.track_number, t.title",
             )?;
-            let rows = stmt.query_map(params![tag_key, tag_value], map_track_row)?;
+            let rows = stmt.query_map(
+                params![taglist_id, tag_value_key, tag_key, tag_value],
+                map_track_row,
+            )?;
             Ok(rows.filter_map(Result::ok).collect())
         } else {
             let mut stmt = self.conn.prepare(
                 "SELECT t.id, t.path, t.title, t.artist, t.album, t.duration_ms, t.track_number,
                         t.added_at, CASE WHEN t.peaks_json IS NOT NULL THEN 1 ELSE 0 END
                  FROM tracks t
+                 LEFT JOIN taglist_track_order o
+                   ON o.taglist_id = ?1 AND o.tag_value = ?2 AND o.track_id = t.id
                  WHERE NOT EXISTS (
                    SELECT 1 FROM track_tags tt
-                   WHERE tt.track_id = t.id AND tt.tag_key = ?1
+                   WHERE tt.track_id = t.id AND tt.tag_key = ?3
                  )
-                 ORDER BY t.artist COLLATE NOCASE, t.album COLLATE NOCASE,
+                 ORDER BY CASE WHEN o.position IS NULL THEN 1 ELSE 0 END,
+                          o.position,
+                          t.artist COLLATE NOCASE, t.album COLLATE NOCASE,
                           t.track_number, t.title",
             )?;
-            let rows = stmt.query_map(params![tag_key], map_track_row)?;
+            let rows = stmt.query_map(
+                params![taglist_id, tag_value_key, tag_key],
+                map_track_row,
+            )?;
             Ok(rows.filter_map(Result::ok).collect())
         }
+    }
+
+    pub fn reorder_taglist_tracks(
+        &self,
+        taglist_id: i64,
+        value: Option<&str>,
+        track_ids: &[i64],
+    ) -> Result<(), DbError> {
+        let tag_value_key = value.unwrap_or("");
+        let taglist = self
+            .get_taglist(taglist_id)?
+            .ok_or(DbError::Sqlite(rusqlite::Error::QueryReturnedNoRows))?;
+        let tag_key = taglist.tag_key;
+
+        let current = self.list_taglist_tracks(taglist_id, &tag_key, value)?;
+        let current_ids: Vec<i64> = current.iter().map(|t| t.id).collect();
+
+        let mut ordered: Vec<i64> = track_ids
+            .iter()
+            .copied()
+            .filter(|id| current_ids.contains(id))
+            .collect();
+        for id in &current_ids {
+            if !ordered.contains(id) {
+                ordered.push(*id);
+            }
+        }
+
+        let tx = self.conn.unchecked_transaction()?;
+        tx.execute(
+            "DELETE FROM taglist_track_order WHERE taglist_id = ?1 AND tag_value = ?2",
+            params![taglist_id, tag_value_key],
+        )?;
+        for (position, track_id) in ordered.iter().enumerate() {
+            tx.execute(
+                "INSERT INTO taglist_track_order (taglist_id, tag_value, track_id, position)
+                 VALUES (?1, ?2, ?3, ?4)",
+                params![taglist_id, tag_value_key, track_id, position as i64],
+            )?;
+        }
+        tx.commit()?;
+        Ok(())
     }
 }
 
@@ -638,12 +748,12 @@ mod tests {
         db.replace_track_tags(track_b, &[]).unwrap();
 
         let classical = db
-            .list_taglist_tracks("Genre", Some("Classical"))
+            .list_taglist_tracks(1, "Genre", Some("Classical"))
             .unwrap();
         assert_eq!(classical.len(), 1);
         assert_eq!(classical[0].id, track_a);
 
-        let no_tag = db.list_taglist_tracks("Genre", None).unwrap();
+        let no_tag = db.list_taglist_tracks(1, "Genre", None).unwrap();
         assert_eq!(no_tag.len(), 1);
         assert_eq!(no_tag[0].id, track_b);
     }
@@ -662,8 +772,8 @@ mod tests {
         )
         .unwrap();
 
-        let rock = db.list_taglist_tracks("Genre", Some("Rock")).unwrap();
-        let pop = db.list_taglist_tracks("Genre", Some("Pop")).unwrap();
+        let rock = db.list_taglist_tracks(1, "Genre", Some("Rock")).unwrap();
+        let pop = db.list_taglist_tracks(1, "Genre", Some("Pop")).unwrap();
         assert_eq!(rock.len(), 1);
         assert_eq!(pop.len(), 1);
         assert_eq!(rock[0].id, track_id);
@@ -693,5 +803,53 @@ mod tests {
             values[0].display_title.as_deref(),
             Some("Showcase: Pre-Preliminary")
         );
+    }
+
+    #[test]
+    fn reorder_playlist_tracks_updates_position() {
+        let db = test_db();
+        let playlist_id = db.create_playlist("Test").unwrap();
+        let track_a = insert_track(&db, "A");
+        let track_b = insert_track(&db, "B");
+        let track_c = insert_track(&db, "C");
+        db.add_track_to_playlist(playlist_id, track_a).unwrap();
+        db.add_track_to_playlist(playlist_id, track_b).unwrap();
+        db.add_track_to_playlist(playlist_id, track_c).unwrap();
+
+        db.reorder_playlist_tracks(playlist_id, &[track_c, track_a, track_b])
+            .unwrap();
+
+        let tracks = db.list_playlist_tracks(playlist_id).unwrap();
+        assert_eq!(
+            tracks.iter().map(|t| t.id).collect::<Vec<_>>(),
+            vec![track_c, track_a, track_b]
+        );
+    }
+
+    #[test]
+    fn taglist_custom_order_overrides_metadata_sort() {
+        let db = test_db();
+        let taglist_id = db.create_taglist("Events", "Comment").unwrap();
+        let track_a = insert_track(&db, "A");
+        let track_b = insert_track(&db, "B");
+        db.replace_track_tags(
+            track_a,
+            &[("Comment".to_string(), "01".to_string())],
+        )
+        .unwrap();
+        db.replace_track_tags(
+            track_b,
+            &[("Comment".to_string(), "01".to_string())],
+        )
+        .unwrap();
+
+        db.reorder_taglist_tracks(taglist_id, Some("01"), &[track_b, track_a])
+            .unwrap();
+
+        let tracks = db
+            .list_taglist_tracks(taglist_id, "Comment", Some("01"))
+            .unwrap();
+        assert_eq!(tracks[0].id, track_b);
+        assert_eq!(tracks[1].id, track_a);
     }
 }

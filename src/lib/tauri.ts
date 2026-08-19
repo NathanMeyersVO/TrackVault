@@ -99,6 +99,8 @@ export const api = {
     invoke<void>("add_track_to_playlist", { playlistId, trackId }),
   removeTrackFromPlaylist: (playlistId: number, trackId: number) =>
     invoke<void>("remove_track_from_playlist", { playlistId, trackId }),
+  reorderPlaylistTracks: (playlistId: number, trackIds: number[]) =>
+    invoke<void>("reorder_playlist_tracks", { playlistId, trackIds }),
   createTaglist: (name: string, tagKey: string) =>
     invoke<number>("create_taglist", { name, tagKey }),
   deleteTaglist: (id: number) => invoke<void>("delete_taglist", { id }),
@@ -109,6 +111,11 @@ export const api = {
     invoke<number>("import_taglist_titles", { taglistId, path }),
   getTaglistTracks: (taglistId: number, value: string | null) =>
     invoke<Track[]>("get_taglist_tracks", { taglistId, value }),
+  reorderTaglistTracks: (
+    taglistId: number,
+    value: string | null,
+    trackIds: number[],
+  ) => invoke<void>("reorder_taglist_tracks", { taglistId, value, trackIds }),
   playTrack: (trackId: number, startMs?: number, autoplay = true) =>
     invoke<PlaybackState>("play_track", { trackId, startMs, autoplay }),
   pausePlayback: () => invoke<PlaybackState>("pause_playback"),

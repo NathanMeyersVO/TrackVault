@@ -55,6 +55,21 @@ export function TaglistView({ taglistId, value }: TaglistViewProps) {
     setActiveTrackIds(filteredTracks.map((track) => track.id));
   }, [filteredTracks, setActiveTrackIds]);
 
+  const reorderTracks = async (orderedIds: number[]) => {
+    const byId = new Map(tracks.map((track) => [track.id, track]));
+    setTracks(
+      orderedIds
+        .map((id) => byId.get(id))
+        .filter((track): track is Track => track != null),
+    );
+    try {
+      await api.reorderTaglistTracks(taglistId, value, orderedIds);
+    } catch (error) {
+      console.error(error);
+      refreshTracks();
+    }
+  };
+
   return (
     <div className="flex h-full flex-col">
       <div className="border-b border-neutral-800 px-4 py-3">
@@ -77,6 +92,7 @@ export function TaglistView({ taglistId, value }: TaglistViewProps) {
           onCursorChange={selectTrack}
           onPlay={playTrack}
           onEditTags={setEditingTrackId}
+          onReorderTracks={isSearching ? undefined : reorderTracks}
           emptyMessage={
             isSearching
               ? "No tracks match your search."
