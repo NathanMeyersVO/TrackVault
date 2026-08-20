@@ -4,6 +4,7 @@ import type { Playlist } from "../lib/tauri";
 
 interface TrackRowMenuProps {
   onEditTags: () => void;
+  onDeleteTrack?: () => void;
   playlists?: Playlist[];
   onAddToPlaylist?: (playlistId: number) => void;
   onRemoveFromPlaylist?: () => void;
@@ -11,6 +12,7 @@ interface TrackRowMenuProps {
 
 export function TrackRowMenu({
   onEditTags,
+  onDeleteTrack,
   playlists,
   onAddToPlaylist,
   onRemoveFromPlaylist,
@@ -115,6 +117,20 @@ export function TrackRowMenu({
               className="block w-full px-3 py-1.5 text-left text-xs text-red-400 hover:bg-neutral-800"
             >
               Remove from playlist
+            </button>
+          )}
+
+          {onDeleteTrack && (
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                closeMenu();
+                onDeleteTrack();
+              }}
+              className="block w-full px-3 py-1.5 text-left text-xs text-red-400 hover:bg-neutral-800"
+            >
+              Delete track
             </button>
           )}
         </div>

@@ -3,6 +3,7 @@ mod commands;
 mod config;
 mod db;
 mod models;
+mod library_path;
 mod playback;
 mod player;
 mod scanner;
@@ -10,16 +11,17 @@ mod seek_index;
 mod tag_index;
 mod tags;
 mod title_map;
+mod upload;
 mod waveform;
 
 use commands::{
-    add_track_to_playlist, create_playlist, create_taglist, delete_playlist, delete_taglist,
-    get_library_folder, get_playback_state, get_playlist_tracks, get_taglist_tracks,
+    add_track_to_playlist, check_upload_conflicts, create_playlist, create_taglist, delete_playlist,
+    delete_taglist, delete_track, get_library_folder, get_playback_state, get_playlist_tracks, get_taglist_tracks,
     get_track_peaks, get_track_tags, get_volume, import_taglist_titles, init_state,
     list_playlists, list_taglist_values, list_taglists, list_tracks, pause_playback, play_track,
     remove_track_from_playlist, reorder_playlist_tracks, reorder_taglist_tracks, resume_playback,
     save_library_config, scan_library, seek_playback, set_library_folder, set_taglist_value_title, set_volume,
-    stop_playback, update_track_tags,
+    stop_playback, update_track_tags, upload_tracks,
 };
 use tauri::Manager;
 
@@ -39,6 +41,9 @@ pub fn run() {
             set_library_folder,
             save_library_config,
             scan_library,
+            upload_tracks,
+            check_upload_conflicts,
+            delete_track,
             create_playlist,
             delete_playlist,
             list_playlists,

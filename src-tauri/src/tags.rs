@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::fs::OpenOptions;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use lofty::config::WriteOptions;
 use lofty::file::{AudioFile, TaggedFileExt};
@@ -256,20 +256,7 @@ fn check_file_writable(path: &Path) -> Result<(), String> {
 }
 
 fn ensure_writable_watch_path(db: &Database, path: &Path) -> Result<(), String> {
-    let canonical = std::fs::canonicalize(path).map_err(|e| format!("Invalid track path: {e}"))?;
-    let folder = db
-        .get_library_folder()
-        .map_err(|e| format!("Database error: {e}"))?
-        .ok_or("No library folder configured.")?;
-
-    let folder_path = PathBuf::from(&folder);
-    let canonical_folder = std::fs::canonicalize(&folder_path)
-        .map_err(|e| format!("Invalid library folder path: {e}"))?;
-    if canonical.starts_with(&canonical_folder) {
-        return Ok(());
-    }
-
-    Err("Track path is not under the library folder.".to_string())
+    crate::library_path::ensure_under_library_folder(db, path)
 }
 
 fn item_key_label(key: &ItemKey) -> String {

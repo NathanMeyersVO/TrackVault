@@ -4,6 +4,7 @@ import { listen } from "@tauri-apps/api/event";
 import { api, type TaglistValue, type Track } from "../lib/tauri";
 import { formatTaglistLabel } from "../lib/taglistLabels";
 import { usePlayer } from "../hooks/usePlayer";
+import { useDeleteTrack } from "../hooks/useDeleteTrack";
 import { useTrackSearch } from "../hooks/useTrackSearch";
 import { usePlayerStore } from "../store/playerStore";
 import { TagEditorModal } from "./TagEditorModal";
@@ -30,6 +31,7 @@ export function TaglistView({ taglistId, value }: TaglistViewProps) {
     setCursorTrackId,
   } = usePlayerStore();
   const { playTrack, selectTrack } = usePlayer();
+  const { requestDeleteTrack, confirmDialog: deleteConfirmDialog } = useDeleteTrack();
   const [tracks, setTracks] = useState<Track[]>([]);
   const [values, setValues] = useState<TaglistValue[]>([]);
   const [tracksLoaded, setTracksLoaded] = useState(false);
@@ -188,6 +190,7 @@ export function TaglistView({ taglistId, value }: TaglistViewProps) {
           onCursorChange={selectTrack}
           onPlay={playTrack}
           onEditTags={setEditingTrackId}
+          onDeleteTrack={requestDeleteTrack}
           onReorderTracks={isSearching ? undefined : reorderTracks}
           emptyMessage={
             isSearching
@@ -208,6 +211,7 @@ export function TaglistView({ taglistId, value }: TaglistViewProps) {
           }
         />
       </div>
+      {deleteConfirmDialog}
       {editingTrackId != null && (
         <TagEditorModal
           trackId={editingTrackId}

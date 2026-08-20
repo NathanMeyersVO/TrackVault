@@ -6,7 +6,7 @@ use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::audio_scan::scan_audio;
 use crate::db::Database;
-use crate::models::{PlaybackState, Playlist, ScanProgress, Taglist, TaglistValue, Track, WaveformPeaks};
+use crate::models::{PlaybackState, Playlist, ScanProgress, Taglist, TaglistValue, Track, UploadResult, WaveformPeaks};
 use crate::player::AudioPlayer;
 use crate::scanner;
 use crate::seek_index::{parse_seek_index, serialize_seek_index, SeekKeyframe};
@@ -110,6 +110,70 @@ pub fn scan_library(app: AppHandle, state: State<'_, AppState>) -> Result<ScanPr
     };
     let _ = app.emit("library-updated", ());
     Ok(progress)
+}
+
+#[tauri::command]
+pub fn check_upload_conflicts(
+    state: State<'_, AppState>,
+    source_paths: Vec<String>,
+) -> Result<Vec<String>, String> {
+    let paths: Vec<PathBuf> = source_paths.into_iter().map(PathBuf::from).collect();
+    let db = state.db.lock();
+    crate::upload::check_upload_conflicts(&db, &paths)
+}
+
+#[tauri::command]
+pub fn upload_tracks(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    source_paths: Vec<String>,
+    overwrite: Option<bool>,
+) -> Result<UploadResult, String> {
+    let paths: Vec<PathBuf> = source_paths.into_iter().map(PathBuf::from).collect();
+    let overwrite = overwrite.unwrap_or(false);
+    let result = {
+        let db = state.db.lock();
+        crate::upload::upload_tracks(&db, &paths, overwrite)?
+    };
+    let _ = app.emit("library-updated", ());
+    Ok(result)
+}
+
+#[tauri::command]
+pub fn delete_track(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    track_id: i64,
+) -> Result<PlaybackState, String> {
+    let path = {
+        let db = state.db.lock();
+        let path = db
+            .get_track_path(track_id)
+            .map_err(|e| e.to_string())?
+            .ok_or("Track not found")?;
+        crate::library_path::ensure_under_library_folder(&db, Path::new(&path))?;
+        if state.player.state().track_id == Some(track_id) {
+            state.player.stop();
+        }
+        db.delete_track(track_id).map_err(|e| e.to_string())?
+    };
+
+    if let Err(error) = std::fs::remove_file(&path) {
+        return Err(format!(
+            "Track removed from library, but file could not be deleted: {error}"
+        ));
+    }
+
+    let mut playback = state.player.state();
+    if playback.track_id == Some(track_id) {
+        playback.track_id = None;
+        playback.position_ms = 0;
+        playback.duration_ms = 0;
+        playback.is_playing = false;
+    }
+
+    let _ = app.emit("library-updated", ());
+    Ok(playback)
 }
 
 #[tauri::command]

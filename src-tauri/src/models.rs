@@ -57,3 +57,10 @@ pub struct ScanProgress {
     pub removed: u32,
     pub done: bool,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UploadResult {
+    pub uploaded: u32,
+    pub skipped: u32,
+    pub errors: Vec<String>,
+}

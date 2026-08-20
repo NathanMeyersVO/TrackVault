@@ -7,6 +7,7 @@ import { api, COMMON_TAG_KEYS, type Taglist, type TaglistValue } from "../lib/ta
 import { formatTaglistLabel } from "../lib/taglistLabels";
 import { getTrackDragData } from "../lib/dragDrop";
 import { useLibrary } from "../hooks/usePlayer";
+import { useUploadTracks } from "../hooks/useUploadTracks";
 import { usePlayerStore, type View } from "../store/playerStore";
 
 function TaglistGroup({
@@ -225,6 +226,14 @@ export function Sidebar({ width }: { width: number }) {
     setDraggingTrackId,
   } = usePlayerStore();
   const { refresh, scanLibrary } = useLibrary();
+  const {
+    uploadTracks,
+    uploading,
+    uploadMessage,
+    uploadError,
+    uploadConfirmDialog,
+    clearUploadFeedback,
+  } = useUploadTracks();
   const [newPlaylistName, setNewPlaylistName] = useState("");
   const [creating, setCreating] = useState(false);
   const [creatingTaglist, setCreatingTaglist] = useState(false);
@@ -260,6 +269,7 @@ export function Sidebar({ width }: { width: number }) {
     setScanning(true);
     setConfigError(null);
     setConfigMessage(null);
+    clearUploadFeedback();
     try {
       await api.setLibraryFolder(selected);
       await refresh();
@@ -275,6 +285,7 @@ export function Sidebar({ width }: { width: number }) {
     setSavingConfig(true);
     setConfigMessage(null);
     setConfigError(null);
+    clearUploadFeedback();
     try {
       const savedPath = await api.saveLibraryConfig();
       setConfigMessage(`Saved to ${savedPath}`);
@@ -500,15 +511,23 @@ export function Sidebar({ width }: { width: number }) {
         </p>
         <button
           onClick={() => void chooseLibraryFolder()}
-          disabled={scanning}
+          disabled={scanning || uploading}
           className="w-full rounded-md bg-neutral-800 px-3 py-2 text-sm text-white hover:bg-neutral-700 disabled:opacity-50"
         >
           Choose library folder
         </button>
         <button
           type="button"
+          onClick={() => void uploadTracks()}
+          disabled={scanning || uploading || !libraryFolder}
+          className="w-full rounded-md bg-neutral-800 px-3 py-2 text-sm text-white hover:bg-neutral-700 disabled:opacity-50"
+        >
+          {uploading ? "Uploading…" : "Upload tracks"}
+        </button>
+        <button
+          type="button"
           onClick={() => void scanLibrary()}
-          disabled={scanning || !libraryFolder}
+          disabled={scanning || uploading || !libraryFolder}
           className="w-full rounded-md bg-neutral-800 px-3 py-2 text-sm text-white hover:bg-neutral-700 disabled:opacity-50"
         >
           {scanning ? "Scanning…" : "Rescan library"}
@@ -516,11 +535,21 @@ export function Sidebar({ width }: { width: number }) {
         <button
           type="button"
           onClick={() => void saveConfiguration()}
-          disabled={scanning || savingConfig || !libraryFolder}
+          disabled={scanning || uploading || savingConfig || !libraryFolder}
           className="w-full rounded-md bg-neutral-800 px-3 py-2 text-sm text-white hover:bg-neutral-700 disabled:opacity-50"
         >
           {savingConfig ? "Saving…" : "Save configuration"}
         </button>
+        {uploadMessage ? (
+          <p className="text-xs text-green-400" title={uploadMessage}>
+            {uploadMessage}
+          </p>
+        ) : null}
+        {uploadError ? (
+          <p className="text-xs text-red-400" title={uploadError}>
+            {uploadError}
+          </p>
+        ) : null}
         {configMessage ? (
           <p className="text-xs text-green-400" title={configMessage}>
             {configMessage}
@@ -533,6 +562,7 @@ export function Sidebar({ width }: { width: number }) {
         ) : null}
         <KeyboardShortcuts />
       </div>
+      {uploadConfirmDialog}
     </aside>
   );
 }

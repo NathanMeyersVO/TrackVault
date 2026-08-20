@@ -51,6 +51,12 @@ export interface ScanProgress {
   done: boolean;
 }
 
+export interface UploadResult {
+  uploaded: number;
+  skipped: number;
+  errors: string[];
+}
+
 export interface TagField {
   key: string;
   value: string;
@@ -89,6 +95,12 @@ export const api = {
   setLibraryFolder: (path: string) =>
     invoke<ScanProgress>("set_library_folder", { path }),
   scanLibrary: () => invoke<ScanProgress>("scan_library"),
+  uploadTracks: (sourcePaths: string[], overwrite = false) =>
+    invoke<UploadResult>("upload_tracks", { sourcePaths, overwrite }),
+  checkUploadConflicts: (sourcePaths: string[]) =>
+    invoke<string[]>("check_upload_conflicts", { sourcePaths }),
+  deleteTrack: (trackId: number) =>
+    invoke<PlaybackState>("delete_track", { trackId }),
   saveLibraryConfig: () => invoke<string>("save_library_config"),
   createPlaylist: (name: string) =>
     invoke<number>("create_playlist", { name }),

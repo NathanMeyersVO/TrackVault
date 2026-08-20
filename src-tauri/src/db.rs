@@ -251,6 +251,15 @@ impl Database {
         Ok(removed)
     }
 
+    pub fn delete_track(&self, track_id: i64) -> Result<String, DbError> {
+        let path = self
+            .get_track_path(track_id)?
+            .ok_or(DbError::Sqlite(rusqlite::Error::QueryReturnedNoRows))?;
+        self.conn
+            .execute("DELETE FROM tracks WHERE id = ?1", params![track_id])?;
+        Ok(path)
+    }
+
     pub fn list_tracks(&self) -> Result<Vec<Track>, DbError> {
         let mut stmt = self.conn.prepare(
             "SELECT id, path, title, artist, album, duration_ms, track_number, added_at,
@@ -1215,5 +1224,37 @@ mod tests {
             )
             .unwrap();
         assert_eq!(position, 1);
+    }
+
+    #[test]
+    fn delete_track_cascades_playlist_and_taglist_order() {
+        let db = test_db();
+        let playlist_id = db.create_playlist("Set").unwrap();
+        let taglist_id = db.create_taglist("Events", "Comment").unwrap();
+        let track_id = insert_track(&db, "Delete Me");
+        db.replace_track_tags(
+            track_id,
+            &[("Comment".to_string(), "01".to_string())],
+        )
+        .unwrap();
+        db.add_track_to_playlist(playlist_id, track_id).unwrap();
+        db.reorder_taglist_tracks(taglist_id, Some("01"), &[track_id])
+            .unwrap();
+
+        db.delete_track(track_id).unwrap();
+        assert_eq!(db.get_track_path(track_id).unwrap(), None);
+
+        let playlist_tracks = db.list_playlist_tracks(playlist_id).unwrap();
+        assert!(playlist_tracks.is_empty());
+
+        let order_count: i64 = db
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM taglist_track_order WHERE track_id = ?1",
+                params![track_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(order_count, 0);
     }
 }
