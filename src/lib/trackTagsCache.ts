@@ -13,6 +13,11 @@ export function invalidateTrackTags(trackId: number): void {
   inflight.delete(trackId);
 }
 
+export function clearTrackTagsCache(): void {
+  cache.clear();
+  inflight.clear();
+}
+
 export async function fetchTrackTags(trackId: number): Promise<TrackTagInfo> {
   const cached = cache.get(trackId);
   if (cached) return cached;

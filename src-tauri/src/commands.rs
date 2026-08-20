@@ -103,6 +103,49 @@ pub fn save_library_config(state: State<'_, AppState>) -> Result<String, String>
 }
 
 #[tauri::command]
+pub fn load_library_config(app: AppHandle, state: State<'_, AppState>) -> Result<String, String> {
+    let (library_root, config) = {
+        let db = state.db.lock();
+        let library = db
+            .get_library_folder()
+            .map_err(|e| e.to_string())?
+            .ok_or_else(|| "No library folder configured".to_string())?;
+        let library_root = PathBuf::from(&library);
+        let config_path = crate::config::config_file_path(&library_root);
+        let config = crate::config::load_config_file(&library_root)?.ok_or_else(|| {
+            format!(
+                "No configuration file found at {}",
+                config_path.to_string_lossy()
+            )
+        })?;
+        db.clear_user_config().map_err(|e| e.to_string())?;
+        (library_root, config)
+    };
+
+    {
+        let db = state.db.lock();
+        crate::config::apply_config(&db, &library_root, &config)?;
+    }
+
+    let path = crate::config::config_file_path(&library_root);
+    let _ = app.emit("library-updated", ());
+    Ok(path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+pub fn reset_library(app: AppHandle, state: State<'_, AppState>) -> Result<PlaybackState, String> {
+    state.player.stop();
+    {
+        let db = state.db.lock();
+        db.reset_library_state().map_err(|e| e.to_string())?;
+    }
+    let mut playback = state.player.state();
+    playback.position_ms = 0;
+    let _ = app.emit("library-updated", ());
+    Ok(playback)
+}
+
+#[tauri::command]
 pub fn scan_library(app: AppHandle, state: State<'_, AppState>) -> Result<ScanProgress, String> {
     let progress = {
         let db = state.db.lock();

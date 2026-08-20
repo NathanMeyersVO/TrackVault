@@ -368,6 +368,20 @@ impl Database {
         Ok(())
     }
 
+    pub fn reset_library_state(&self) -> Result<(), DbError> {
+        let tx = self.conn.unchecked_transaction()?;
+        tx.execute("DELETE FROM playlist_tracks", [])?;
+        tx.execute("DELETE FROM playlists", [])?;
+        tx.execute("DELETE FROM taglist_track_order", [])?;
+        tx.execute("DELETE FROM taglist_value_titles", [])?;
+        tx.execute("DELETE FROM taglists", [])?;
+        tx.execute("DELETE FROM track_tags", [])?;
+        tx.execute("DELETE FROM tracks", [])?;
+        tx.execute("DELETE FROM watch_folders", [])?;
+        tx.commit()?;
+        Ok(())
+    }
+
     pub fn list_taglist_value_titles(
         &self,
         taglist_id: i64,

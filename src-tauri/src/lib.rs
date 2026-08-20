@@ -20,8 +20,8 @@ use commands::{
     get_track_peaks, get_track_tags, get_volume, import_taglist_titles, init_state,
     list_playlists, list_taglist_values, list_taglists, list_tracks, pause_playback, play_track,
     remove_track_from_playlist, reorder_playlist_tracks, reorder_taglist_tracks, resume_playback,
-    save_library_config, scan_library, seek_playback, set_library_folder, set_taglist_value_title, set_volume,
-    stop_playback, update_track_tags, upload_tracks,
+    load_library_config, reset_library, save_library_config, scan_library, seek_playback, set_library_folder,
+    set_taglist_value_title, set_volume, stop_playback, update_track_tags, upload_tracks,
 };
 use tauri::Manager;
 
@@ -40,6 +40,8 @@ pub fn run() {
             get_library_folder,
             set_library_folder,
             save_library_config,
+            load_library_config,
+            reset_library,
             scan_library,
             upload_tracks,
             check_upload_conflicts,

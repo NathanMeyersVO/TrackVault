@@ -102,6 +102,8 @@ export const api = {
   deleteTrack: (trackId: number) =>
     invoke<PlaybackState>("delete_track", { trackId }),
   saveLibraryConfig: () => invoke<string>("save_library_config"),
+  loadLibraryConfig: () => invoke<string>("load_library_config"),
+  resetLibrary: () => invoke<PlaybackState>("reset_library"),
   createPlaylist: (name: string) =>
     invoke<number>("create_playlist", { name }),
   deletePlaylist: (id: number) => invoke<void>("delete_playlist", { id }),

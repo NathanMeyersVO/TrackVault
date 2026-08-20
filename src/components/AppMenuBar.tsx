@@ -11,15 +11,21 @@ export function AppMenuBar() {
     scanning,
     uploading,
     savingConfig,
+    loadingConfig,
+    resetting,
     uploadMessage,
     uploadError,
     configMessage,
     configError,
     uploadConfirmDialog,
+    loadConfigConfirmDialog,
+    resetConfirmDialog,
     chooseLibraryFolder,
     uploadTracks,
     scanLibrary,
     saveConfiguration,
+    requestLoadConfiguration,
+    requestResetLibrary,
     actionsDisabled,
     libraryActionsDisabled,
   } = useLibraryMenuActions();
@@ -45,6 +51,17 @@ export function AppMenuBar() {
       label: savingConfig ? "Saving…" : "Save configuration",
       onClick: () => void saveConfiguration(),
       disabled: libraryActionsDisabled || savingConfig,
+    },
+    {
+      label: loadingConfig ? "Loading…" : "Load configuration",
+      onClick: () => void requestLoadConfiguration(),
+      disabled: libraryActionsDisabled || loadingConfig,
+    },
+    { separator: true },
+    {
+      label: resetting ? "Resetting…" : "Reset to initial state",
+      onClick: () => void requestResetLibrary(),
+      disabled: actionsDisabled,
     },
   ];
 
@@ -85,6 +102,8 @@ export function AppMenuBar() {
         </div>
       </header>
       {uploadConfirmDialog}
+      {loadConfigConfirmDialog}
+      {resetConfirmDialog}
       {shortcutsOpen ? (
         <KeyboardShortcutsModal onClose={() => setShortcutsOpen(false)} />
       ) : null}
