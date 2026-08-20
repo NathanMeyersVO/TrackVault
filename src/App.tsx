@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { AppMenuBar } from "./components/AppMenuBar";
 import { Sidebar } from "./components/Sidebar";
 import { SidebarResizeHandle } from "./components/SidebarResizeHandle";
 import { LibraryView } from "./components/LibraryView";
@@ -38,7 +39,7 @@ function MainContent() {
 
       {view === "library" && tracks.length === 0 && (
         <div className="border-t border-neutral-800 px-4 py-2 text-xs text-neutral-500">
-          Tip: use &quot;Choose library folder&quot; in the sidebar to scan MP3, FLAC, WAV, OGG, and M4A files.
+          Tip: use File → Choose library folder to scan MP3, FLAC, WAV, OGG, and M4A files.
         </div>
       )}
     </main>
@@ -66,6 +67,7 @@ export default function App() {
 
   return (
     <div className="flex h-full flex-col">
+      <AppMenuBar />
       <div className="flex min-h-0 flex-1">
         <Sidebar width={sidebarWidth} />
         <SidebarResizeHandle width={sidebarWidth} onResizeStart={onResizeStart} />

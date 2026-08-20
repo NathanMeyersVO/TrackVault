@@ -2,12 +2,11 @@ import { useCallback, useEffect, useRef, useState, type DragEvent, type Keyboard
 import { open } from "@tauri-apps/plugin-dialog";
 import { listen } from "@tauri-apps/api/event";
 
-import { KeyboardShortcuts } from "./KeyboardShortcuts";
-import { api, COMMON_TAG_KEYS, type Taglist, type TaglistValue } from "../lib/tauri";
+import { ConfirmDialog } from "./ConfirmDialog";
+import { api, COMMON_TAG_KEYS, type Playlist, type Taglist, type TaglistValue } from "../lib/tauri";
 import { formatTaglistLabel } from "../lib/taglistLabels";
 import { getTrackDragData } from "../lib/dragDrop";
 import { useLibrary } from "../hooks/usePlayer";
-import { useUploadTracks } from "../hooks/useUploadTracks";
 import { usePlayerStore, type View } from "../store/playerStore";
 
 function TaglistGroup({
@@ -219,30 +218,18 @@ export function Sidebar({ width }: { width: number }) {
     taglists,
     view,
     setView,
-    scanning,
-    setScanning,
-    libraryFolder,
     draggingTrackId,
     setDraggingTrackId,
   } = usePlayerStore();
-  const { refresh, scanLibrary } = useLibrary();
-  const {
-    uploadTracks,
-    uploading,
-    uploadMessage,
-    uploadError,
-    uploadConfirmDialog,
-    clearUploadFeedback,
-  } = useUploadTracks();
+  const { refresh } = useLibrary();
   const [newPlaylistName, setNewPlaylistName] = useState("");
   const [creating, setCreating] = useState(false);
   const [creatingTaglist, setCreatingTaglist] = useState(false);
   const [newTaglistName, setNewTaglistName] = useState("");
   const [newTaglistKey, setNewTaglistKey] = useState<string>(COMMON_TAG_KEYS[0]);
   const [dragOverPlaylistId, setDragOverPlaylistId] = useState<number | null>(null);
-  const [configMessage, setConfigMessage] = useState<string | null>(null);
-  const [configError, setConfigError] = useState<string | null>(null);
-  const [savingConfig, setSavingConfig] = useState(false);
+  const [pendingDeletePlaylist, setPendingDeletePlaylist] = useState<Playlist | null>(null);
+  const [deletingPlaylist, setDeletingPlaylist] = useState(false);
 
   const isTrackDragging = draggingTrackId != null;
 
@@ -258,41 +245,35 @@ export function Sidebar({ width }: { width: number }) {
     await refresh();
   };
 
-  const chooseLibraryFolder = async () => {
-    const selected = await open({
-      directory: true,
-      multiple: false,
-      title: "Choose library folder",
-    });
-    if (typeof selected !== "string") return;
-
-    setScanning(true);
-    setConfigError(null);
-    setConfigMessage(null);
-    clearUploadFeedback();
-    try {
-      await api.setLibraryFolder(selected);
-      await refresh();
-    } catch (err) {
-      setConfigError(String(err));
-      await refresh().catch(console.error);
-    } finally {
-      setScanning(false);
-    }
+  const requestDeletePlaylist = (event: MouseEvent, playlist: Playlist) => {
+    event.stopPropagation();
+    setPendingDeletePlaylist(playlist);
   };
 
-  const saveConfiguration = async () => {
-    setSavingConfig(true);
-    setConfigMessage(null);
-    setConfigError(null);
-    clearUploadFeedback();
+  const cancelDeletePlaylist = () => {
+    if (deletingPlaylist) return;
+    setPendingDeletePlaylist(null);
+  };
+
+  const confirmDeletePlaylist = async () => {
+    if (!pendingDeletePlaylist) return;
+
+    setDeletingPlaylist(true);
     try {
-      const savedPath = await api.saveLibraryConfig();
-      setConfigMessage(`Saved to ${savedPath}`);
-    } catch (err) {
-      setConfigError(String(err));
+      await api.deletePlaylist(pendingDeletePlaylist.id);
+      if (
+        typeof view === "object" &&
+        "playlistId" in view &&
+        view.playlistId === pendingDeletePlaylist.id
+      ) {
+        setView("library");
+      }
+      await refresh();
+      setPendingDeletePlaylist(null);
+    } catch (error) {
+      console.error(error);
     } finally {
-      setSavingConfig(false);
+      setDeletingPlaylist(false);
     }
   };
 
@@ -322,8 +303,8 @@ export function Sidebar({ width }: { width: number }) {
       style={{ width }}
     >
       <div className="border-b border-neutral-800 px-4 py-3">
-        <h1 className="text-lg font-semibold tracking-tight text-white">TrackVault</h1>
-        <p className="text-xs text-neutral-500">Local music library</p>
+        <h2 className="text-sm font-semibold tracking-tight text-white">Browse</h2>
+        <p className="text-xs text-neutral-500">Library, playlists & taglists</p>
       </div>
 
       <nav className="flex-1 overflow-y-auto p-2">
@@ -387,7 +368,7 @@ export function Sidebar({ width }: { width: number }) {
               onDrop={(event) => {
                 void handlePlaylistDrop(playlist.id, event);
               }}
-              className={`mb-1 w-full rounded-md px-3 py-2 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-neutral-500 ${
+              className={`group/playlist mb-1 flex w-full items-center rounded-md px-3 py-2 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-neutral-500 ${
                 isDragOver
                   ? "border-2 border-blue-500 bg-blue-950/40 text-white ring-2 ring-blue-500"
                   : isTrackDragging
@@ -397,8 +378,18 @@ export function Sidebar({ width }: { width: number }) {
                       : "border border-transparent text-neutral-300 hover:bg-neutral-800/60"
               }`}
             >
-              <span className="truncate">{playlist.name}</span>
-              <span className="ml-1 text-neutral-500">({playlist.track_count})</span>
+              <span className="min-w-0 flex-1 truncate">
+                {playlist.name}
+                <span className="ml-1 text-neutral-500">({playlist.track_count})</span>
+              </span>
+              <button
+                type="button"
+                onClick={(event) => requestDeletePlaylist(event, playlist)}
+                className="ml-1 hidden shrink-0 rounded px-1 text-xs text-neutral-500 hover:text-red-400 group-hover/playlist:inline"
+                title="Delete playlist"
+              >
+                ×
+              </button>
             </div>
           );
         })}
@@ -502,67 +493,18 @@ export function Sidebar({ width }: { width: number }) {
         )}
       </nav>
 
-      <div className="space-y-2 border-t border-neutral-800 p-3">
-        <p
-          className="truncate text-xs text-neutral-400"
-          title={libraryFolder ?? undefined}
-        >
-          {libraryFolder ?? "No library folder chosen"}
-        </p>
-        <button
-          onClick={() => void chooseLibraryFolder()}
-          disabled={scanning || uploading}
-          className="w-full rounded-md bg-neutral-800 px-3 py-2 text-sm text-white hover:bg-neutral-700 disabled:opacity-50"
-        >
-          Choose library folder
-        </button>
-        <button
-          type="button"
-          onClick={() => void uploadTracks()}
-          disabled={scanning || uploading || !libraryFolder}
-          className="w-full rounded-md bg-neutral-800 px-3 py-2 text-sm text-white hover:bg-neutral-700 disabled:opacity-50"
-        >
-          {uploading ? "Uploading…" : "Upload tracks"}
-        </button>
-        <button
-          type="button"
-          onClick={() => void scanLibrary()}
-          disabled={scanning || uploading || !libraryFolder}
-          className="w-full rounded-md bg-neutral-800 px-3 py-2 text-sm text-white hover:bg-neutral-700 disabled:opacity-50"
-        >
-          {scanning ? "Scanning…" : "Rescan library"}
-        </button>
-        <button
-          type="button"
-          onClick={() => void saveConfiguration()}
-          disabled={scanning || uploading || savingConfig || !libraryFolder}
-          className="w-full rounded-md bg-neutral-800 px-3 py-2 text-sm text-white hover:bg-neutral-700 disabled:opacity-50"
-        >
-          {savingConfig ? "Saving…" : "Save configuration"}
-        </button>
-        {uploadMessage ? (
-          <p className="text-xs text-green-400" title={uploadMessage}>
-            {uploadMessage}
-          </p>
-        ) : null}
-        {uploadError ? (
-          <p className="text-xs text-red-400" title={uploadError}>
-            {uploadError}
-          </p>
-        ) : null}
-        {configMessage ? (
-          <p className="text-xs text-green-400" title={configMessage}>
-            {configMessage}
-          </p>
-        ) : null}
-        {configError ? (
-          <p className="text-xs text-red-400" title={configError}>
-            {configError}
-          </p>
-        ) : null}
-        <KeyboardShortcuts />
-      </div>
-      {uploadConfirmDialog}
+      {pendingDeletePlaylist ? (
+        <ConfirmDialog
+          title="Delete playlist"
+          message={`Delete "${pendingDeletePlaylist.name}"? This will remove the playlist but not the tracks.`}
+          confirmLabel="Delete"
+          cancelLabel="Cancel"
+          destructive
+          busy={deletingPlaylist}
+          onConfirm={() => void confirmDeletePlaylist()}
+          onCancel={cancelDeletePlaylist}
+        />
+      ) : null}
     </aside>
   );
 }
