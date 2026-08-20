@@ -360,7 +360,7 @@ impl AudioPlayer {
                 autoplay,
             })
             .map_err(|e| e.to_string())?;
-        self.wait_for_state(track_id)
+        self.wait_for_state(track_id, autoplay)
     }
 
     pub fn pause(&self) {
@@ -419,11 +419,14 @@ impl AudioPlayer {
         Ok(())
     }
 
-    fn wait_for_state(&self, track_id: i64) -> Result<(), String> {
+    fn wait_for_state(&self, track_id: i64, autoplay: bool) -> Result<(), String> {
         for _ in 0..50 {
-            thread::sleep(Duration::from_millis(10));
+            thread::sleep(Duration::from_millis(100));
             let state = self.state();
-            if state.track_id == Some(track_id) {
+            if state.track_id != Some(track_id) {
+                continue;
+            }
+            if !autoplay || state.is_playing {
                 return Ok(());
             }
         }

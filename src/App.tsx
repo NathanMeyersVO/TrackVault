@@ -7,6 +7,7 @@ import { PlaylistView } from "./components/PlaylistView";
 import { TaglistView } from "./components/TaglistView";
 import { NowPlayingBar } from "./components/NowPlayingBar";
 import { useLibrary, usePlayer } from "./hooks/usePlayer";
+import { initPlayerController } from "./playerController";
 import { useSidebarWidth } from "./hooks/useSidebarWidth";
 import { useTrackCursor } from "./hooks/useTrackCursor";
 import { usePlayerStore, type View } from "./store/playerStore";
@@ -47,6 +48,10 @@ function MainContent() {
 }
 
 export default function App() {
+  useEffect(() => {
+    initPlayerController();
+  }, []);
+
   const { selectTrack, playTrack, togglePlayPause, adjustVolume } = usePlayer();
   const { width: sidebarWidth, onResizeStart } = useSidebarWidth();
   const setDraggingTrackId = usePlayerStore((state) => state.setDraggingTrackId);

@@ -13,6 +13,12 @@ export interface TaglistNav {
   activateNextSublist: () => void;
 }
 
+export interface PlayIntent {
+  trackId: number;
+  startMs: number;
+  autoplay: boolean;
+}
+
 const SEEK_CONFIRM_TOLERANCE_MS = 50;
 const POSITION_GUARD_TOLERANCE_MS = 100;
 export const SEEK_FALLBACK_MS = 15_000;
@@ -33,6 +39,8 @@ interface PlayerStore {
   seekGeneration: number;
   positionGuardTargetMs: number | null;
   pendingPausedLoadTrackId: number | null;
+  pendingPlayIntent: PlayIntent | null;
+  loadAutoplayRequested: boolean;
   draggingTrackId: number | null;
   volume: number;
   taglistNav: TaglistNav | null;
@@ -48,13 +56,15 @@ interface PlayerStore {
   setScanning: (scanning: boolean) => void;
   setLibraryFolder: (libraryFolder: string | null) => void;
   beginTransport: (targetMs: number) => void;
-  beginTrackLoad: (targetMs: number) => void;
+  beginTrackLoad: (targetMs: number, autoplay: boolean) => void;
   endTrackLoad: (result: PlaybackState) => void;
   releaseTransport: () => void;
   completeTransport: (result: PlaybackState, targetMs: number) => void;
   forceCompleteTransport: (targetMs: number) => void;
   setPendingPausedLoad: (trackId: number | null) => void;
   clearPendingPausedLoad: () => void;
+  setPendingPlayIntent: (intent: PlayIntent | null) => void;
+  clearPendingPlayIntent: () => void;
   setDraggingTrackId: (id: number | null) => void;
   applyBackendPlayback: (incoming: PlaybackState) => void;
   setVolume: (volume: number) => void;
@@ -106,6 +116,8 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   seekGeneration: 0,
   positionGuardTargetMs: null,
   pendingPausedLoadTrackId: null,
+  pendingPlayIntent: null,
+  loadAutoplayRequested: false,
   draggingTrackId: null,
   volume: 1,
   taglistNav: null,
@@ -133,19 +145,21 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       seekGeneration: state.seekGeneration + 1,
       positionGuardTargetMs: null,
     })),
-  beginTrackLoad: (targetMs) =>
+  beginTrackLoad: (targetMs, autoplay) =>
     set((state) => ({
       transportBusy: true,
       transportMode: "load",
       lockedPositionMs: targetMs,
       seekGeneration: state.seekGeneration + 1,
       positionGuardTargetMs: null,
+      loadAutoplayRequested: autoplay,
     })),
   endTrackLoad: (result) =>
     set({
       transportBusy: false,
       transportMode: "idle",
       lockedPositionMs: null,
+      loadAutoplayRequested: false,
       playback: result,
     }),
   releaseTransport: () =>
@@ -153,6 +167,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       transportBusy: false,
       transportMode: "idle",
       lockedPositionMs: null,
+      loadAutoplayRequested: false,
     }),
   completeTransport: (result, targetMs) =>
     set({
@@ -168,6 +183,8 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   },
   setPendingPausedLoad: (trackId) => set({ pendingPausedLoadTrackId: trackId }),
   clearPendingPausedLoad: () => set({ pendingPausedLoadTrackId: null }),
+  setPendingPlayIntent: (intent) => set({ pendingPlayIntent: intent }),
+  clearPendingPlayIntent: () => set({ pendingPlayIntent: null }),
   setDraggingTrackId: (draggingTrackId) => set({ draggingTrackId }),
   applyBackendPlayback: (incoming) => {
     const state = get();

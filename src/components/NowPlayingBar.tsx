@@ -45,10 +45,12 @@ export function NowPlayingBar() {
   const displayPinned = hasLoadedTrack && isDisplayPositionPinned(store);
 
   useEffect(() => {
-    if (!displayTrackId) {
-      setPeaks([]);
-      setPeakDurationMs(0);
-      setPreviewPositionMs(0);
+    if (!displayTrackId || transportMode === "load") {
+      if (!displayTrackId) {
+        setPeaks([]);
+        setPeakDurationMs(0);
+        setPreviewPositionMs(0);
+      }
       return;
     }
 
@@ -66,7 +68,7 @@ export function NowPlayingBar() {
     return () => {
       cancelled = true;
     };
-  }, [displayTrackId]);
+  }, [displayTrackId, transportMode]);
 
   useEffect(() => {
     if (hasLoadedTrack) {
