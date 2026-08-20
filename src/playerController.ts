@@ -189,7 +189,8 @@ async function seek(positionMs: number) {
   const seekGeneration = store.seekGeneration;
 
   try {
-    await api.seekPlayback(positionMs);
+    const result = await api.seekPlayback(positionMs);
+    usePlayerStore.getState().completeTransport(result, positionMs);
   } catch {
     // Seek was queued; stay pinned until emitter confirms or fallback fires.
   }
@@ -206,7 +207,8 @@ async function stop() {
   const seekGeneration = store.seekGeneration;
 
   try {
-    await api.stopPlayback();
+    const result = await api.stopPlayback();
+    usePlayerStore.getState().completeTransport(result, 0);
   } catch {
     // Stop was queued; stay pinned until emitter confirms or fallback fires.
   }

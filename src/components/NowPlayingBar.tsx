@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { api, formatDuration } from "../lib/tauri";
 import { usePlayer } from "../hooks/usePlayer";
-import { usePlayerStore, getDisplayPositionMs, isDisplayPositionPinned } from "../store/playerStore";
+import { usePlayerStore, getDisplayPositionMs } from "../store/playerStore";
 import { TransportControls } from "./TransportControls";
 import { VolumeControl } from "./VolumeControl";
 import { SeekIndicator } from "./SeekIndicator";
@@ -41,8 +41,6 @@ export function NowPlayingBar() {
   const displayPositionMs = hasLoadedTrack
     ? getDisplayPositionMs(store)
     : previewPositionMs;
-
-  const displayPinned = hasLoadedTrack && isDisplayPositionPinned(store);
 
   useEffect(() => {
     if (!displayTrackId || transportMode === "load") {
@@ -161,7 +159,6 @@ export function NowPlayingBar() {
             durationMs={durationMs}
             positionMs={displayPositionMs}
             transportBusy={transportBusy}
-            displayPinned={displayPinned}
             interactive={canSeek}
             onSeek={handleSeek}
           />

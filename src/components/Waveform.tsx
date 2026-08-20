@@ -7,7 +7,6 @@ interface WaveformProps {
   durationMs: number;
   positionMs: number;
   transportBusy?: boolean;
-  displayPinned?: boolean;
   interactive?: boolean;
   onSeek: (positionMs: number) => Promise<void>;
 }
@@ -18,7 +17,6 @@ export function Waveform({
   durationMs,
   positionMs,
   transportBusy = false,
-  displayPinned = false,
   interactive = true,
   onSeek,
 }: WaveformProps) {
@@ -26,12 +24,17 @@ export function Waveform({
   const wavesurferRef = useRef<WaveSurfer | null>(null);
   const onSeekRef = useRef(onSeek);
   const transportBusyRef = useRef(transportBusy);
+  const durationMsRef = useRef(durationMs);
+  const positionMsRef = useRef(positionMs);
+  const pendingUserSeekMsRef = useRef<number | null>(null);
 
   onSeekRef.current = onSeek;
   transportBusyRef.current = transportBusy;
+  durationMsRef.current = durationMs;
+  positionMsRef.current = positionMs;
 
   useEffect(() => {
-    if (!containerRef.current || !trackId || peaks.length === 0) {
+    if (!containerRef.current || !trackId || peaks.length === 0 || durationMs <= 0) {
       return;
     }
 
@@ -52,10 +55,39 @@ export function Waveform({
     const durationSec = durationMs / 1000;
     ws.load("", [peaks], durationSec);
 
-    ws.on("interaction", () => {
+    const seekVisual = (relativeX: number): number | null => {
+      const durationSec = durationMsRef.current / 1000;
+      if (durationSec <= 0) return null;
+      const newTime = relativeX * durationSec;
+      ws.setTime(newTime);
+      return Math.round(newTime * 1000);
+    };
+
+    ws.on("ready", () => {
+      ws.setTime(positionMsRef.current / 1000);
+    });
+
+    ws.on("click", (relativeX) => {
       if (transportBusyRef.current) return;
-      const position = Math.round(ws.getCurrentTime() * 1000);
-      void onSeekRef.current(position);
+      const targetMs = seekVisual(relativeX);
+      if (targetMs == null) return;
+      pendingUserSeekMsRef.current = targetMs;
+      void onSeekRef.current(targetMs);
+    });
+
+    ws.on("drag", (relativeX) => {
+      if (transportBusyRef.current) return;
+      const targetMs = seekVisual(relativeX);
+      if (targetMs == null) return;
+      pendingUserSeekMsRef.current = targetMs;
+    });
+
+    ws.on("dragend", (relativeX) => {
+      if (transportBusyRef.current) return;
+      const targetMs = seekVisual(relativeX);
+      if (targetMs == null) return;
+      pendingUserSeekMsRef.current = targetMs;
+      void onSeekRef.current(targetMs);
     });
 
     wavesurferRef.current = ws;
@@ -74,9 +106,18 @@ export function Waveform({
 
   useEffect(() => {
     const ws = wavesurferRef.current;
-    if (!ws || transportBusy || displayPinned) return;
+    if (!ws) return;
+
+    const pending = pendingUserSeekMsRef.current;
+    if (pending != null && positionMs !== pending) {
+      return;
+    }
+    if (pending === positionMs) {
+      pendingUserSeekMsRef.current = null;
+    }
+
     ws.setTime(positionMs / 1000);
-  }, [positionMs, transportBusy, displayPinned]);
+  }, [positionMs]);
 
   if (!trackId) {
     return (

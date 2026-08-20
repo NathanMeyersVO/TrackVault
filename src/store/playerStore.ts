@@ -23,6 +23,33 @@ const SEEK_CONFIRM_TOLERANCE_MS = 50;
 const POSITION_GUARD_TOLERANCE_MS = 100;
 export const SEEK_FALLBACK_MS = 15_000;
 
+export function shouldClearPositionGuard(
+  guardTargetMs: number,
+  incoming: PlaybackState,
+): boolean {
+  const delta = incoming.position_ms - guardTargetMs;
+  if (Math.abs(delta) <= POSITION_GUARD_TOLERANCE_MS) {
+    return true;
+  }
+  if (delta < -POSITION_GUARD_TOLERANCE_MS) {
+    return false;
+  }
+  return incoming.is_playing;
+}
+
+export function mergeBackendPlaybackState(
+  existing: PlaybackState,
+  incoming: PlaybackState,
+): PlaybackState {
+  if (!incoming.is_playing && existing.track_id === incoming.track_id) {
+    return {
+      ...incoming,
+      position_ms: existing.position_ms,
+    };
+  }
+  return incoming;
+}
+
 interface PlayerStore {
   tracks: Track[];
   playlists: Playlist[];
@@ -89,12 +116,6 @@ export function getDisplayPositionMs(
   return state.playback.position_ms;
 }
 
-export function isDisplayPositionPinned(
-  state: Pick<PlayerStore, "transportBusy" | "positionGuardTargetMs">,
-): boolean {
-  return state.transportBusy || state.positionGuardTargetMs != null;
-}
-
 export const usePlayerStore = create<PlayerStore>((set, get) => ({
   tracks: [],
   playlists: [],
@@ -144,6 +165,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       lockedPositionMs: targetMs,
       seekGeneration: state.seekGeneration + 1,
       positionGuardTargetMs: null,
+      playback: { ...state.playback, position_ms: targetMs },
     })),
   beginTrackLoad: (targetMs, autoplay) =>
     set((state) => ({
@@ -175,7 +197,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       transportMode: "idle",
       lockedPositionMs: null,
       playback: { ...result, position_ms: targetMs },
-      positionGuardTargetMs: targetMs,
+      positionGuardTargetMs: result.is_playing ? targetMs : null,
     }),
   forceCompleteTransport: (targetMs) => {
     const { playback } = get();
@@ -208,20 +230,17 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     }
 
     if (state.positionGuardTargetMs != null) {
-      if (
-        Math.abs(incoming.position_ms - state.positionGuardTargetMs) >
-        POSITION_GUARD_TOLERANCE_MS
-      ) {
+      if (!shouldClearPositionGuard(state.positionGuardTargetMs, incoming)) {
         return;
       }
       set({
         positionGuardTargetMs: null,
-        playback: incoming,
+        playback: mergeBackendPlaybackState(state.playback, incoming),
       });
       return;
     }
 
-    set({ playback: incoming });
+    set({ playback: mergeBackendPlaybackState(state.playback, incoming) });
   },
   setVolume: (volume) => set({ volume: Math.min(1, Math.max(0, volume)) }),
   patchTrack: (track) =>
