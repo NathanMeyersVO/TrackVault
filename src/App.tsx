@@ -1,10 +1,12 @@
 import { useEffect } from "react";
 import { Sidebar } from "./components/Sidebar";
+import { SidebarResizeHandle } from "./components/SidebarResizeHandle";
 import { LibraryView } from "./components/LibraryView";
 import { PlaylistView } from "./components/PlaylistView";
 import { TaglistView } from "./components/TaglistView";
 import { NowPlayingBar } from "./components/NowPlayingBar";
 import { useLibrary, usePlayer } from "./hooks/usePlayer";
+import { useSidebarWidth } from "./hooks/useSidebarWidth";
 import { useTrackCursor } from "./hooks/useTrackCursor";
 import { usePlayerStore, type View } from "./store/playerStore";
 
@@ -45,6 +47,7 @@ function MainContent() {
 
 export default function App() {
   const { selectTrack, playTrack, togglePlayPause, adjustVolume } = usePlayer();
+  const { width: sidebarWidth, onResizeStart } = useSidebarWidth();
   const setDraggingTrackId = usePlayerStore((state) => state.setDraggingTrackId);
   useTrackCursor({
     onSelectTrack: selectTrack,
@@ -64,7 +67,8 @@ export default function App() {
   return (
     <div className="flex h-full flex-col">
       <div className="flex min-h-0 flex-1">
-        <Sidebar />
+        <Sidebar width={sidebarWidth} />
+        <SidebarResizeHandle width={sidebarWidth} onResizeStart={onResizeStart} />
         <MainContent />
       </div>
       <NowPlayingBar />

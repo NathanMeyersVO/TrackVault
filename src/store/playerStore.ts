@@ -37,6 +37,7 @@ interface PlayerStore {
   volume: number;
   taglistNav: TaglistNav | null;
   cursorTaglistFooter: boolean;
+  pendingTaglistSelectFirst: boolean;
   setTracks: (tracks: Track[]) => void;
   setPlaylists: (playlists: Playlist[]) => void;
   setTaglists: (taglists: Taglist[]) => void;
@@ -60,6 +61,7 @@ interface PlayerStore {
   patchTrack: (track: Track) => void;
   setTaglistNav: (nav: TaglistNav | null) => void;
   setCursorTaglistFooter: (active: boolean) => void;
+  setPendingTaglistSelectFirst: (pending: boolean) => void;
 }
 
 export function getDisplayPositionMs(
@@ -108,6 +110,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   volume: 1,
   taglistNav: null,
   cursorTaglistFooter: false,
+  pendingTaglistSelectFirst: false,
   setTracks: (tracks) => set({ tracks }),
   setPlaylists: (playlists) => set({ playlists }),
   setTaglists: (taglists) => set({ taglists }),
@@ -216,6 +219,8 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       cursorTaglistFooter: active,
       cursorTrackId: active ? null : state.cursorTrackId,
     })),
+  setPendingTaglistSelectFirst: (pendingTaglistSelectFirst) =>
+    set({ pendingTaglistSelectFirst }),
 }));
 
 let transportFallbackId = 0;

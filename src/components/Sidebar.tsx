@@ -212,7 +212,7 @@ function TaglistGroup({
   );
 }
 
-export function Sidebar() {
+export function Sidebar({ width }: { width: number }) {
   const {
     playlists,
     taglists,
@@ -284,7 +284,10 @@ export function Sidebar() {
   const isLibraryActive = view === "library";
 
   return (
-    <aside className="flex w-56 shrink-0 flex-col border-r border-neutral-800 bg-neutral-900">
+    <aside
+      className="flex shrink-0 flex-col bg-neutral-900"
+      style={{ width }}
+    >
       <div className="border-b border-neutral-800 px-4 py-3">
         <h1 className="text-lg font-semibold tracking-tight text-white">TrackVault</h1>
         <p className="text-xs text-neutral-500">Local music library</p>

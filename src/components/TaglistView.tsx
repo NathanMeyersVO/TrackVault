@@ -21,15 +21,18 @@ export function TaglistView({ taglistId, value }: TaglistViewProps) {
     playback,
     cursorTrackId,
     cursorTaglistFooter,
+    pendingTaglistSelectFirst,
     setActiveTrackIds,
     setView,
     setTaglistNav,
     setCursorTaglistFooter,
+    setPendingTaglistSelectFirst,
     setCursorTrackId,
   } = usePlayerStore();
   const { playTrack, selectTrack } = usePlayer();
   const [tracks, setTracks] = useState<Track[]>([]);
   const [values, setValues] = useState<TaglistValue[]>([]);
+  const [tracksLoaded, setTracksLoaded] = useState(false);
   const [editingTrackId, setEditingTrackId] = useState<number | null>(null);
   const { query, setQuery, filteredTracks, isSearching } = useTrackSearch(tracks);
 
@@ -46,32 +49,41 @@ export function TaglistView({ taglistId, value }: TaglistViewProps) {
       ? values[currentIndex + 1]
       : null;
   const hasNextSublist = nextSublist != null && !isSearching;
+  const nextSublistName = nextSublist
+    ? (nextSublist.display_title ??
+      formatTaglistLabel(nextSublist.value, null))
+    : null;
+  const footerLabel =
+    nextSublistName != null ? `Next taglist (${nextSublistName})` : null;
 
   const refreshTracks = useCallback(() => {
-    api.getTaglistTracks(taglistId, value).then(setTracks).catch(console.error);
+    api
+      .getTaglistTracks(taglistId, value)
+      .then((loaded) => {
+        setTracks(loaded);
+        setTracksLoaded(true);
+      })
+      .catch(console.error);
   }, [taglistId, value]);
 
   const refreshValues = useCallback(() => {
     api.listTaglistValues(taglistId).then(setValues).catch(console.error);
   }, [taglistId]);
 
+  useEffect(() => {
+    setTracks([]);
+    setTracksLoaded(false);
+  }, [taglistId, value]);
+
   const activateNextSublist = useCallback(() => {
     if (!nextSublist) return;
     setCursorTaglistFooter(false);
-    const nextValue = nextSublist.value;
-    setView({ taglistId, value: nextValue });
-    void api
-      .getTaglistTracks(taglistId, nextValue)
-      .then((loaded) => {
-        if (loaded[0]) selectTrack(loaded[0].id);
-        else setCursorTrackId(null);
-      })
-      .catch(console.error);
+    setPendingTaglistSelectFirst(true);
+    setView({ taglistId, value: nextSublist.value });
   }, [
     nextSublist,
-    selectTrack,
     setCursorTaglistFooter,
-    setCursorTrackId,
+    setPendingTaglistSelectFirst,
     setView,
     taglistId,
   ]);
@@ -96,6 +108,24 @@ export function TaglistView({ taglistId, value }: TaglistViewProps) {
   }, [filteredTracks, setActiveTrackIds]);
 
   useEffect(() => {
+    if (!pendingTaglistSelectFirst || !tracksLoaded) return;
+
+    if (filteredTracks[0]) {
+      selectTrack(filteredTracks[0].id);
+    } else {
+      setCursorTrackId(null);
+    }
+    setPendingTaglistSelectFirst(false);
+  }, [
+    filteredTracks,
+    pendingTaglistSelectFirst,
+    selectTrack,
+    setCursorTrackId,
+    setPendingTaglistSelectFirst,
+    tracksLoaded,
+  ]);
+
+  useEffect(() => {
     if (hasNextSublist) {
       setTaglistNav({ hasNextSublist: true, activateNextSublist });
     } else {
@@ -113,8 +143,9 @@ export function TaglistView({ taglistId, value }: TaglistViewProps) {
     return () => {
       setTaglistNav(null);
       setCursorTaglistFooter(false);
+      setPendingTaglistSelectFirst(false);
     };
-  }, [setCursorTaglistFooter, setTaglistNav]);
+  }, [setCursorTaglistFooter, setPendingTaglistSelectFirst, setTaglistNav]);
 
   const reorderTracks = async (orderedIds: number[]) => {
     const byId = new Map(tracks.map((track) => [track.id, track]));
@@ -166,9 +197,9 @@ export function TaglistView({ taglistId, value }: TaglistViewProps) {
                 : "No tracks with this tag."
           }
           footerRow={
-            hasNextSublist
+            hasNextSublist && footerLabel
               ? {
-                  label: "Next taglist",
+                  label: footerLabel,
                   isSelected: cursorTaglistFooter,
                   onSelect: selectFooter,
                   onActivate: activateNextSublist,
