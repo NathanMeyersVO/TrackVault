@@ -107,6 +107,17 @@ impl Database {
 
             CREATE INDEX IF NOT EXISTS idx_taglist_track_order_position
                 ON taglist_track_order(taglist_id, tag_value, position);
+
+            CREATE TABLE IF NOT EXISTS taglist_value_order (
+                taglist_id INTEGER NOT NULL,
+                tag_value TEXT NOT NULL,
+                position INTEGER NOT NULL,
+                PRIMARY KEY (taglist_id, tag_value),
+                FOREIGN KEY (taglist_id) REFERENCES taglists(id) ON DELETE CASCADE
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_taglist_value_order_position
+                ON taglist_value_order(taglist_id, position);
             ",
         )?;
         let _ = self.conn.execute(
@@ -363,6 +374,7 @@ impl Database {
         tx.execute("DELETE FROM playlists", [])?;
         tx.execute("DELETE FROM taglist_track_order", [])?;
         tx.execute("DELETE FROM taglist_value_titles", [])?;
+        tx.execute("DELETE FROM taglist_value_order", [])?;
         tx.execute("DELETE FROM taglists", [])?;
         tx.commit()?;
         Ok(())
@@ -374,6 +386,7 @@ impl Database {
         tx.execute("DELETE FROM playlists", [])?;
         tx.execute("DELETE FROM taglist_track_order", [])?;
         tx.execute("DELETE FROM taglist_value_titles", [])?;
+        tx.execute("DELETE FROM taglist_value_order", [])?;
         tx.execute("DELETE FROM taglists", [])?;
         tx.execute("DELETE FROM track_tags", [])?;
         tx.execute("DELETE FROM tracks", [])?;
@@ -629,30 +642,95 @@ impl Database {
         Ok(rows.filter_map(Result::ok).collect())
     }
 
+    pub fn list_taglist_value_order(&self, taglist_id: i64) -> Result<Vec<String>, DbError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT tag_value FROM taglist_value_order
+             WHERE taglist_id = ?1
+             ORDER BY position",
+        )?;
+        let rows = stmt.query_map(params![taglist_id], |row| row.get(0))?;
+        Ok(rows.filter_map(Result::ok).collect())
+    }
+
+    pub fn reorder_taglist_values(
+        &self,
+        taglist_id: i64,
+        tag_values: &[String],
+    ) -> Result<(), DbError> {
+        let taglist = self
+            .get_taglist(taglist_id)?
+            .ok_or(DbError::Sqlite(rusqlite::Error::QueryReturnedNoRows))?;
+        let tag_key = taglist.tag_key;
+
+        let current: Vec<String> = self
+            .conn
+            .prepare(
+                "SELECT DISTINCT tag_value FROM track_tags WHERE tag_key = ?1
+                 ORDER BY tag_value COLLATE NOCASE",
+            )?
+            .query_map(params![tag_key], |row| row.get(0))?
+            .filter_map(Result::ok)
+            .collect();
+
+        let mut ordered: Vec<String> = tag_values
+            .iter()
+            .filter(|value| current.contains(value))
+            .cloned()
+            .collect();
+        for value in &current {
+            if !ordered.contains(value) {
+                ordered.push(value.clone());
+            }
+        }
+
+        let tx = self.conn.unchecked_transaction()?;
+        tx.execute(
+            "DELETE FROM taglist_value_order WHERE taglist_id = ?1",
+            params![taglist_id],
+        )?;
+        for (position, tag_value) in ordered.iter().enumerate() {
+            tx.execute(
+                "INSERT INTO taglist_value_order (taglist_id, tag_value, position)
+                 VALUES (?1, ?2, ?3)",
+                params![taglist_id, tag_value, position as i64],
+            )?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
     pub fn list_taglist_values(
         &self,
         tag_key: &str,
         taglist_id: i64,
     ) -> Result<Vec<TaglistValue>, DbError> {
         let titles = self.get_taglist_titles(taglist_id)?;
-        let mut values = Vec::new();
+        let mut counts: HashMap<String, i64> = HashMap::new();
 
         let mut stmt = self.conn.prepare(
             "SELECT tag_value, COUNT(DISTINCT track_id)
              FROM track_tags
              WHERE tag_key = ?1
-             GROUP BY tag_value
-             ORDER BY tag_value COLLATE NOCASE",
+             GROUP BY tag_value",
         )?;
         let rows = stmt.query_map(params![tag_key], |row| {
-            let value: String = row.get(0)?;
-            Ok(TaglistValue {
-                value: Some(value.clone()),
-                track_count: row.get(1)?,
-                display_title: titles.get(&value).cloned(),
-            })
+            Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
         })?;
-        values.extend(rows.filter_map(Result::ok));
+        for row in rows.filter_map(Result::ok) {
+            counts.insert(row.0, row.1);
+        }
+
+        let stored_order = self.list_taglist_value_order(taglist_id)?;
+        let all_values: Vec<String> = counts.keys().cloned().collect();
+        let ordered_values = merge_taglist_value_order(&stored_order, &all_values);
+        let mut values: Vec<TaglistValue> = ordered_values
+            .into_iter()
+            .map(|value| TaglistValue {
+                track_count: counts.get(&value).copied().unwrap_or(0),
+                display_title: titles.get(&value).cloned(),
+                value: Some(value),
+            })
+            .collect();
 
         let no_tag_count: i64 = self.conn.query_row(
             "SELECT COUNT(*) FROM tracks t
@@ -920,6 +998,36 @@ impl Database {
     }
 }
 
+fn merge_taglist_value_order(stored: &[String], all_values: &[String]) -> Vec<String> {
+    let all_set: std::collections::HashSet<&str> =
+        all_values.iter().map(String::as_str).collect();
+    let mut result: Vec<String> = stored
+        .iter()
+        .filter(|value| all_set.contains(value.as_str()))
+        .cloned()
+        .collect();
+
+    let mut default_sorted = all_values.to_vec();
+    default_sorted.sort_by(|a, b| a.to_lowercase().cmp(&b.to_lowercase()));
+
+    for new_val in default_sorted {
+        if result.iter().any(|existing| existing == &new_val) {
+            continue;
+        }
+        let new_lower = new_val.to_lowercase();
+        let mut last_before: Option<usize> = None;
+        for (index, existing) in result.iter().enumerate() {
+            if existing.to_lowercase() < new_lower {
+                last_before = Some(index);
+            }
+        }
+        let insert_at = last_before.map(|index| index + 1).unwrap_or(0);
+        result.insert(insert_at, new_val);
+    }
+
+    result
+}
+
 fn map_track_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Track> {
     Ok(Track {
         id: row.get(0)?,
@@ -989,6 +1097,91 @@ mod tests {
         assert_eq!(values[1].value.as_deref(), Some("Mozart"));
         assert_eq!(values[2].value, None);
         assert_eq!(values[2].track_count, 1);
+    }
+
+    #[test]
+    fn merge_taglist_value_order_inserts_new_values_alphabetically() {
+        let merged = merge_taglist_value_order(
+            &["Mozart".to_string(), "Bach".to_string()],
+            &[
+                "Mozart".to_string(),
+                "Bach".to_string(),
+                "Beethoven".to_string(),
+            ],
+        );
+        assert_eq!(
+            merged,
+            vec!["Mozart", "Bach", "Beethoven"]
+                .into_iter()
+                .map(String::from)
+                .collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn taglist_values_custom_order_persisted_with_no_tag_last() {
+        let db = test_db();
+        let taglist_id = db.create_taglist("Composers", "Composer").unwrap();
+        let track_a = insert_track(&db, "A");
+        let track_b = insert_track(&db, "B");
+        let track_c = insert_track(&db, "C");
+
+        db.replace_track_tags(
+            track_a,
+            &[("Composer".to_string(), "Mozart".to_string())],
+        )
+        .unwrap();
+        db.replace_track_tags(
+            track_b,
+            &[("Composer".to_string(), "Bach".to_string())],
+        )
+        .unwrap();
+        db.replace_track_tags(track_c, &[]).unwrap();
+
+        db.reorder_taglist_values(taglist_id, &["Mozart".to_string(), "Bach".to_string()])
+            .unwrap();
+
+        let values = db.list_taglist_values("Composer", taglist_id).unwrap();
+        assert_eq!(values.len(), 3);
+        assert_eq!(values[0].value.as_deref(), Some("Mozart"));
+        assert_eq!(values[1].value.as_deref(), Some("Bach"));
+        assert_eq!(values[2].value, None);
+    }
+
+    #[test]
+    fn new_taglist_value_inserts_at_default_position() {
+        let db = test_db();
+        let taglist_id = db.create_taglist("Composers", "Composer").unwrap();
+        let track_a = insert_track(&db, "A");
+        let track_b = insert_track(&db, "B");
+
+        db.replace_track_tags(
+            track_a,
+            &[("Composer".to_string(), "Mozart".to_string())],
+        )
+        .unwrap();
+        db.replace_track_tags(
+            track_b,
+            &[("Composer".to_string(), "Bach".to_string())],
+        )
+        .unwrap();
+        db.reorder_taglist_values(taglist_id, &["Mozart".to_string(), "Bach".to_string()])
+            .unwrap();
+
+        let track_c = insert_track(&db, "C");
+        db.replace_track_tags(
+            track_c,
+            &[("Composer".to_string(), "Beethoven".to_string())],
+        )
+        .unwrap();
+
+        let values = db.list_taglist_values("Composer", taglist_id).unwrap();
+        assert_eq!(values.len(), 4);
+        assert_eq!(values[0].value.as_deref(), Some("Mozart"));
+        assert_eq!(values[1].value.as_deref(), Some("Bach"));
+        assert_eq!(values[2].value.as_deref(), Some("Beethoven"));
+        assert_eq!(values[3].value, None);
+        assert_eq!(values[3].track_count, 0);
     }
 
     #[test]

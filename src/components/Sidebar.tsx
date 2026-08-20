@@ -5,7 +5,13 @@ import { listen } from "@tauri-apps/api/event";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { api, COMMON_TAG_KEYS, type Playlist, type Taglist, type TaglistValue } from "../lib/tauri";
 import { formatTaglistLabel } from "../lib/taglistLabels";
-import { getTrackDragData } from "../lib/dragDrop";
+import {
+  getSublistReorderDragData,
+  getTrackDragData,
+  isSublistReorderDrag,
+  reorderItemsByIndex,
+  setSublistReorderDragData,
+} from "../lib/dragDrop";
 import { useLibrary } from "../hooks/usePlayer";
 import { useTagDropConfirm } from "../hooks/useTagDropConfirm";
 import { usePlayerStore, type View } from "../store/playerStore";
@@ -17,6 +23,19 @@ interface TaglistDropTarget {
 
 function taglistDropTargetKey(taglistId: number, value: string | null): string {
   return `${taglistId}:${value ?? "NO-TAG"}`;
+}
+
+function SublistGripIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true" className="h-3.5 w-3.5 fill-current">
+      <circle cx="5" cy="4" r="1.2" />
+      <circle cx="11" cy="4" r="1.2" />
+      <circle cx="5" cy="8" r="1.2" />
+      <circle cx="11" cy="8" r="1.2" />
+      <circle cx="5" cy="12" r="1.2" />
+      <circle cx="11" cy="12" r="1.2" />
+    </svg>
+  );
 }
 
 function TaglistGroup({
@@ -44,7 +63,20 @@ function TaglistGroup({
   const [values, setValues] = useState<TaglistValue[]>([]);
   const [editingValue, setEditingValue] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [dropTarget, setDropTarget] = useState<{
+    index: number;
+    position: "before" | "after";
+  } | null>(null);
   const skipBlurSaveRef = useRef(false);
+
+  const taggedValues = values.filter((entry) => entry.value != null);
+  const noTagEntry = values.find((entry) => entry.value == null);
+
+  const clearReorderState = useCallback(() => {
+    setDragIndex(null);
+    setDropTarget(null);
+  }, []);
 
   const loadValues = useCallback(() => {
     api.listTaglistValues(taglist.id).then(setValues).catch(console.error);
@@ -118,6 +150,253 @@ function TaglistGroup({
     }
   };
 
+  const handleSublistReorder = async (orderedValues: TaglistValue[]) => {
+    const nextValues = [...orderedValues];
+    if (noTagEntry) nextValues.push(noTagEntry);
+    setValues(nextValues);
+    try {
+      await api.reorderTaglistValues(
+        taglist.id,
+        orderedValues.map((entry) => entry.value!),
+      );
+    } catch (error) {
+      console.error(error);
+      loadValues();
+    }
+  };
+
+  const handleSublistDrop = (
+    targetIndex: number,
+    event: DragEvent,
+  ) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (dragIndex == null && !isSublistReorderDrag(event.dataTransfer)) {
+      clearReorderState();
+      return;
+    }
+
+    const fromIndex = dragIndex ?? getSublistReorderDragData(event.dataTransfer);
+    if (fromIndex == null || fromIndex === targetIndex) {
+      clearReorderState();
+      return;
+    }
+
+    const row = event.currentTarget.getBoundingClientRect();
+    const position: "before" | "after" =
+      event.clientY < row.top + row.height / 2 ? "before" : "after";
+    const reordered = reorderItemsByIndex(
+      taggedValues,
+      fromIndex,
+      targetIndex,
+      position,
+    );
+    void handleSublistReorder(reordered);
+    clearReorderState();
+  };
+
+  const renderSublistRow = (
+    entry: TaglistValue,
+    index: number,
+    reorderable: boolean,
+  ) => {
+    const label = formatTaglistLabel(entry.value, entry.display_title);
+    const rowKey = entry.value ?? "NO-TAG";
+    const active =
+      typeof view === "object" &&
+      "taglistId" in view &&
+      view.taglistId === taglist.id &&
+      view.value === entry.value;
+    const isEditing = entry.value != null && editingValue === entry.value;
+    const isDragging = reorderable && dragIndex === index;
+    const dropIndicator =
+      reorderable && dropTarget?.index === index ? dropTarget.position : null;
+
+    const handleNavigate = () => {
+      if (isEditing) return;
+      setView({ taglistId: taglist.id, value: entry.value });
+    };
+
+    const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+      if (isEditing) return;
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        handleNavigate();
+      }
+    };
+
+    if (isEditing && entry.value != null) {
+      return (
+        <div
+          key={rowKey}
+          className="mb-0.5 flex items-center gap-1 rounded-md py-1 pl-6 pr-2"
+          onClick={(event) => event.stopPropagation()}
+        >
+          <span className="shrink-0 text-sm text-neutral-400">{entry.value} -</span>
+          <input
+            autoFocus
+            value={editTitle}
+            onChange={(event) => setEditTitle(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                void saveTitle(entry.value!);
+              }
+              if (event.key === "Escape") {
+                event.preventDefault();
+                cancelEditing();
+              }
+            }}
+            onBlur={() => {
+              if (skipBlurSaveRef.current) {
+                skipBlurSaveRef.current = false;
+                return;
+              }
+              void saveTitle(entry.value!);
+            }}
+            placeholder="Display title"
+            className="min-w-0 flex-1 rounded-md border border-neutral-700 bg-neutral-950 px-2 py-1 text-sm text-neutral-100"
+          />
+        </div>
+      );
+    }
+
+    const isDragOver =
+      dragOverTarget?.taglistId === taglist.id &&
+      dragOverTarget.value === entry.value;
+
+    const handleDrop = (event: DragEvent) => {
+      if (isSublistReorderDrag(event.dataTransfer)) {
+        if (reorderable) handleSublistDrop(index, event);
+        return;
+      }
+
+      event.preventDefault();
+      setDragOverTarget(null);
+      setDraggingTrackId(null);
+
+      const trackId = draggingTrackId ?? getTrackDragData(event.dataTransfer);
+      if (trackId == null) return;
+
+      onTagDrop(trackId, taglist, entry);
+    };
+
+    const dropBarClass =
+      dropIndicator === "before"
+        ? "border-t-2 border-t-sky-400"
+        : dropIndicator === "after"
+          ? "border-b-2 border-b-sky-400"
+          : "";
+    const stateClass = dropIndicator
+      ? ""
+      : isDragOver
+        ? "border-2 border-blue-500 bg-blue-950/40 text-white ring-2 ring-blue-500"
+        : isTrackDragging
+          ? "border border-dashed border-neutral-600 bg-neutral-800/50 text-neutral-200"
+          : active
+            ? "border border-transparent bg-neutral-800 text-white"
+            : "border border-transparent text-neutral-300 hover:bg-neutral-800/60";
+
+    return (
+      <div
+        key={rowKey}
+        role="button"
+        tabIndex={0}
+        onClick={handleNavigate}
+        onKeyDown={handleKeyDown}
+        onDragOver={(event) => {
+          if (
+            reorderable &&
+            (dragIndex != null || isSublistReorderDrag(event.dataTransfer))
+          ) {
+            event.preventDefault();
+            event.stopPropagation();
+            event.dataTransfer.dropEffect = "move";
+            const row = event.currentTarget.getBoundingClientRect();
+            const position: "before" | "after" =
+              event.clientY < row.top + row.height / 2 ? "before" : "after";
+            setDropTarget({ index, position });
+            return;
+          }
+          if (!isTrackDragging) return;
+          event.preventDefault();
+          event.dataTransfer.dropEffect = "copy";
+          setDragOverTarget({ taglistId: taglist.id, value: entry.value });
+        }}
+        onDragEnter={(event) => {
+          if (
+            reorderable &&
+            (dragIndex != null || isSublistReorderDrag(event.dataTransfer))
+          ) {
+            event.preventDefault();
+            event.stopPropagation();
+            return;
+          }
+          if (!isTrackDragging) return;
+          event.preventDefault();
+          setDragOverTarget({ taglistId: taglist.id, value: entry.value });
+        }}
+        onDragLeave={(event) => {
+          if (
+            reorderable &&
+            (dragIndex != null || isSublistReorderDrag(event.dataTransfer))
+          ) {
+            if (event.currentTarget.contains(event.relatedTarget as Node)) return;
+            setDropTarget((current) =>
+              current?.index === index ? null : current,
+            );
+            return;
+          }
+          if (event.currentTarget.contains(event.relatedTarget as Node)) return;
+          const key = taglistDropTargetKey(taglist.id, entry.value);
+          setDragOverTarget((current) =>
+            current &&
+            taglistDropTargetKey(current.taglistId, current.value) === key
+              ? null
+              : current,
+          );
+        }}
+        onDrop={handleDrop}
+        className={`group/sublist mb-0.5 flex w-full items-center rounded-md py-1.5 pr-3 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-neutral-500 ${
+          reorderable ? "pl-2" : "pl-6"
+        } ${dropBarClass} ${isDragging ? "opacity-40" : ""} ${stateClass}`}
+      >
+        {reorderable && entry.value != null ? (
+          <button
+            type="button"
+            draggable
+            aria-label={`Reorder ${label}`}
+            className="mr-1 flex shrink-0 cursor-grab items-center justify-center rounded p-0.5 text-neutral-600 hover:bg-neutral-800 hover:text-neutral-300 active:cursor-grabbing"
+            onClick={(event) => event.stopPropagation()}
+            onDragStart={(event) => {
+              event.stopPropagation();
+              setSublistReorderDragData(event.dataTransfer, index);
+              setDragIndex(index);
+            }}
+            onDragEnd={() => clearReorderState()}
+          >
+            <SublistGripIcon />
+          </button>
+        ) : null}
+        <span className="min-w-0 flex-1 truncate">
+          <span className="truncate">{label}</span>
+          <span className="ml-1 text-neutral-500">({entry.track_count})</span>
+        </span>
+        {entry.value != null && (
+          <button
+            type="button"
+            onClick={(event) => startEditing(event, entry.value!, entry.display_title)}
+            className="ml-1 hidden shrink-0 rounded px-1 text-xs text-neutral-500 hover:text-white group-hover/sublist:inline"
+            title="Edit title"
+          >
+            ✎
+          </button>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="mb-2">
       <div className="group flex items-center justify-between px-3 py-1">
@@ -143,134 +422,8 @@ function TaglistGroup({
           </button>
         </div>
       </div>
-      {values.map((entry) => {
-        const label = formatTaglistLabel(entry.value, entry.display_title);
-        const rowKey = entry.value ?? "NO-TAG";
-        const active =
-          typeof view === "object" &&
-          "taglistId" in view &&
-          view.taglistId === taglist.id &&
-          view.value === entry.value;
-        const isEditing = entry.value != null && editingValue === entry.value;
-
-        const handleNavigate = () => {
-          if (isEditing) return;
-          setView({ taglistId: taglist.id, value: entry.value });
-        };
-
-        const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-          if (isEditing) return;
-          if (event.key === "Enter" || event.key === " ") {
-            event.preventDefault();
-            handleNavigate();
-          }
-        };
-
-        if (isEditing && entry.value != null) {
-          return (
-            <div
-              key={rowKey}
-              className="mb-0.5 flex items-center gap-1 rounded-md py-1 pl-6 pr-2"
-              onClick={(event) => event.stopPropagation()}
-            >
-              <span className="shrink-0 text-sm text-neutral-400">{entry.value} -</span>
-              <input
-                autoFocus
-                value={editTitle}
-                onChange={(event) => setEditTitle(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.preventDefault();
-                    void saveTitle(entry.value!);
-                  }
-                  if (event.key === "Escape") {
-                    event.preventDefault();
-                    cancelEditing();
-                  }
-                }}
-                onBlur={() => {
-                  if (skipBlurSaveRef.current) {
-                    skipBlurSaveRef.current = false;
-                    return;
-                  }
-                  void saveTitle(entry.value!);
-                }}
-                placeholder="Display title"
-                className="min-w-0 flex-1 rounded-md border border-neutral-700 bg-neutral-950 px-2 py-1 text-sm text-neutral-100"
-              />
-            </div>
-          );
-        }
-
-        const isDragOver =
-          dragOverTarget?.taglistId === taglist.id &&
-          dragOverTarget.value === entry.value;
-
-        const handleDrop = (event: DragEvent) => {
-          event.preventDefault();
-          setDragOverTarget(null);
-          setDraggingTrackId(null);
-
-          const trackId = draggingTrackId ?? getTrackDragData(event.dataTransfer);
-          if (trackId == null) return;
-
-          onTagDrop(trackId, taglist, entry);
-        };
-
-        return (
-          <div
-            key={rowKey}
-            role="button"
-            tabIndex={0}
-            onClick={handleNavigate}
-            onKeyDown={handleKeyDown}
-            onDragOver={(event) => {
-              if (!isTrackDragging) return;
-              event.preventDefault();
-              event.dataTransfer.dropEffect = "copy";
-              setDragOverTarget({ taglistId: taglist.id, value: entry.value });
-            }}
-            onDragEnter={(event) => {
-              if (!isTrackDragging) return;
-              event.preventDefault();
-              setDragOverTarget({ taglistId: taglist.id, value: entry.value });
-            }}
-            onDragLeave={(event) => {
-              if (event.currentTarget.contains(event.relatedTarget as Node)) return;
-              const key = taglistDropTargetKey(taglist.id, entry.value);
-              setDragOverTarget((current) =>
-                current &&
-                taglistDropTargetKey(current.taglistId, current.value) === key
-                  ? null
-                  : current,
-              );
-            }}
-            onDrop={handleDrop}
-            className={`group/sublist mb-0.5 w-full rounded-md py-1.5 pl-6 pr-3 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-neutral-500 ${
-              isDragOver
-                ? "border-2 border-blue-500 bg-blue-950/40 text-white ring-2 ring-blue-500"
-                : isTrackDragging
-                  ? "border border-dashed border-neutral-600 bg-neutral-800/50 text-neutral-200"
-                  : active
-                    ? "border border-transparent bg-neutral-800 text-white"
-                    : "border border-transparent text-neutral-300 hover:bg-neutral-800/60"
-            }`}
-          >
-            <span className="truncate">{label}</span>
-            <span className="ml-1 text-neutral-500">({entry.track_count})</span>
-            {entry.value != null && (
-              <button
-                type="button"
-                onClick={(event) => startEditing(event, entry.value!, entry.display_title)}
-                className="ml-1 hidden rounded px-1 text-xs text-neutral-500 hover:text-white group-hover/sublist:inline"
-                title="Edit title"
-              >
-                ✎
-              </button>
-            )}
-          </div>
-        );
-      })}
+      {taggedValues.map((entry, index) => renderSublistRow(entry, index, true))}
+      {noTagEntry ? renderSublistRow(noTagEntry, taggedValues.length, false) : null}
     </div>
   );
 }

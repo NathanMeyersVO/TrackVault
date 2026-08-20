@@ -141,6 +141,8 @@ export const api = {
     value: string | null,
     trackIds: number[],
   ) => invoke<void>("reorder_taglist_tracks", { taglistId, value, trackIds }),
+  reorderTaglistValues: (taglistId: number, tagValues: string[]) =>
+    invoke<void>("reorder_taglist_values", { taglistId, tagValues }),
   playTrack: (trackId: number, startMs?: number, autoplay = true) =>
     invoke<PlaybackState>("play_track", { trackId, startMs, autoplay }),
   pausePlayback: () => invoke<PlaybackState>("pause_playback"),

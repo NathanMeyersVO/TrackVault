@@ -29,6 +29,8 @@ pub struct ConfigTaglist {
     pub value_titles: HashMap<String, String>,
     #[serde(default)]
     pub track_order: HashMap<String, Vec<String>>,
+    #[serde(default)]
+    pub value_order: Vec<String>,
 }
 
 pub fn config_file_path(library_root: &Path) -> PathBuf {
@@ -148,6 +150,9 @@ pub fn export_config(db: &Database, library_root: &Path) -> Result<LibraryConfig
         let value_titles = db
             .list_taglist_value_titles(taglist.id)
             .map_err(|e| e.to_string())?;
+        let value_order = db
+            .list_taglist_value_order(taglist.id)
+            .map_err(|e| e.to_string())?;
         let order_rows = db
             .list_taglist_track_order(taglist.id)
             .map_err(|e| e.to_string())?;
@@ -185,6 +190,7 @@ pub fn export_config(db: &Database, library_root: &Path) -> Result<LibraryConfig
             tag_key: taglist.tag_key,
             value_titles,
             track_order,
+            value_order,
         });
     }
 
@@ -254,6 +260,10 @@ pub fn apply_config(
             .map_err(|e| e.to_string())?;
         if !taglist.value_titles.is_empty() {
             db.import_taglist_titles(taglist_id, &taglist.value_titles)
+                .map_err(|e| e.to_string())?;
+        }
+        if !taglist.value_order.is_empty() {
+            db.reorder_taglist_values(taglist_id, &taglist.value_order)
                 .map_err(|e| e.to_string())?;
         }
         for (tag_value, rel_paths) in &taglist.track_order {
@@ -336,7 +346,19 @@ mod tests {
             .unwrap();
 
         let taglist_id = db.create_taglist("By Comment", "Comment").unwrap();
+        db.replace_track_tags(
+            tracks[0].id,
+            &[("Comment".to_string(), "01".to_string())],
+        )
+        .unwrap();
+        db.replace_track_tags(
+            tracks[1].id,
+            &[("Comment".to_string(), "02".to_string())],
+        )
+        .unwrap();
         db.set_taglist_value_title(taglist_id, "01", Some("Opening"))
+            .unwrap();
+        db.reorder_taglist_values(taglist_id, &["02".to_string(), "01".to_string()])
             .unwrap();
         db.reorder_taglist_tracks(taglist_id, Some("01"), &[tracks[0].id])
             .unwrap();
@@ -350,6 +372,10 @@ mod tests {
         assert_eq!(
             exported.taglists[0].value_titles.get("01"),
             Some(&"Opening".to_string())
+        );
+        assert_eq!(
+            exported.taglists[0].value_order,
+            vec!["02".to_string(), "01".to_string()]
         );
 
         db.clear_user_config().unwrap();
@@ -370,6 +396,11 @@ mod tests {
             .list_taglist_value_titles(taglists[0].id)
             .unwrap();
         assert_eq!(values.get("01"), Some(&"Opening".to_string()));
+        let sublists = db
+            .list_taglist_values("Comment", taglists[0].id)
+            .unwrap();
+        assert_eq!(sublists[0].value.as_deref(), Some("02"));
+        assert_eq!(sublists[1].value.as_deref(), Some("01"));
 
         std::fs::remove_dir_all(&library).ok();
     }

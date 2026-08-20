@@ -20,7 +20,8 @@ use commands::{
     delete_taglist, delete_track, get_library_folder, get_playback_state, get_playlist_tracks, get_taglist_tracks,
     get_track_peaks, get_track_tags, get_volume, import_taglist_titles, init_state,
     list_playlists, list_taglist_values, list_taglists, list_tracks, pause_playback, play_track,
-    remove_track_from_playlist, reorder_playlist_tracks, reorder_taglist_tracks, resume_playback,
+    remove_track_from_playlist, reorder_playlist_tracks, reorder_taglist_tracks,
+    reorder_taglist_values, resume_playback,
     load_library_config, reset_library, save_library_config, scan_library, seek_playback, set_library_folder,
     set_taglist_value_title, set_volume, stop_playback, update_track_tags, upload_tracks,
 };
@@ -62,6 +63,7 @@ pub fn run() {
             set_taglist_value_title,
             get_taglist_tracks,
             reorder_taglist_tracks,
+            reorder_taglist_values,
             play_track,
             pause_playback,
             resume_playback,
