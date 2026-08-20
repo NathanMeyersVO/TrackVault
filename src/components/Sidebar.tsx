@@ -231,6 +231,9 @@ export function Sidebar({ width }: { width: number }) {
   const [newTaglistName, setNewTaglistName] = useState("");
   const [newTaglistKey, setNewTaglistKey] = useState<string>(COMMON_TAG_KEYS[0]);
   const [dragOverPlaylistId, setDragOverPlaylistId] = useState<number | null>(null);
+  const [configMessage, setConfigMessage] = useState<string | null>(null);
+  const [configError, setConfigError] = useState<string | null>(null);
+  const [savingConfig, setSavingConfig] = useState(false);
 
   const isTrackDragging = draggingTrackId != null;
 
@@ -255,11 +258,30 @@ export function Sidebar({ width }: { width: number }) {
     if (typeof selected !== "string") return;
 
     setScanning(true);
+    setConfigError(null);
+    setConfigMessage(null);
     try {
       await api.setLibraryFolder(selected);
       await refresh();
+    } catch (err) {
+      setConfigError(String(err));
+      await refresh().catch(console.error);
     } finally {
       setScanning(false);
+    }
+  };
+
+  const saveConfiguration = async () => {
+    setSavingConfig(true);
+    setConfigMessage(null);
+    setConfigError(null);
+    try {
+      const savedPath = await api.saveLibraryConfig();
+      setConfigMessage(`Saved to ${savedPath}`);
+    } catch (err) {
+      setConfigError(String(err));
+    } finally {
+      setSavingConfig(false);
     }
   };
 
@@ -491,6 +513,24 @@ export function Sidebar({ width }: { width: number }) {
         >
           {scanning ? "Scanning…" : "Rescan library"}
         </button>
+        <button
+          type="button"
+          onClick={() => void saveConfiguration()}
+          disabled={scanning || savingConfig || !libraryFolder}
+          className="w-full rounded-md bg-neutral-800 px-3 py-2 text-sm text-white hover:bg-neutral-700 disabled:opacity-50"
+        >
+          {savingConfig ? "Saving…" : "Save configuration"}
+        </button>
+        {configMessage ? (
+          <p className="text-xs text-green-400" title={configMessage}>
+            {configMessage}
+          </p>
+        ) : null}
+        {configError ? (
+          <p className="text-xs text-red-400" title={configError}>
+            {configError}
+          </p>
+        ) : null}
         <KeyboardShortcuts />
       </div>
     </aside>

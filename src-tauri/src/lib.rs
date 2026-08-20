@@ -1,5 +1,6 @@
 mod audio_scan;
 mod commands;
+mod config;
 mod db;
 mod models;
 mod playback;
@@ -17,7 +18,7 @@ use commands::{
     get_track_peaks, get_track_tags, get_volume, import_taglist_titles, init_state,
     list_playlists, list_taglist_values, list_taglists, list_tracks, pause_playback, play_track,
     remove_track_from_playlist, reorder_playlist_tracks, reorder_taglist_tracks, resume_playback,
-    scan_library, seek_playback, set_library_folder, set_taglist_value_title, set_volume,
+    save_library_config, scan_library, seek_playback, set_library_folder, set_taglist_value_title, set_volume,
     stop_playback, update_track_tags,
 };
 use tauri::Manager;
@@ -36,6 +37,7 @@ pub fn run() {
             list_tracks,
             get_library_folder,
             set_library_folder,
+            save_library_config,
             scan_library,
             create_playlist,
             delete_playlist,

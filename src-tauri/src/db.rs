@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::Path;
 
 use rusqlite::{params, Connection};
@@ -274,6 +275,16 @@ impl Database {
         }
     }
 
+    pub fn get_track_id_by_path(&self, path: &str) -> Result<Option<i64>, DbError> {
+        let mut stmt = self.conn.prepare("SELECT id FROM tracks WHERE path = ?1")?;
+        let mut rows = stmt.query(params![path])?;
+        if let Some(row) = rows.next()? {
+            Ok(Some(row.get(0)?))
+        } else {
+            Ok(None)
+        }
+    }
+
     pub fn get_track_path(&self, id: i64) -> Result<Option<String>, DbError> {
         let mut stmt = self.conn.prepare("SELECT path FROM tracks WHERE id = ?1")?;
         let mut rows = stmt.query(params![id])?;
@@ -335,6 +346,40 @@ impl Database {
             params![seek_index_json, id],
         )?;
         Ok(())
+    }
+
+    pub fn clear_user_config(&self) -> Result<(), DbError> {
+        let tx = self.conn.unchecked_transaction()?;
+        tx.execute("DELETE FROM playlist_tracks", [])?;
+        tx.execute("DELETE FROM playlists", [])?;
+        tx.execute("DELETE FROM taglist_track_order", [])?;
+        tx.execute("DELETE FROM taglist_value_titles", [])?;
+        tx.execute("DELETE FROM taglists", [])?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    pub fn list_taglist_value_titles(
+        &self,
+        taglist_id: i64,
+    ) -> Result<HashMap<String, String>, DbError> {
+        self.get_taglist_titles(taglist_id)
+    }
+
+    pub fn list_taglist_track_order(
+        &self,
+        taglist_id: i64,
+    ) -> Result<Vec<(String, i64, i64)>, DbError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT tag_value, track_id, position
+             FROM taglist_track_order
+             WHERE taglist_id = ?1
+             ORDER BY tag_value COLLATE NOCASE, position",
+        )?;
+        let rows = stmt.query_map(params![taglist_id], |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+        })?;
+        Ok(rows.filter_map(Result::ok).collect())
     }
 
     pub fn create_playlist(&self, name: &str) -> Result<i64, DbError> {

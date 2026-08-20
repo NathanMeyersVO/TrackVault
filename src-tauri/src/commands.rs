@@ -56,14 +56,50 @@ pub fn set_library_folder(
     state: State<'_, AppState>,
     path: String,
 ) -> Result<ScanProgress, String> {
+    let library_root = PathBuf::from(&path);
     {
         let db = state.db.lock();
         db.set_library_folder(&path).map_err(|e| e.to_string())?;
+        db.clear_user_config().map_err(|e| e.to_string())?;
     }
 
-    let progress = scan_library(app.clone(), state)?;
+    let pending_config = match crate::config::load_config_file(&library_root) {
+        Ok(config) => config,
+        Err(e) => {
+            let _progress = {
+                let db = state.db.lock();
+                scanner::scan_library_folder(&db)?
+            };
+            let _ = app.emit("library-updated", ());
+            return Err(format!(
+                "Library folder set and scanned, but config could not be loaded: {e}"
+            ));
+        }
+    };
+
+    let progress = {
+        let db = state.db.lock();
+        scanner::scan_library_folder(&db)?
+    };
+
+    if let Some(config) = pending_config {
+        let db = state.db.lock();
+        crate::config::apply_config(&db, &library_root, &config)?;
+    }
+
     let _ = app.emit("library-updated", ());
     Ok(progress)
+}
+
+#[tauri::command]
+pub fn save_library_config(state: State<'_, AppState>) -> Result<String, String> {
+    let db = state.db.lock();
+    let library = db
+        .get_library_folder()
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "No library folder configured".to_string())?;
+    let path = crate::config::save_config(&db, Path::new(&library))?;
+    Ok(path.to_string_lossy().to_string())
 }
 
 #[tauri::command]

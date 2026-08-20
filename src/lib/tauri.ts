@@ -89,6 +89,7 @@ export const api = {
   setLibraryFolder: (path: string) =>
     invoke<ScanProgress>("set_library_folder", { path }),
   scanLibrary: () => invoke<ScanProgress>("scan_library"),
+  saveLibraryConfig: () => invoke<string>("save_library_config"),
   createPlaylist: (name: string) =>
     invoke<number>("create_playlist", { name }),
   deletePlaylist: (id: number) => invoke<void>("delete_playlist", { id }),
