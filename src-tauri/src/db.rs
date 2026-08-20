@@ -732,6 +732,160 @@ impl Database {
         tx.commit()?;
         Ok(())
     }
+
+    pub fn get_track_tag_values(
+        &self,
+        track_id: i64,
+        tag_key: &str,
+    ) -> Result<Vec<String>, DbError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT tag_value FROM track_tags
+             WHERE track_id = ?1 AND tag_key = ?2
+             ORDER BY tag_value COLLATE NOCASE",
+        )?;
+        let rows = stmt.query_map(params![track_id, tag_key], |row| row.get(0))?;
+        Ok(rows.filter_map(Result::ok).collect())
+    }
+
+    pub fn track_in_taglist_sublist(
+        &self,
+        tag_key: &str,
+        tag_value: &str,
+        track_id: i64,
+    ) -> Result<bool, DbError> {
+        if tag_value.is_empty() {
+            let count: i64 = self.conn.query_row(
+                "SELECT COUNT(*) FROM track_tags WHERE track_id = ?1 AND tag_key = ?2",
+                params![track_id, tag_key],
+                |row| row.get(0),
+            )?;
+            Ok(count == 0)
+        } else {
+            let count: i64 = self.conn.query_row(
+                "SELECT COUNT(*) FROM track_tags
+                 WHERE track_id = ?1 AND tag_key = ?2 AND tag_value = ?3",
+                params![track_id, tag_key, tag_value],
+                |row| row.get(0),
+            )?;
+            Ok(count > 0)
+        }
+    }
+
+    fn taglist_sublist_has_custom_order(
+        &self,
+        taglist_id: i64,
+        tag_value: &str,
+    ) -> Result<bool, DbError> {
+        let count: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM taglist_track_order
+             WHERE taglist_id = ?1 AND tag_value = ?2",
+            params![taglist_id, tag_value],
+            |row| row.get(0),
+        )?;
+        Ok(count > 0)
+    }
+
+    fn track_has_order_in_sublist(
+        &self,
+        taglist_id: i64,
+        tag_value: &str,
+        track_id: i64,
+    ) -> Result<bool, DbError> {
+        let count: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM taglist_track_order
+             WHERE taglist_id = ?1 AND tag_value = ?2 AND track_id = ?3",
+            params![taglist_id, tag_value, track_id],
+            |row| row.get(0),
+        )?;
+        Ok(count > 0)
+    }
+
+    fn max_order_position(
+        &self,
+        taglist_id: i64,
+        tag_value: &str,
+    ) -> Result<i64, DbError> {
+        Ok(self.conn.query_row(
+            "SELECT COALESCE(MAX(position), -1) FROM taglist_track_order
+             WHERE taglist_id = ?1 AND tag_value = ?2",
+            params![taglist_id, tag_value],
+            |row| row.get(0),
+        )?)
+    }
+
+    fn append_track_to_taglist_order(
+        &self,
+        taglist_id: i64,
+        tag_value: &str,
+        track_id: i64,
+    ) -> Result<(), DbError> {
+        let position = self.max_order_position(taglist_id, tag_value)? + 1;
+        self.conn.execute(
+            "INSERT INTO taglist_track_order (taglist_id, tag_value, track_id, position)
+             VALUES (?1, ?2, ?3, ?4)",
+            params![taglist_id, tag_value, track_id, position],
+        )?;
+        Ok(())
+    }
+
+    pub fn sync_taglist_order_for_track_key(
+        &self,
+        track_id: i64,
+        taglist_id: i64,
+        tag_key: &str,
+    ) -> Result<(), DbError> {
+        let current_values = self.get_track_tag_values(track_id, tag_key)?;
+
+        let mut stmt = self.conn.prepare(
+            "SELECT tag_value FROM taglist_track_order
+             WHERE track_id = ?1 AND taglist_id = ?2",
+        )?;
+        let ordered_values: Vec<String> = stmt
+            .query_map(params![track_id, taglist_id], |row| row.get(0))?
+            .filter_map(Result::ok)
+            .collect();
+
+        for ordered_value in ordered_values {
+            let still_belongs = if ordered_value.is_empty() {
+                current_values.is_empty()
+            } else {
+                current_values.iter().any(|value| value == &ordered_value)
+            };
+
+            if !still_belongs {
+                self.conn.execute(
+                    "DELETE FROM taglist_track_order
+                     WHERE track_id = ?1 AND taglist_id = ?2 AND tag_value = ?3",
+                    params![track_id, taglist_id, ordered_value],
+                )?;
+            }
+        }
+
+        let sublists_to_integrate: Vec<String> = if current_values.is_empty() {
+            vec![String::new()]
+        } else {
+            current_values
+        };
+
+        for tag_value in sublists_to_integrate {
+            if !self.taglist_sublist_has_custom_order(taglist_id, &tag_value)? {
+                continue;
+            }
+            if self.track_has_order_in_sublist(taglist_id, &tag_value, track_id)? {
+                continue;
+            }
+            self.append_track_to_taglist_order(taglist_id, &tag_value, track_id)?;
+        }
+
+        Ok(())
+    }
+
+    pub fn sync_taglist_order_for_track(&self, track_id: i64) -> Result<(), DbError> {
+        for taglist in self.list_taglists()? {
+            self.sync_taglist_order_for_track_key(track_id, taglist.id, &taglist.tag_key)?;
+        }
+        Ok(())
+    }
 }
 
 fn map_track_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Track> {
@@ -958,5 +1112,108 @@ mod tests {
             .unwrap();
         assert_eq!(tracks[0].id, track_b);
         assert_eq!(tracks[1].id, track_a);
+    }
+
+    #[test]
+    fn tag_change_moves_track_out_of_reordered_old_sublist_only() {
+        let db = test_db();
+        let taglist_id = db.create_taglist("Events", "Comment").unwrap();
+        let track_a = insert_track(&db, "A");
+        let track_b = insert_track(&db, "B");
+        db.replace_track_tags(
+            track_a,
+            &[("Comment".to_string(), "01".to_string())],
+        )
+        .unwrap();
+        db.replace_track_tags(
+            track_b,
+            &[("Comment".to_string(), "02".to_string())],
+        )
+        .unwrap();
+
+        db.reorder_taglist_tracks(taglist_id, Some("01"), &[track_a])
+            .unwrap();
+
+        db.replace_track_tags(
+            track_a,
+            &[("Comment".to_string(), "02".to_string())],
+        )
+        .unwrap();
+        db.sync_taglist_order_for_track(track_a).unwrap();
+
+        let old_sublist = db
+            .list_taglist_tracks(taglist_id, "Comment", Some("01"))
+            .unwrap();
+        assert!(old_sublist.is_empty());
+
+        let new_sublist = db
+            .list_taglist_tracks(taglist_id, "Comment", Some("02"))
+            .unwrap();
+        assert_eq!(new_sublist.len(), 2);
+        assert!(new_sublist.iter().any(|track| track.id == track_a));
+
+        let stale_order: i64 = db
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM taglist_track_order
+                 WHERE taglist_id = ?1 AND tag_value = '01' AND track_id = ?2",
+                params![taglist_id, track_a],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(stale_order, 0);
+    }
+
+    #[test]
+    fn tag_change_moves_track_between_two_reordered_sublists() {
+        let db = test_db();
+        let taglist_id = db.create_taglist("Events", "Comment").unwrap();
+        let track_a = insert_track(&db, "A");
+        let track_b = insert_track(&db, "B");
+        db.replace_track_tags(
+            track_a,
+            &[("Comment".to_string(), "01".to_string())],
+        )
+        .unwrap();
+        db.replace_track_tags(
+            track_b,
+            &[("Comment".to_string(), "02".to_string())],
+        )
+        .unwrap();
+
+        db.reorder_taglist_tracks(taglist_id, Some("01"), &[track_a])
+            .unwrap();
+        db.reorder_taglist_tracks(taglist_id, Some("02"), &[track_b])
+            .unwrap();
+
+        db.replace_track_tags(
+            track_a,
+            &[("Comment".to_string(), "02".to_string())],
+        )
+        .unwrap();
+        db.sync_taglist_order_for_track(track_a).unwrap();
+
+        let old_sublist = db
+            .list_taglist_tracks(taglist_id, "Comment", Some("01"))
+            .unwrap();
+        assert!(old_sublist.is_empty());
+
+        let new_sublist = db
+            .list_taglist_tracks(taglist_id, "Comment", Some("02"))
+            .unwrap();
+        assert_eq!(new_sublist.len(), 2);
+        assert_eq!(new_sublist[0].id, track_b);
+        assert_eq!(new_sublist[1].id, track_a);
+
+        let position: i64 = db
+            .conn
+            .query_row(
+                "SELECT position FROM taglist_track_order
+                 WHERE taglist_id = ?1 AND tag_value = '02' AND track_id = ?2",
+                params![taglist_id, track_a],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(position, 1);
     }
 }

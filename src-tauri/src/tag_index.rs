@@ -20,23 +20,3 @@ pub fn backfill_unindexed_tracks(db: &Database) -> Result<(), String> {
     }
     Ok(())
 }
-
-pub fn index_track_tags_from_fields(
-    db: &Database,
-    track_id: i64,
-    fields: &[crate::tags::TagFieldInput],
-) -> Result<(), String> {
-    let pairs: Vec<(String, String)> = fields
-        .iter()
-        .filter_map(|field| {
-            let value = field.value.trim();
-            if value.is_empty() {
-                None
-            } else {
-                Some((field.key.clone(), value.to_string()))
-            }
-        })
-        .collect();
-    db.replace_track_tags(track_id, &pairs)
-        .map_err(|e| e.to_string())
-}

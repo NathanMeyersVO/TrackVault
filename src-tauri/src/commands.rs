@@ -483,7 +483,9 @@ pub fn update_track_tags(
 
     {
         let db = state.db.lock();
-        crate::tag_index::index_track_tags_from_fields(&db, track_id, &fields)?;
+        crate::tag_index::index_track_tags(&db, track_id, Path::new(&path))?;
+        db.sync_taglist_order_for_track(track_id)
+            .map_err(|e| e.to_string())?;
     }
 
     let _ = app.emit("library-updated", ());

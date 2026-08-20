@@ -154,6 +154,12 @@ pub fn export_config(db: &Database, library_root: &Path) -> Result<LibraryConfig
 
         let mut track_order: HashMap<String, Vec<(i64, String)>> = HashMap::new();
         for (tag_value, track_id, position) in order_rows {
+            if !db
+                .track_in_taglist_sublist(&taglist.tag_key, &tag_value, track_id)
+                .map_err(|e| e.to_string())?
+            {
+                continue;
+            }
             let path = db
                 .get_track_path(track_id)
                 .map_err(|e| e.to_string())?
