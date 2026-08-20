@@ -87,6 +87,11 @@ pub fn set_library_folder(
         crate::config::apply_config(&db, &library_root, &config)?;
     }
 
+    {
+        let db = state.db.lock();
+        crate::library_setup::maybe_auto_import_event_schedule(&db, &library_root)?;
+    }
+
     let _ = app.emit("library-updated", ());
     Ok(progress)
 }

@@ -528,6 +528,15 @@ impl Database {
         Ok(())
     }
 
+    pub fn has_taglist_named(&self, name: &str) -> Result<bool, DbError> {
+        let count: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM taglists WHERE name = ?1 COLLATE NOCASE",
+            params![name],
+            |row| row.get(0),
+        )?;
+        Ok(count > 0)
+    }
+
     pub fn list_taglists(&self) -> Result<Vec<Taglist>, DbError> {
         let mut stmt = self.conn.prepare(
             "SELECT id, name, tag_key, created_at FROM taglists ORDER BY name COLLATE NOCASE",

@@ -4,6 +4,7 @@ mod config;
 mod db;
 mod models;
 mod library_path;
+mod library_setup;
 mod playback;
 mod player;
 mod scanner;

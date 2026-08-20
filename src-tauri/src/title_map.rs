@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use calamine::{open_workbook_auto, Data, Reader};
 
@@ -7,6 +7,36 @@ const EVENT_SCHEDULE_SHEET: &str = "Event Schedule";
 const TAG_COLUMN: &str = "#";
 const TITLE_COLUMN: &str = "Title";
 const GROUP_COLUMN: &str = "Group";
+
+fn is_excel_extension(path: &Path) -> bool {
+    matches!(
+        path.extension()
+            .and_then(|e| e.to_str())
+            .map(|e| e.to_lowercase()),
+        Some(ext) if ext == "xls" || ext == "xlsx"
+    )
+}
+
+pub fn find_top_level_event_schedule(
+    library_root: &Path,
+) -> Result<Option<(PathBuf, HashMap<String, String>)>, String> {
+    let candidates: Vec<PathBuf> = std::fs::read_dir(library_root)
+        .map_err(|e| e.to_string())?
+        .filter_map(|entry| entry.ok())
+        .map(|entry| entry.path())
+        .filter(|path| path.is_file() && is_excel_extension(path))
+        .collect();
+
+    if candidates.len() != 1 {
+        return Ok(None);
+    }
+
+    let path = candidates.into_iter().next().expect("exactly one candidate");
+    match parse_title_map(&path) {
+        Ok(mappings) => Ok(Some((path, mappings))),
+        Err(_) => Ok(None),
+    }
+}
 
 pub fn parse_title_map(path: &Path) -> Result<HashMap<String, String>, String> {
     let ext = path
@@ -217,5 +247,76 @@ mod tests {
 
         let err = parse_title_map_from_rows(&headers, &rows).unwrap_err();
         assert!(err.contains("#"));
+    }
+
+    fn write_event_schedule_xlsx(path: &Path, rows: &[(&str, &str)]) {
+        use rust_xlsxwriter::{Workbook, Worksheet};
+
+        let mut workbook = Workbook::new();
+        let mut worksheet = Worksheet::new();
+        worksheet.set_name("Event Schedule").unwrap();
+        worksheet.write_string(0, 0, "#").unwrap();
+        worksheet.write_string(0, 1, "Title").unwrap();
+        for (row_idx, (tag, title)) in rows.iter().enumerate() {
+            let row = (row_idx + 1) as u32;
+            worksheet.write_string(row, 0, *tag).unwrap();
+            worksheet.write_string(row, 1, *title).unwrap();
+        }
+        workbook.push_worksheet(worksheet);
+        workbook.save(path).unwrap();
+    }
+
+    fn temp_library_dir() -> PathBuf {
+        use std::sync::atomic::{AtomicU64, Ordering};
+
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
+        let unique = COUNTER.fetch_add(1, Ordering::Relaxed);
+        let library = std::env::temp_dir().join(format!(
+            "trackvault-title-map-test-{}-{unique}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&library).expect("create library dir");
+        library
+    }
+
+    #[test]
+    fn find_top_level_event_schedule_none_when_no_excel_files() {
+        let library = temp_library_dir();
+        let result = find_top_level_event_schedule(&library).unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn find_top_level_event_schedule_none_when_multiple_excel_files() {
+        let library = temp_library_dir();
+        write_event_schedule_xlsx(&library.join("a.xlsx"), &[("01", "First")]);
+        write_event_schedule_xlsx(&library.join("b.xlsx"), &[("02", "Second")]);
+
+        let result = find_top_level_event_schedule(&library).unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn find_top_level_event_schedule_none_when_schedule_invalid() {
+        let library = temp_library_dir();
+        std::fs::write(library.join("schedule.xlsx"), b"not an xlsx").unwrap();
+
+        let result = find_top_level_event_schedule(&library).unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn find_top_level_event_schedule_returns_mappings_for_single_valid_file() {
+        let library = temp_library_dir();
+        let path = library.join("schedule.xlsx");
+        write_event_schedule_xlsx(&path, &[("01", "Showcase: Pre-Preliminary")]);
+
+        let result = find_top_level_event_schedule(&library).unwrap();
+        let (found_path, mappings) = result.expect("expected schedule");
+        assert_eq!(found_path, path);
+        assert_eq!(
+            mappings.get("01"),
+            Some(&"Showcase: Pre-Preliminary".to_string())
+        );
     }
 }
