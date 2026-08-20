@@ -1,7 +1,11 @@
 import { useCallback, useState, type CSSProperties } from "react";
 
 import { TAGLIST_FOOTER_ROW_ID, TRACK_LIST_ID } from "../hooks/useTrackCursor";
-import { getReorderDragData, setReorderDragData } from "../lib/dragDrop";
+import {
+  getReorderDragData,
+  isReorderDrag,
+  setReorderDragData,
+} from "../lib/dragDrop";
 import { appearance } from "../lib/appearance";
 import type { Playlist, Track } from "../lib/tauri";
 import { TrackTableRow } from "./TrackTableRow";
@@ -88,6 +92,11 @@ export function TrackTable({
       event.preventDefault();
       if (!onReorderTracks) return;
 
+      if (dragIndex == null && !isReorderDrag(event.dataTransfer)) {
+        clearReorderState();
+        return;
+      }
+
       const fromIndex = dragIndex ?? getReorderDragData(event.dataTransfer);
       if (fromIndex == null || fromIndex === targetIndex) {
         clearReorderState();
@@ -161,7 +170,7 @@ export function TrackTable({
               onAddTrackToPlaylist={onAddTrackToPlaylist}
               onRemoveTrackFromPlaylist={onRemoveTrackFromPlaylist}
               onDeleteTrack={onDeleteTrack}
-              draggable={draggable && !reorderable}
+              draggable={draggable}
               reorderable={reorderable}
               isDragging={dragIndex === index}
               dropIndicator={
@@ -173,6 +182,9 @@ export function TrackTable({
               }}
               onReorderDragEnd={clearReorderState}
               onReorderDragOver={(event) => {
+                if (dragIndex == null && !isReorderDrag(event.dataTransfer)) {
+                  return;
+                }
                 event.preventDefault();
                 event.dataTransfer.dropEffect = "move";
                 const row = event.currentTarget.getBoundingClientRect();

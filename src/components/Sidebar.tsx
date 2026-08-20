@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type DragEvent, type KeyboardEvent, type MouseEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type Dispatch, type DragEvent, type KeyboardEvent, type MouseEvent, type SetStateAction } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { listen } from "@tauri-apps/api/event";
 
@@ -7,16 +7,38 @@ import { api, COMMON_TAG_KEYS, type Playlist, type Taglist, type TaglistValue } 
 import { formatTaglistLabel } from "../lib/taglistLabels";
 import { getTrackDragData } from "../lib/dragDrop";
 import { useLibrary } from "../hooks/usePlayer";
+import { useTagDropConfirm } from "../hooks/useTagDropConfirm";
 import { usePlayerStore, type View } from "../store/playerStore";
+
+interface TaglistDropTarget {
+  taglistId: number;
+  value: string | null;
+}
+
+function taglistDropTargetKey(taglistId: number, value: string | null): string {
+  return `${taglistId}:${value ?? "NO-TAG"}`;
+}
 
 function TaglistGroup({
   taglist,
   view,
   setView,
+  isTrackDragging,
+  draggingTrackId,
+  dragOverTarget,
+  setDragOverTarget,
+  setDraggingTrackId,
+  onTagDrop,
 }: {
   taglist: Taglist;
   view: View;
   setView: (view: View) => void;
+  isTrackDragging: boolean;
+  draggingTrackId: number | null;
+  dragOverTarget: TaglistDropTarget | null;
+  setDragOverTarget: Dispatch<SetStateAction<TaglistDropTarget | null>>;
+  setDraggingTrackId: (trackId: number | null) => void;
+  onTagDrop: (trackId: number, taglist: Taglist, entry: TaglistValue) => void;
 }) {
   const { refresh } = useLibrary();
   const [values, setValues] = useState<TaglistValue[]>([]);
@@ -180,6 +202,21 @@ function TaglistGroup({
           );
         }
 
+        const isDragOver =
+          dragOverTarget?.taglistId === taglist.id &&
+          dragOverTarget.value === entry.value;
+
+        const handleDrop = (event: DragEvent) => {
+          event.preventDefault();
+          setDragOverTarget(null);
+          setDraggingTrackId(null);
+
+          const trackId = draggingTrackId ?? getTrackDragData(event.dataTransfer);
+          if (trackId == null) return;
+
+          onTagDrop(trackId, taglist, entry);
+        };
+
         return (
           <div
             key={rowKey}
@@ -187,10 +224,36 @@ function TaglistGroup({
             tabIndex={0}
             onClick={handleNavigate}
             onKeyDown={handleKeyDown}
+            onDragOver={(event) => {
+              if (!isTrackDragging) return;
+              event.preventDefault();
+              event.dataTransfer.dropEffect = "copy";
+              setDragOverTarget({ taglistId: taglist.id, value: entry.value });
+            }}
+            onDragEnter={(event) => {
+              if (!isTrackDragging) return;
+              event.preventDefault();
+              setDragOverTarget({ taglistId: taglist.id, value: entry.value });
+            }}
+            onDragLeave={(event) => {
+              if (event.currentTarget.contains(event.relatedTarget as Node)) return;
+              const key = taglistDropTargetKey(taglist.id, entry.value);
+              setDragOverTarget((current) =>
+                current &&
+                taglistDropTargetKey(current.taglistId, current.value) === key
+                  ? null
+                  : current,
+              );
+            }}
+            onDrop={handleDrop}
             className={`group/sublist mb-0.5 w-full rounded-md py-1.5 pl-6 pr-3 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-neutral-500 ${
-              active
-                ? "bg-neutral-800 text-white"
-                : "text-neutral-300 hover:bg-neutral-800/60"
+              isDragOver
+                ? "border-2 border-blue-500 bg-blue-950/40 text-white ring-2 ring-blue-500"
+                : isTrackDragging
+                  ? "border border-dashed border-neutral-600 bg-neutral-800/50 text-neutral-200"
+                  : active
+                    ? "border border-transparent bg-neutral-800 text-white"
+                    : "border border-transparent text-neutral-300 hover:bg-neutral-800/60"
             }`}
           >
             <span className="truncate">{label}</span>
@@ -228,8 +291,11 @@ export function Sidebar({ width }: { width: number }) {
   const [newTaglistName, setNewTaglistName] = useState("");
   const [newTaglistKey, setNewTaglistKey] = useState<string>(COMMON_TAG_KEYS[0]);
   const [dragOverPlaylistId, setDragOverPlaylistId] = useState<number | null>(null);
+  const [dragOverTaglistTarget, setDragOverTaglistTarget] =
+    useState<TaglistDropTarget | null>(null);
   const [pendingDeletePlaylist, setPendingDeletePlaylist] = useState<Playlist | null>(null);
   const [deletingPlaylist, setDeletingPlaylist] = useState(false);
+  const { requestTagDrop, confirmDialog: tagDropConfirmDialog } = useTagDropConfirm();
 
   const isTrackDragging = draggingTrackId != null;
 
@@ -320,7 +386,7 @@ export function Sidebar({ width }: { width: number }) {
         </button>
 
         <div className="mb-2 mt-4 px-3 text-xs font-medium uppercase tracking-wide text-neutral-500">
-          {isTrackDragging ? "Drop on a playlist" : "Playlists"}
+          {isTrackDragging ? "Drop on a playlist or taglist" : "Playlists"}
         </div>
 
         {playlists.map((playlist) => {
@@ -432,7 +498,7 @@ export function Sidebar({ width }: { width: number }) {
         )}
 
         <div className="mb-2 mt-4 px-3 text-xs font-medium uppercase tracking-wide text-neutral-500">
-          Taglists
+          {isTrackDragging ? "Drop on a taglist sublist" : "Taglists"}
         </div>
 
         {taglists.map((taglist) => (
@@ -441,6 +507,14 @@ export function Sidebar({ width }: { width: number }) {
             taglist={taglist}
             view={view}
             setView={setView}
+            isTrackDragging={isTrackDragging}
+            draggingTrackId={draggingTrackId}
+            dragOverTarget={dragOverTaglistTarget}
+            setDragOverTarget={setDragOverTaglistTarget}
+            setDraggingTrackId={setDraggingTrackId}
+            onTagDrop={(trackId, droppedTaglist, entry) => {
+              void requestTagDrop(trackId, droppedTaglist, entry);
+            }}
           />
         ))}
 
@@ -505,6 +579,7 @@ export function Sidebar({ width }: { width: number }) {
           onCancel={cancelDeletePlaylist}
         />
       ) : null}
+      {tagDropConfirmDialog}
     </aside>
   );
 }

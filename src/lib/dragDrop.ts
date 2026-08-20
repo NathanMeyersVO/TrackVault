@@ -46,3 +46,7 @@ export function isTrackDrag(dataTransfer: DataTransfer): boolean {
     dataTransfer.types.includes("text/plain")
   );
 }
+
+export function isReorderDrag(dataTransfer: DataTransfer): boolean {
+  return dataTransfer.types.includes(REORDER_DRAG_MIME);
+}
