@@ -549,9 +549,7 @@ pub fn stop_playback(state: State<'_, AppState>) -> Result<PlaybackState, String
 #[tauri::command]
 pub fn seek_playback(state: State<'_, AppState>, position_ms: u64) -> Result<PlaybackState, String> {
     state.player.seek(position_ms)?;
-    let mut playback = state.player.state();
-    playback.position_ms = position_ms.min(playback.duration_ms);
-    Ok(playback)
+    Ok(state.player.state())
 }
 
 #[tauri::command]

@@ -95,10 +95,12 @@ impl TrackSession {
 
     pub fn seek_to(&mut self, target_ms: u64) -> Result<(), String> {
         let target_ms = target_ms.min(self.duration_ms);
-        let target_frame = ms_to_frames(target_ms, self.sample_rate);
         let keyframe = nearest_keyframe(&self.seek_index, target_ms).clone();
 
         self.reopen()?;
+
+        let target_frame = ms_to_frames(target_ms, self.sample_rate);
+        let keyframe_frame = ms_to_frames(keyframe.ts_ms, self.sample_rate);
 
         if keyframe.ts_ms > 0 {
             let seek_to = SeekTo::Time {
@@ -114,10 +116,10 @@ impl TrackSession {
                 decoder.reset();
             }
             if seek_ok {
-                self.frame_cursor = keyframe.sample_index;
+                self.frame_cursor = keyframe_frame;
             } else {
                 self.frame_cursor = 0;
-                self.decode_until_frame(keyframe.sample_index, false)?;
+                self.decode_until_frame(keyframe_frame, false)?;
             }
         } else {
             self.frame_cursor = 0;
@@ -355,5 +357,31 @@ fn ms_to_time(ms: u64) -> Time {
     Time {
         seconds: ms / 1000,
         frac: (ms % 1000) as f64 / 1000.0,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ms_to_frames;
+
+    #[test]
+    fn ms_to_frames_at_48khz() {
+        assert_eq!(ms_to_frames(60_000, 48_000), 2_880_000);
+    }
+
+    #[test]
+    fn ms_to_frames_at_44_1khz() {
+        assert_eq!(ms_to_frames(60_000, 44_100), 2_646_000);
+    }
+
+    #[test]
+    fn stale_sample_rate_causes_early_seek_at_48khz() {
+        let target_ms = 60_000u64;
+        let stale_frame = ms_to_frames(target_ms, 44_100);
+        let correct_frame = ms_to_frames(target_ms, 48_000);
+        let early_ms = stale_frame * 1000 / 48_000;
+        assert_eq!(early_ms, 55_125);
+        assert!(correct_frame > stale_frame);
+        assert_eq!(correct_frame - stale_frame, 234_000);
     }
 }

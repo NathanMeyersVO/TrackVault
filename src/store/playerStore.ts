@@ -204,14 +204,19 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       lockedPositionMs: null,
       loadAutoplayRequested: false,
     }),
-  completeTransport: (result, targetMs) =>
+  completeTransport: (result, targetMs) => {
+    const positionMs =
+      Math.abs(result.position_ms - targetMs) <= SEEK_CONFIRM_TOLERANCE_MS
+        ? targetMs
+        : result.position_ms;
     set({
       transportBusy: false,
       transportMode: "idle",
       lockedPositionMs: null,
-      playback: { ...result, position_ms: targetMs },
-      positionGuardTargetMs: result.is_playing ? targetMs : null,
-    }),
+      playback: { ...result, position_ms: positionMs },
+      positionGuardTargetMs: result.is_playing ? positionMs : null,
+    });
+  },
   forceCompleteTransport: (targetMs) => {
     const { playback } = get();
     get().completeTransport(playback, targetMs);
