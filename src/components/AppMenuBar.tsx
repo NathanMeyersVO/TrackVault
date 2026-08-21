@@ -10,27 +10,41 @@ export function AppMenuBar() {
   const [appearanceOpen, setAppearanceOpen] = useState(false);
   const {
     libraryFolder,
+    collectionId,
+    collectionName,
     scanning,
-    uploading,
+    libraryUploading,
+    collectionUploading,
     savingConfig,
     loadingConfig,
-    resetting,
+    closingLibrary,
+    importingCollection,
     uploadMessage,
     uploadError,
     configMessage,
     configError,
-    uploadConfirmDialog,
+    libraryUploadConfirmDialog,
+    collectionUploadConfirmDialog,
     loadConfigConfirmDialog,
-    resetConfirmDialog,
+    closeLibraryConfirmDialog,
     chooseLibraryFolder,
-    uploadTracks,
+    uploadToLibrary,
+    uploadToCollection,
     scanLibrary,
     saveConfiguration,
     requestLoadConfiguration,
-    requestResetLibrary,
+    requestCloseLibrary,
+    importCollection,
     actionsDisabled,
     libraryActionsDisabled,
+    libraryUploadDisabled,
+    collectionUploadDisabled,
   } = useLibraryMenuActions();
+
+  const collectionUploadLabel =
+    collectionName != null
+      ? `Upload to collection (${collectionName})…`
+      : "Upload to collection…";
 
   const fileItems: MenuEntry[] = [
     {
@@ -39,9 +53,21 @@ export function AppMenuBar() {
       disabled: actionsDisabled,
     },
     {
-      label: uploading ? "Uploading…" : "Upload tracks",
-      onClick: () => void uploadTracks(),
-      disabled: libraryActionsDisabled,
+      label: libraryUploading ? "Uploading to library…" : "Upload to library…",
+      onClick: () => void uploadToLibrary(),
+      disabled: libraryUploadDisabled,
+    },
+    {
+      label: collectionUploading
+        ? "Uploading to collection…"
+        : collectionUploadLabel,
+      onClick: () => void uploadToCollection(),
+      disabled: collectionUploadDisabled,
+    },
+    {
+      label: importingCollection ? "Importing…" : "Import collection…",
+      onClick: () => void importCollection(),
+      disabled: actionsDisabled,
     },
     { separator: true },
     {
@@ -61,8 +87,8 @@ export function AppMenuBar() {
     },
     { separator: true },
     {
-      label: resetting ? "Resetting…" : "Reset to initial state",
-      onClick: () => void requestResetLibrary(),
+      label: closingLibrary ? "Closing library…" : "Close library",
+      onClick: () => void requestCloseLibrary(),
       disabled: actionsDisabled,
     },
   ];
@@ -90,6 +116,11 @@ export function AppMenuBar() {
         ? "text-green-400"
         : "text-muted";
 
+  const statusLabel =
+    collectionId != null && collectionName != null
+      ? `Collection: ${collectionName}`
+      : libraryFolder ?? "No library folder chosen";
+
   return (
     <>
       <header className="flex shrink-0 items-center gap-4 border-b border-border bg-surface px-4 py-2">
@@ -105,15 +136,14 @@ export function AppMenuBar() {
           {statusMessage ? (
             <MenuBarStatus className={statusClassName}>{statusMessage}</MenuBarStatus>
           ) : (
-            <MenuBarStatus className="text-muted">
-              {libraryFolder ?? "No library folder chosen"}
-            </MenuBarStatus>
+            <MenuBarStatus className="text-muted">{statusLabel}</MenuBarStatus>
           )}
         </div>
       </header>
-      {uploadConfirmDialog}
+      {libraryUploadConfirmDialog}
+      {collectionUploadConfirmDialog}
       {loadConfigConfirmDialog}
-      {resetConfirmDialog}
+      {closeLibraryConfirmDialog}
       {shortcutsOpen ? (
         <KeyboardShortcutsModal onClose={() => setShortcutsOpen(false)} />
       ) : null}

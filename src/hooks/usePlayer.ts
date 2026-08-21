@@ -14,7 +14,7 @@ import { usePlayerStore } from "../store/playerStore";
 
 export function useLibrary() {
 
-  const { setTracks, setPlaylists, setTaglists, setScanning, setLibraryFolder } =
+  const { setTracks, setPlaylists, setTaglists, setCollections, setScanning, setLibraryFolder } =
 
     usePlayerStore();
 
@@ -22,13 +22,15 @@ export function useLibrary() {
 
   const refresh = useCallback(async () => {
 
-    const [tracks, playlists, taglists, libraryFolder] = await Promise.all([
+    const [tracks, playlists, taglists, collections, libraryFolder] = await Promise.all([
 
       api.listTracks(),
 
       api.listPlaylists(),
 
       api.listTaglists(),
+
+      api.listCollections(),
 
       api.getLibraryFolder(),
 
@@ -40,9 +42,11 @@ export function useLibrary() {
 
     setTaglists(taglists);
 
+    setCollections(collections);
+
     setLibraryFolder(libraryFolder);
 
-  }, [setTracks, setPlaylists, setTaglists, setLibraryFolder]);
+  }, [setTracks, setPlaylists, setTaglists, setCollections, setLibraryFolder]);
 
 
 

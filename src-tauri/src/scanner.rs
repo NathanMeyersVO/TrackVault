@@ -122,13 +122,15 @@ pub fn scan_library_folder(db: &Database) -> Result<ScanProgress, String> {
         total.added += progress.added;
     }
 
-    let existing = db.list_track_paths().map_err(|e| e.to_string())?;
+    let existing = db
+        .list_library_track_paths()
+        .map_err(|e| e.to_string())?;
     let missing: Vec<String> = existing
         .into_iter()
         .filter(|path| !seen.contains(path))
         .collect();
     total.removed = db
-        .delete_tracks_by_paths(&missing)
+        .delete_library_tracks_by_paths(&missing)
         .map_err(|e| e.to_string())?;
 
     Ok(total)

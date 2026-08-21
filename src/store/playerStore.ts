@@ -1,11 +1,12 @@
 import { create } from "zustand";
 
-import type { PlaybackState, Playlist, Taglist, Track } from "../lib/tauri";
+import type { Collection, PlaybackState, Playlist, Taglist, Track } from "../lib/tauri";
 
 export type View =
   | "library"
   | { playlistId: number }
-  | { taglistId: number; value: string | null };
+  | { taglistId: number; value: string | null }
+  | { collectionId: number };
 export type TransportMode = "idle" | "seek" | "load";
 
 export interface TaglistNav {
@@ -54,6 +55,7 @@ interface PlayerStore {
   tracks: Track[];
   playlists: Playlist[];
   taglists: Taglist[];
+  collections: Collection[];
   view: View;
   cursorTrackId: number | null;
   activeTrackIds: number[];
@@ -76,6 +78,7 @@ interface PlayerStore {
   setTracks: (tracks: Track[]) => void;
   setPlaylists: (playlists: Playlist[]) => void;
   setTaglists: (taglists: Taglist[]) => void;
+  setCollections: (collections: Collection[]) => void;
   setView: (view: View) => void;
   setCursorTrackId: (id: number | null) => void;
   setActiveTrackIds: (ids: number[]) => void;
@@ -120,6 +123,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   tracks: [],
   playlists: [],
   taglists: [],
+  collections: [],
   view: "library",
   cursorTrackId: null,
   activeTrackIds: [],
@@ -147,6 +151,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   setTracks: (tracks) => set({ tracks }),
   setPlaylists: (playlists) => set({ playlists }),
   setTaglists: (taglists) => set({ taglists }),
+  setCollections: (collections) => set({ collections }),
   setView: (view) => set({ view }),
   setCursorTrackId: (cursorTrackId) =>
     set((state) => ({

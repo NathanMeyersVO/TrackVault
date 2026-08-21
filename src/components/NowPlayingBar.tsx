@@ -22,6 +22,9 @@ export function NowPlayingBar() {
   const [peaks, setPeaks] = useState<number[]>([]);
   const [peakDurationMs, setPeakDurationMs] = useState(0);
   const [previewPositionMs, setPreviewPositionMs] = useState(0);
+  const [fetchedTrack, setFetchedTrack] = useState<Awaited<
+    ReturnType<typeof api.getTrack>
+  > | null>(null);
 
   const hasLoadedTrack = playback.track_id !== null;
   const isPlaying = playback.is_playing;
@@ -29,7 +32,33 @@ export function NowPlayingBar() {
     transportMode === "load" && cursorTrackId != null
       ? cursorTrackId
       : playback.track_id ?? cursorTrackId;
-  const displayTrack = tracks.find((t) => t.id === displayTrackId);
+  const libraryTrack = tracks.find((t) => t.id === displayTrackId);
+  const displayTrack =
+    libraryTrack ??
+    (fetchedTrack?.id === displayTrackId ? fetchedTrack : null);
+
+  useEffect(() => {
+    if (displayTrackId == null) {
+      setFetchedTrack(null);
+      return;
+    }
+    if (libraryTrack != null) {
+      setFetchedTrack(null);
+      return;
+    }
+
+    let cancelled = false;
+    api
+      .getTrack(displayTrackId)
+      .then((track) => {
+        if (!cancelled) setFetchedTrack(track);
+      })
+      .catch(console.error);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [displayTrackId, libraryTrack]);
 
   const durationMs =
     transportMode === "load" && displayTrack
@@ -129,7 +158,7 @@ export function NowPlayingBar() {
           <div className="truncate text-xs text-muted">
             {displayTrack
               ? `${displayTrack.artist || "Unknown artist"} — ${displayTrack.album || "Unknown album"}`
-              : "Choose a track from your library"}
+              : "Choose a track to play"}
           </div>
         </div>
         <TransportControls

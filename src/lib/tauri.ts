@@ -19,6 +19,13 @@ export interface Playlist {
   track_count: number;
 }
 
+export interface Collection {
+  id: number;
+  name: string;
+  created_at: number;
+  track_count: number;
+}
+
 export interface Taglist {
   id: number;
   name: string;
@@ -95,6 +102,7 @@ export interface ThemeSettings {
 
 export const api = {
   listTracks: () => invoke<Track[]>("list_tracks"),
+  getTrack: (trackId: number) => invoke<Track>("get_track", { trackId }),
   getLibraryFolder: () => invoke<string | null>("get_library_folder"),
   setLibraryFolder: (path: string) =>
     invoke<ScanProgress>("set_library_folder", { path }),
@@ -107,7 +115,42 @@ export const api = {
     invoke<PlaybackState>("delete_track", { trackId }),
   saveLibraryConfig: () => invoke<string>("save_library_config"),
   loadLibraryConfig: () => invoke<string>("load_library_config"),
-  resetLibrary: () => invoke<PlaybackState>("reset_library"),
+  resetLibrary: () => invoke<PlaybackState>("close_library"),
+  closeLibrary: () => invoke<PlaybackState>("close_library"),
+  createCollection: (name: string) =>
+    invoke<number>("create_collection", { name }),
+  deleteCollection: (id: number) => invoke<void>("delete_collection", { id }),
+  listCollections: () => invoke<Collection[]>("list_collections"),
+  getCollectionTracks: (collectionId: number) =>
+    invoke<Track[]>("get_collection_tracks", { collectionId }),
+  reorderCollectionTracks: (collectionId: number, trackIds: number[]) =>
+    invoke<void>("reorder_collection_tracks", { collectionId, trackIds }),
+  reorderCollections: (collectionIds: number[]) =>
+    invoke<void>("reorder_collections", { collectionIds }),
+  uploadCollectionTracks: (
+    collectionId: number,
+    sourcePaths: string[],
+    overwrite = false,
+  ) =>
+    invoke<UploadResult>("upload_collection_tracks", {
+      collectionId,
+      sourcePaths,
+      overwrite,
+    }),
+  checkCollectionUploadConflicts: (
+    collectionId: number,
+    sourcePaths: string[],
+  ) =>
+    invoke<string[]>("check_collection_upload_conflicts", {
+      collectionId,
+      sourcePaths,
+    }),
+  deleteCollectionTrack: (trackId: number) =>
+    invoke<PlaybackState>("delete_collection_track", { trackId }),
+  exportCollection: (collectionId: number, destination: string) =>
+    invoke<void>("export_collection", { collectionId, destination }),
+  importCollection: (source: string) =>
+    invoke<number>("import_collection", { source }),
   createPlaylist: (name: string) =>
     invoke<number>("create_playlist", { name }),
   deletePlaylist: (id: number) => invoke<void>("delete_playlist", { id }),

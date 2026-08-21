@@ -22,6 +22,14 @@ pub struct Playlist {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Collection {
+    pub id: i64,
+    pub name: String,
+    pub created_at: i64,
+    pub track_count: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Taglist {
     pub id: i64,
     pub name: String,

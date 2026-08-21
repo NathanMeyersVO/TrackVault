@@ -4,7 +4,7 @@ use std::path::Path;
 use rusqlite::{params, Connection};
 use thiserror::Error;
 
-use crate::models::{Playlist, Taglist, TaglistValue, Track};
+use crate::models::{Collection, Playlist, Taglist, TaglistValue, Track};
 
 #[derive(Debug, Error)]
 pub enum DbError {
@@ -133,7 +133,69 @@ impl Database {
             "ALTER TABLE tracks ADD COLUMN tags_indexed INTEGER NOT NULL DEFAULT 0",
             [],
         );
+        self.conn.execute_batch(
+            "
+            CREATE TABLE IF NOT EXISTS collections (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                created_at INTEGER NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS collection_tracks (
+                collection_id INTEGER NOT NULL,
+                track_id INTEGER NOT NULL,
+                position INTEGER NOT NULL,
+                PRIMARY KEY (collection_id, track_id),
+                FOREIGN KEY (collection_id) REFERENCES collections(id) ON DELETE CASCADE,
+                FOREIGN KEY (track_id) REFERENCES tracks(id) ON DELETE CASCADE
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_collection_tracks_position
+                ON collection_tracks(collection_id, position);
+
+            CREATE TABLE IF NOT EXISTS collection_order (
+                collection_id INTEGER PRIMARY KEY,
+                position INTEGER NOT NULL,
+                FOREIGN KEY (collection_id) REFERENCES collections(id) ON DELETE CASCADE
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_collection_order_position
+                ON collection_order(position);
+            ",
+        )?;
+        let _ = self.conn.execute(
+            "ALTER TABLE tracks ADD COLUMN collection_id INTEGER REFERENCES collections(id) ON DELETE CASCADE",
+            [],
+        );
+        self.bootstrap_collection_order()?;
         self.migrate_single_library_folder()?;
+        Ok(())
+    }
+
+    fn bootstrap_collection_order(&self) -> Result<(), DbError> {
+        let order_count: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM collection_order",
+            [],
+            |row| row.get(0),
+        )?;
+        if order_count > 0 {
+            return Ok(());
+        }
+
+        let mut stmt = self
+            .conn
+            .prepare("SELECT id FROM collections ORDER BY name COLLATE NOCASE")?;
+        let ids: Vec<i64> = stmt
+            .query_map([], |row| row.get(0))?
+            .filter_map(Result::ok)
+            .collect();
+
+        for (position, collection_id) in ids.iter().enumerate() {
+            self.conn.execute(
+                "INSERT INTO collection_order (collection_id, position) VALUES (?1, ?2)",
+                params![collection_id, position as i64],
+            )?;
+        }
         Ok(())
     }
 
@@ -198,6 +260,47 @@ impl Database {
         duration_ms: i64,
         track_number: Option<i32>,
     ) -> Result<(i64, bool), DbError> {
+        self.upsert_track_with_collection(
+            path, title, artist, album, duration_ms, track_number, None,
+        )
+    }
+
+    pub fn upsert_collection_track(
+        &self,
+        collection_id: i64,
+        path: &str,
+        title: &str,
+        artist: &str,
+        album: &str,
+        duration_ms: i64,
+        track_number: Option<i32>,
+    ) -> Result<(i64, bool), DbError> {
+        let (track_id, is_new) = self.upsert_track_with_collection(
+            path, title, artist, album, duration_ms, track_number, Some(collection_id),
+        )?;
+        let position: i64 = self.conn.query_row(
+            "SELECT COALESCE(MAX(position), -1) + 1 FROM collection_tracks WHERE collection_id = ?1",
+            params![collection_id],
+            |row| row.get(0),
+        )?;
+        self.conn.execute(
+            "INSERT OR IGNORE INTO collection_tracks (collection_id, track_id, position)
+             VALUES (?1, ?2, ?3)",
+            params![collection_id, track_id, position],
+        )?;
+        Ok((track_id, is_new))
+    }
+
+    fn upsert_track_with_collection(
+        &self,
+        path: &str,
+        title: &str,
+        artist: &str,
+        album: &str,
+        duration_ms: i64,
+        track_number: Option<i32>,
+        collection_id: Option<i64>,
+    ) -> Result<(i64, bool), DbError> {
         let exists: bool = self.conn.query_row(
             "SELECT 1 FROM tracks WHERE path = ?1",
             params![path],
@@ -206,14 +309,15 @@ impl Database {
 
         let now = chrono_now();
         self.conn.execute(
-            "INSERT INTO tracks (path, title, artist, album, duration_ms, track_number, added_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+            "INSERT INTO tracks (path, title, artist, album, duration_ms, track_number, added_at, collection_id)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
              ON CONFLICT(path) DO UPDATE SET
                title = excluded.title,
                artist = excluded.artist,
                album = excluded.album,
                duration_ms = excluded.duration_ms,
                track_number = excluded.track_number,
+               collection_id = excluded.collection_id,
                peaks_json = CASE
                  WHEN tracks.duration_ms != excluded.duration_ms THEN NULL
                  ELSE tracks.peaks_json
@@ -222,7 +326,9 @@ impl Database {
                  WHEN tracks.duration_ms != excluded.duration_ms THEN NULL
                  ELSE tracks.seek_index_json
                END",
-            params![path, title, artist, album, duration_ms, track_number, now],
+            params![
+                path, title, artist, album, duration_ms, track_number, now, collection_id
+            ],
         )?;
         let track_id: i64 = self.conn.query_row(
             "SELECT id FROM tracks WHERE path = ?1",
@@ -266,17 +372,27 @@ impl Database {
     }
 
     pub fn list_track_paths(&self) -> Result<Vec<String>, DbError> {
-        let mut stmt = self.conn.prepare("SELECT path FROM tracks")?;
+        let mut stmt = self.conn.prepare("SELECT path FROM tracks WHERE collection_id IS NULL")?;
         let rows = stmt.query_map([], |row| row.get(0))?;
         Ok(rows.filter_map(Result::ok).collect())
     }
 
+    pub fn list_library_track_paths(&self) -> Result<Vec<String>, DbError> {
+        self.list_track_paths()
+    }
+
     pub fn delete_tracks_by_paths(&self, paths: &[String]) -> Result<u32, DbError> {
+        self.delete_library_tracks_by_paths(paths)
+    }
+
+    pub fn delete_library_tracks_by_paths(&self, paths: &[String]) -> Result<u32, DbError> {
         if paths.is_empty() {
             return Ok(0);
         }
 
-        let mut stmt = self.conn.prepare("DELETE FROM tracks WHERE path = ?1")?;
+        let mut stmt = self
+            .conn
+            .prepare("DELETE FROM tracks WHERE path = ?1 AND collection_id IS NULL")?;
         let mut removed = 0u32;
         for path in paths {
             removed += stmt.execute(params![path])? as u32;
@@ -297,7 +413,9 @@ impl Database {
         let mut stmt = self.conn.prepare(
             "SELECT id, path, title, artist, album, duration_ms, track_number, added_at,
                     CASE WHEN peaks_json IS NOT NULL THEN 1 ELSE 0 END
-             FROM tracks ORDER BY artist COLLATE NOCASE, album COLLATE NOCASE, track_number, title",
+             FROM tracks
+             WHERE collection_id IS NULL
+             ORDER BY artist COLLATE NOCASE, album COLLATE NOCASE, track_number, title",
         )?;
         let rows = stmt.query_map([], map_track_row)?;
         Ok(rows.filter_map(Result::ok).collect())
@@ -325,6 +443,34 @@ impl Database {
         } else {
             Ok(None)
         }
+    }
+
+    pub fn get_track_collection_id(&self, track_id: i64) -> Result<Option<i64>, DbError> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT collection_id FROM tracks WHERE id = ?1")?;
+        let mut rows = stmt.query(params![track_id])?;
+        if let Some(row) = rows.next()? {
+            Ok(row.get(0)?)
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub fn get_track_collection_id_by_path(&self, path: &str) -> Result<Option<i64>, DbError> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT collection_id FROM tracks WHERE path = ?1")?;
+        let mut rows = stmt.query(params![path])?;
+        if let Some(row) = rows.next()? {
+            Ok(row.get(0)?)
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub fn is_library_track(&self, track_id: i64) -> Result<bool, DbError> {
+        Ok(self.get_track_collection_id(track_id)?.is_none())
     }
 
     pub fn get_track_path(&self, id: i64) -> Result<Option<String>, DbError> {
@@ -402,7 +548,7 @@ impl Database {
         Ok(())
     }
 
-    pub fn reset_library_state(&self) -> Result<(), DbError> {
+    pub fn close_library_state(&self) -> Result<(), DbError> {
         let tx = self.conn.unchecked_transaction()?;
         tx.execute("DELETE FROM playlist_tracks", [])?;
         tx.execute("DELETE FROM playlists", [])?;
@@ -410,9 +556,201 @@ impl Database {
         tx.execute("DELETE FROM taglist_value_titles", [])?;
         tx.execute("DELETE FROM taglist_value_order", [])?;
         tx.execute("DELETE FROM taglists", [])?;
-        tx.execute("DELETE FROM track_tags", [])?;
-        tx.execute("DELETE FROM tracks", [])?;
+        tx.execute("DELETE FROM track_tags WHERE track_id IN (SELECT id FROM tracks WHERE collection_id IS NULL)", [])?;
+        tx.execute("DELETE FROM tracks WHERE collection_id IS NULL", [])?;
         tx.execute("DELETE FROM watch_folders", [])?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    pub fn create_collection(&self, name: &str) -> Result<i64, DbError> {
+        let now = chrono_now();
+        let tx = self.conn.unchecked_transaction()?;
+        tx.execute(
+            "INSERT INTO collections (name, created_at) VALUES (?1, ?2)",
+            params![name, now],
+        )?;
+        let collection_id = tx.last_insert_rowid();
+        let position: i64 = tx.query_row(
+            "SELECT COALESCE(MAX(position), -1) + 1 FROM collection_order",
+            [],
+            |row| row.get(0),
+        )?;
+        tx.execute(
+            "INSERT INTO collection_order (collection_id, position) VALUES (?1, ?2)",
+            params![collection_id, position],
+        )?;
+        tx.commit()?;
+        Ok(collection_id)
+    }
+
+    pub fn delete_collection(&self, id: i64) -> Result<(), DbError> {
+        self.conn
+            .execute("DELETE FROM collections WHERE id = ?1", params![id])?;
+        Ok(())
+    }
+
+    pub fn list_collection_order_ids(&self) -> Result<Vec<i64>, DbError> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT collection_id FROM collection_order ORDER BY position")?;
+        let rows = stmt.query_map([], |row| row.get(0))?;
+        Ok(rows.filter_map(Result::ok).collect())
+    }
+
+    fn default_collection_order_ids(&self) -> Result<Vec<i64>, DbError> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT id FROM collections ORDER BY name COLLATE NOCASE")?;
+        let rows = stmt.query_map([], |row| row.get(0))?;
+        Ok(rows.filter_map(Result::ok).collect())
+    }
+
+    pub fn reorder_collections(&self, collection_ids: &[i64]) -> Result<(), DbError> {
+        let all = self.default_collection_order_ids()?;
+        let all_set: std::collections::HashSet<i64> = all.iter().copied().collect();
+
+        let mut ordered: Vec<i64> = collection_ids
+            .iter()
+            .copied()
+            .filter(|id| all_set.contains(id))
+            .collect();
+        for id in all {
+            if !ordered.contains(&id) {
+                ordered.push(id);
+            }
+        }
+
+        let tx = self.conn.unchecked_transaction()?;
+        tx.execute("DELETE FROM collection_order", [])?;
+        for (position, collection_id) in ordered.iter().enumerate() {
+            tx.execute(
+                "INSERT INTO collection_order (collection_id, position) VALUES (?1, ?2)",
+                params![collection_id, position as i64],
+            )?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    pub fn list_collections(&self) -> Result<Vec<Collection>, DbError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT c.id, c.name, c.created_at,
+                    (SELECT COUNT(*) FROM collection_tracks ct WHERE ct.collection_id = c.id)
+             FROM collections c",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok(Collection {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                created_at: row.get(2)?,
+                track_count: row.get(3)?,
+            })
+        })?;
+        let mut by_id: HashMap<i64, Collection> = HashMap::new();
+        for row in rows.filter_map(Result::ok) {
+            by_id.insert(row.id, row);
+        }
+
+        let stored_order = self.list_collection_order_ids()?;
+        let default_order = self.default_collection_order_ids()?;
+        let ordered_ids = merge_collection_order(&stored_order, &default_order);
+
+        Ok(ordered_ids
+            .into_iter()
+            .filter_map(|id| by_id.remove(&id))
+            .collect())
+    }
+
+    pub fn get_collection(&self, id: i64) -> Result<Option<Collection>, DbError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT c.id, c.name, c.created_at,
+                    (SELECT COUNT(*) FROM collection_tracks ct WHERE ct.collection_id = c.id)
+             FROM collections c WHERE c.id = ?1",
+        )?;
+        let mut rows = stmt.query(params![id])?;
+        if let Some(row) = rows.next()? {
+            Ok(Some(Collection {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                created_at: row.get(2)?,
+                track_count: row.get(3)?,
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub fn collection_name_exists(&self, name: &str) -> Result<bool, DbError> {
+        let count: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM collections WHERE name = ?1 COLLATE NOCASE",
+            params![name],
+            |row| row.get(0),
+        )?;
+        Ok(count > 0)
+    }
+
+    pub fn unique_collection_name(&self, base: &str) -> Result<String, DbError> {
+        if !self.collection_name_exists(base)? {
+            return Ok(base.to_string());
+        }
+        for index in 2..10_000 {
+            let candidate = format!("{base} ({index})");
+            if !self.collection_name_exists(&candidate)? {
+                return Ok(candidate);
+            }
+        }
+        Ok(format!("{base} ({})", chrono_now()))
+    }
+
+    pub fn list_collection_tracks(&self, collection_id: i64) -> Result<Vec<Track>, DbError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT t.id, t.path, t.title, t.artist, t.album, t.duration_ms, t.track_number,
+                    t.added_at, CASE WHEN t.peaks_json IS NOT NULL THEN 1 ELSE 0 END
+             FROM tracks t
+             JOIN collection_tracks ct ON ct.track_id = t.id
+             WHERE ct.collection_id = ?1
+             ORDER BY ct.position",
+        )?;
+        let rows = stmt.query_map(params![collection_id], map_track_row)?;
+        Ok(rows.filter_map(Result::ok).collect())
+    }
+
+    pub fn reorder_collection_tracks(
+        &self,
+        collection_id: i64,
+        track_ids: &[i64],
+    ) -> Result<(), DbError> {
+        let tx = self.conn.unchecked_transaction()?;
+
+        let mut existing: Vec<i64> = {
+            let mut stmt = tx.prepare(
+                "SELECT track_id FROM collection_tracks
+                 WHERE collection_id = ?1 ORDER BY position",
+            )?;
+            let rows = stmt.query_map(params![collection_id], |row| row.get(0))?;
+            rows.filter_map(Result::ok).collect()
+        };
+
+        let mut ordered: Vec<i64> = track_ids
+            .iter()
+            .copied()
+            .filter(|id| existing.contains(id))
+            .collect();
+        for id in existing.drain(..) {
+            if !ordered.contains(&id) {
+                ordered.push(id);
+            }
+        }
+
+        for (position, track_id) in ordered.iter().enumerate() {
+            tx.execute(
+                "UPDATE collection_tracks SET position = ?1
+                 WHERE collection_id = ?2 AND track_id = ?3",
+                params![position as i64, collection_id, track_id],
+            )?;
+        }
+
         tx.commit()?;
         Ok(())
     }
@@ -1020,6 +1358,23 @@ impl Database {
     }
 }
 
+fn merge_collection_order(stored: &[i64], all_ids: &[i64]) -> Vec<i64> {
+    let all_set: std::collections::HashSet<i64> = all_ids.iter().copied().collect();
+    let mut result: Vec<i64> = stored
+        .iter()
+        .copied()
+        .filter(|id| all_set.contains(id))
+        .collect();
+
+    for id in all_ids {
+        if !result.contains(id) {
+            result.push(*id);
+        }
+    }
+
+    result
+}
+
 fn merge_taglist_value_order(stored: &[String], all_values: &[String]) -> Vec<String> {
     let all_set: std::collections::HashSet<&str> =
         all_values.iter().map(String::as_str).collect();
@@ -1119,6 +1474,26 @@ mod tests {
         assert_eq!(values[1].value.as_deref(), Some("Mozart"));
         assert_eq!(values[2].value, None);
         assert_eq!(values[2].track_count, 1);
+    }
+
+    #[test]
+    fn reorder_collections_updates_sidebar_order() {
+        let db = test_db();
+        let alpha = db.create_collection("Alpha").unwrap();
+        let beta = db.create_collection("Beta").unwrap();
+        let gamma = db.create_collection("Gamma").unwrap();
+
+        assert_eq!(
+            db.list_collections().unwrap().into_iter().map(|c| c.id).collect::<Vec<_>>(),
+            vec![alpha, beta, gamma]
+        );
+
+        db.reorder_collections(&[gamma, alpha, beta]).unwrap();
+
+        assert_eq!(
+            db.list_collections().unwrap().into_iter().map(|c| c.name).collect::<Vec<_>>(),
+            vec!["Gamma", "Alpha", "Beta"]
+        );
     }
 
     #[test]

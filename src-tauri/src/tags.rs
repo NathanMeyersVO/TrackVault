@@ -256,7 +256,7 @@ fn check_file_writable(path: &Path) -> Result<(), String> {
 }
 
 fn ensure_writable_watch_path(db: &Database, path: &Path) -> Result<(), String> {
-    crate::library_path::ensure_under_library_folder(db, path)
+    crate::library_path::ensure_writable_track_path(db, path)
 }
 
 fn item_key_label(key: &ItemKey) -> String {

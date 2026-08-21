@@ -3,13 +3,16 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { listen } from "@tauri-apps/api/event";
 
 import { ConfirmDialog } from "./ConfirmDialog";
-import { api, COMMON_TAG_KEYS, type Playlist, type Taglist, type TaglistValue } from "../lib/tauri";
+import { api, COMMON_TAG_KEYS, type Collection, type Playlist, type Taglist, type TaglistValue } from "../lib/tauri";
 import { formatTaglistLabel } from "../lib/taglistLabels";
 import {
+  getCollectionReorderDragData,
   getSublistReorderDragData,
   getTrackDragData,
+  isCollectionReorderDrag,
   isSublistReorderDrag,
   reorderItemsByIndex,
+  setCollectionReorderDragData,
   setSublistReorderDragData,
 } from "../lib/dragDrop";
 import { useLibrary } from "../hooks/usePlayer";
@@ -432,14 +435,18 @@ export function Sidebar({ width }: { width: number }) {
   const {
     playlists,
     taglists,
+    collections,
     view,
     setView,
+    setCollections,
     draggingTrackId,
     setDraggingTrackId,
   } = usePlayerStore();
   const { refresh } = useLibrary();
   const [newPlaylistName, setNewPlaylistName] = useState("");
+  const [newCollectionName, setNewCollectionName] = useState("");
   const [creating, setCreating] = useState(false);
+  const [creatingCollection, setCreatingCollection] = useState(false);
   const [creatingTaglist, setCreatingTaglist] = useState(false);
   const [newTaglistName, setNewTaglistName] = useState("");
   const [newTaglistKey, setNewTaglistKey] = useState<string>(COMMON_TAG_KEYS[0]);
@@ -447,8 +454,63 @@ export function Sidebar({ width }: { width: number }) {
   const [dragOverTaglistTarget, setDragOverTaglistTarget] =
     useState<TaglistDropTarget | null>(null);
   const [pendingDeletePlaylist, setPendingDeletePlaylist] = useState<Playlist | null>(null);
+  const [pendingDeleteCollection, setPendingDeleteCollection] =
+    useState<Collection | null>(null);
   const [deletingPlaylist, setDeletingPlaylist] = useState(false);
+  const [deletingCollection, setDeletingCollection] = useState(false);
+  const [collectionDragIndex, setCollectionDragIndex] = useState<number | null>(null);
+  const [collectionDropTarget, setCollectionDropTarget] = useState<{
+    index: number;
+    position: "before" | "after";
+  } | null>(null);
   const { requestTagDrop, confirmDialog: tagDropConfirmDialog } = useTagDropConfirm();
+
+  const clearCollectionReorderState = useCallback(() => {
+    setCollectionDragIndex(null);
+    setCollectionDropTarget(null);
+  }, []);
+
+  const handleCollectionReorder = async (orderedCollections: Collection[]) => {
+    setCollections(orderedCollections);
+    try {
+      await api.reorderCollections(orderedCollections.map((collection) => collection.id));
+    } catch (error) {
+      console.error(error);
+      await refresh();
+    }
+  };
+
+  const handleCollectionDrop = (targetIndex: number, event: DragEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (
+      collectionDragIndex == null &&
+      !isCollectionReorderDrag(event.dataTransfer)
+    ) {
+      clearCollectionReorderState();
+      return;
+    }
+
+    const fromIndex =
+      collectionDragIndex ?? getCollectionReorderDragData(event.dataTransfer);
+    if (fromIndex == null || fromIndex === targetIndex) {
+      clearCollectionReorderState();
+      return;
+    }
+
+    const row = event.currentTarget.getBoundingClientRect();
+    const position: "before" | "after" =
+      event.clientY < row.top + row.height / 2 ? "before" : "after";
+    const reordered = reorderItemsByIndex(
+      collections,
+      fromIndex,
+      targetIndex,
+      position,
+    );
+    void handleCollectionReorder(reordered);
+    clearCollectionReorderState();
+  };
 
   const isTrackDragging = draggingTrackId != null;
 
@@ -505,6 +567,48 @@ export function Sidebar({ width }: { width: number }) {
     await refresh();
   };
 
+  const createCollection = async () => {
+    const name = newCollectionName.trim();
+    if (!name) return;
+    const collectionId = await api.createCollection(name);
+    setNewCollectionName("");
+    setCreatingCollection(false);
+    await refresh();
+    setView({ collectionId });
+  };
+
+  const requestDeleteCollection = (event: MouseEvent, collection: Collection) => {
+    event.stopPropagation();
+    setPendingDeleteCollection(collection);
+  };
+
+  const cancelDeleteCollection = () => {
+    if (deletingCollection) return;
+    setPendingDeleteCollection(null);
+  };
+
+  const confirmDeleteCollection = async () => {
+    if (!pendingDeleteCollection) return;
+
+    setDeletingCollection(true);
+    try {
+      await api.deleteCollection(pendingDeleteCollection.id);
+      if (
+        typeof view === "object" &&
+        "collectionId" in view &&
+        view.collectionId === pendingDeleteCollection.id
+      ) {
+        setView("library");
+      }
+      await refresh();
+      setPendingDeleteCollection(null);
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setDeletingCollection(false);
+    }
+  };
+
   const createTaglist = async () => {
     const name = newTaglistName.trim();
     if (!name) return;
@@ -523,7 +627,7 @@ export function Sidebar({ width }: { width: number }) {
     >
       <div className="border-b border-border px-4 py-3">
         <h2 className="text-sm font-semibold tracking-tight text-foreground">Browse</h2>
-        <p className="text-xs text-muted">Library, playlists & taglists</p>
+        <p className="text-xs text-muted">Library, collections, playlists & taglists</p>
       </div>
 
       <nav className="flex-1 overflow-y-auto p-2">
@@ -537,6 +641,142 @@ export function Sidebar({ width }: { width: number }) {
         >
           Library
         </button>
+
+        <div className="mb-2 mt-4 px-3 text-xs font-medium uppercase tracking-wide text-muted">
+          Collections
+        </div>
+
+        {collections.map((collection, index) => {
+          const active =
+            typeof view === "object" &&
+            "collectionId" in view &&
+            view.collectionId === collection.id;
+          const isDragging = collectionDragIndex === index;
+          const dropIndicator =
+            collectionDropTarget?.index === index
+              ? collectionDropTarget.position
+              : null;
+          const dropBarClass =
+            dropIndicator === "before"
+              ? "border-t-2 border-t-drop"
+              : dropIndicator === "after"
+                ? "border-b-2 border-b-drop"
+                : "";
+
+          return (
+            <div
+              key={collection.id}
+              role="button"
+              tabIndex={0}
+              onClick={() => setView({ collectionId: collection.id })}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  setView({ collectionId: collection.id });
+                }
+              }}
+              onDragOver={(event) => {
+                if (
+                  collectionDragIndex == null &&
+                  !isCollectionReorderDrag(event.dataTransfer)
+                ) {
+                  return;
+                }
+                event.preventDefault();
+                event.stopPropagation();
+                event.dataTransfer.dropEffect = "move";
+                const row = event.currentTarget.getBoundingClientRect();
+                const position: "before" | "after" =
+                  event.clientY < row.top + row.height / 2 ? "before" : "after";
+                setCollectionDropTarget({ index, position });
+              }}
+              onDragLeave={(event) => {
+                if (
+                  collectionDragIndex == null &&
+                  !isCollectionReorderDrag(event.dataTransfer)
+                ) {
+                  return;
+                }
+                setCollectionDropTarget((current) =>
+                  current?.index === index ? null : current,
+                );
+              }}
+              onDrop={(event) => handleCollectionDrop(index, event)}
+              className={`group/collection mb-1 flex w-full items-center rounded-md py-2 pr-3 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-muted pl-2 ${dropBarClass} ${
+                isDragging ? "opacity-40" : ""
+              } ${
+                active
+                  ? "border border-transparent bg-surface-hover text-foreground"
+                  : "border border-transparent text-foreground hover:bg-surface-hover/60"
+              }`}
+            >
+              <button
+                type="button"
+                draggable
+                aria-label={`Reorder ${collection.name}`}
+                className="mr-1 flex shrink-0 cursor-grab items-center justify-center rounded p-0.5 text-muted hover:bg-surface-hover hover:text-foreground active:cursor-grabbing"
+                onClick={(event) => event.stopPropagation()}
+                onDragStart={(event) => {
+                  event.stopPropagation();
+                  setCollectionReorderDragData(event.dataTransfer, index);
+                  setCollectionDragIndex(index);
+                }}
+                onDragEnd={() => clearCollectionReorderState()}
+              >
+                <SublistGripIcon />
+              </button>
+              <span className="min-w-0 flex-1 truncate">
+                {collection.name}
+                <span className="ml-1 text-muted">({collection.track_count})</span>
+              </span>
+              <button
+                type="button"
+                onClick={(event) => requestDeleteCollection(event, collection)}
+                className="ml-1 hidden shrink-0 rounded px-1 text-xs text-muted hover:text-red-400 group-hover/collection:inline"
+                title="Delete collection"
+              >
+                ×
+              </button>
+            </div>
+          );
+        })}
+
+        {creatingCollection ? (
+          <div className="mt-2 space-y-2 px-2">
+            <input
+              autoFocus
+              value={newCollectionName}
+              onChange={(e) => setNewCollectionName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void createCollection();
+                if (e.key === "Escape") setCreatingCollection(false);
+              }}
+              placeholder="Collection name"
+              className="w-full rounded-md border border-border bg-background px-2 py-1 text-sm"
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={() => void createCollection()}
+                className="rounded-md bg-accent px-2 py-1 text-xs text-foreground hover:bg-accent-hover"
+              >
+                Create
+              </button>
+              <button
+                onClick={() => setCreatingCollection(false)}
+                className="rounded-md px-2 py-1 text-xs text-muted hover:text-foreground"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            onClick={() => setCreatingCollection(true)}
+            className="mt-1 w-full rounded-md px-3 py-2 text-left text-sm text-muted hover:bg-surface-hover/60 hover:text-foreground"
+          >
+            + New collection
+          </button>
+        )}
 
         <div className="mb-2 mt-4 px-3 text-xs font-medium uppercase tracking-wide text-muted">
           {isTrackDragging ? "Drop on a playlist or taglist" : "Playlists"}
@@ -730,6 +970,18 @@ export function Sidebar({ width }: { width: number }) {
           busy={deletingPlaylist}
           onConfirm={() => void confirmDeletePlaylist()}
           onCancel={cancelDeletePlaylist}
+        />
+      ) : null}
+      {pendingDeleteCollection ? (
+        <ConfirmDialog
+          title="Delete collection"
+          message={`Delete "${pendingDeleteCollection.name}" and all tracks stored in app data? This cannot be undone.`}
+          confirmLabel="Delete"
+          cancelLabel="Cancel"
+          destructive
+          busy={deletingCollection}
+          onConfirm={() => void confirmDeleteCollection()}
+          onCancel={cancelDeleteCollection}
         />
       ) : null}
       {tagDropConfirmDialog}

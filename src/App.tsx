@@ -5,6 +5,7 @@ import { SidebarResizeHandle } from "./components/SidebarResizeHandle";
 import { LibraryView } from "./components/LibraryView";
 import { PlaylistView } from "./components/PlaylistView";
 import { TaglistView } from "./components/TaglistView";
+import { CollectionView } from "./components/CollectionView";
 import { NowPlayingBar } from "./components/NowPlayingBar";
 import { useLibrary, usePlayer } from "./hooks/usePlayer";
 import { initPlayerController } from "./playerController";
@@ -22,6 +23,10 @@ function isTaglistView(
   return typeof view === "object" && "taglistId" in view;
 }
 
+function isCollectionView(view: View): view is { collectionId: number } {
+  return typeof view === "object" && "collectionId" in view;
+}
+
 function MainContent() {
   const { view, tracks } = usePlayerStore();
   useLibrary();
@@ -31,6 +36,8 @@ function MainContent() {
       <div className="min-h-0 flex-1">
         {view === "library" ? (
           <LibraryView />
+        ) : isCollectionView(view) ? (
+          <CollectionView collectionId={view.collectionId} />
         ) : isTaglistView(view) ? (
           <TaglistView taglistId={view.taglistId} value={view.value} />
         ) : isPlaylistView(view) ? (

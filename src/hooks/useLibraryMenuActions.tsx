@@ -2,16 +2,29 @@ import { useCallback, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 
 import { ConfirmDialog } from "../components/ConfirmDialog";
+import { importCollectionFromDialog } from "../components/CollectionView";
 import { api } from "../lib/tauri";
 import { clearTrackTagsCache } from "../lib/trackTagsCache";
 import { useLibrary } from "./usePlayer";
 import { useUploadTracks } from "./useUploadTracks";
+import { useCollectionUpload } from "./useCollectionUpload";
 import { usePlayerStore } from "../store/playerStore";
+
+function activeCollectionId(
+  view: ReturnType<typeof usePlayerStore.getState>["view"],
+): number | null {
+  if (typeof view === "object" && "collectionId" in view) {
+    return view.collectionId;
+  }
+  return null;
+}
 
 export function useLibraryMenuActions() {
   const {
     libraryFolder,
     scanning,
+    view,
+    collections,
     setScanning,
     setView,
     setCursorTrackId,
@@ -19,22 +32,45 @@ export function useLibraryMenuActions() {
     setPlayback,
     clearPendingPausedLoad,
   } = usePlayerStore();
+  const collectionId = activeCollectionId(view);
+  const collectionName =
+    collectionId != null
+      ? collections.find((collection) => collection.id === collectionId)?.name
+      : null;
   const { refresh, scanLibrary } = useLibrary();
+  const libraryUpload = useUploadTracks();
+  const collectionUpload = useCollectionUpload(collectionId);
   const {
-    uploadTracks,
-    uploading,
-    uploadMessage,
-    uploadError,
-    uploadConfirmDialog,
-    clearUploadFeedback,
-  } = useUploadTracks();
+    uploadTracks: uploadToLibrary,
+    uploading: libraryUploading,
+    uploadMessage: libraryUploadMessage,
+    uploadError: libraryUploadError,
+    uploadConfirmDialog: libraryUploadConfirmDialog,
+    clearUploadFeedback: clearLibraryUploadFeedback,
+  } = libraryUpload;
+  const {
+    uploadTracks: uploadToCollection,
+    uploading: collectionUploading,
+    uploadMessage: collectionUploadMessage,
+    uploadError: collectionUploadError,
+    uploadConfirmDialog: collectionUploadConfirmDialog,
+    clearUploadFeedback: clearCollectionUploadFeedback,
+  } = collectionUpload;
+  const uploading = libraryUploading || collectionUploading;
+  const uploadMessage = libraryUploadMessage ?? collectionUploadMessage;
+  const uploadError = libraryUploadError ?? collectionUploadError;
+  const clearUploadFeedback = useCallback(() => {
+    clearLibraryUploadFeedback();
+    clearCollectionUploadFeedback();
+  }, [clearCollectionUploadFeedback, clearLibraryUploadFeedback]);
   const [configMessage, setConfigMessage] = useState<string | null>(null);
   const [configError, setConfigError] = useState<string | null>(null);
   const [savingConfig, setSavingConfig] = useState(false);
   const [loadingConfig, setLoadingConfig] = useState(false);
   const [loadConfigConfirmOpen, setLoadConfigConfirmOpen] = useState(false);
-  const [resetting, setResetting] = useState(false);
-  const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
+  const [closingLibrary, setClosingLibrary] = useState(false);
+  const [closeLibraryConfirmOpen, setCloseLibraryConfirmOpen] = useState(false);
+  const [importingCollection, setImportingCollection] = useState(false);
 
   const chooseLibraryFolder = useCallback(async () => {
     const selected = await open({
@@ -67,8 +103,10 @@ export function useLibraryMenuActions() {
     try {
       const savedPath = await api.saveLibraryConfig();
       setConfigMessage(`Saved to ${savedPath}`);
+      return true;
     } catch (err) {
       setConfigError(String(err));
+      return false;
     } finally {
       setSavingConfig(false);
     }
@@ -101,35 +139,28 @@ export function useLibraryMenuActions() {
     }
   }, [clearUploadFeedback, refresh]);
 
-  const requestResetLibrary = useCallback(() => {
-    setResetConfirmOpen(true);
-  }, []);
-
-  const cancelResetLibrary = useCallback(() => {
-    if (resetting) return;
-    setResetConfirmOpen(false);
-  }, [resetting]);
-
-  const confirmResetLibrary = useCallback(async () => {
-    setResetting(true);
+  const closeLibrary = useCallback(async () => {
+    setClosingLibrary(true);
     setConfigMessage(null);
     setConfigError(null);
     clearUploadFeedback();
     try {
-      const playback = await api.resetLibrary();
+      const playback = await api.closeLibrary();
       setPlayback(playback);
-      setView("library");
-      setCursorTrackId(null);
-      setActiveTrackIds([]);
+      if (view === "library") {
+        setCursorTrackId(null);
+        setActiveTrackIds([]);
+      }
       clearPendingPausedLoad();
       clearTrackTagsCache();
       await refresh();
-      setConfigMessage("Reset to initial state");
-      setResetConfirmOpen(false);
+      setCloseLibraryConfirmOpen(false);
+      return true;
     } catch (err) {
       setConfigError(String(err));
+      return false;
     } finally {
-      setResetting(false);
+      setClosingLibrary(false);
     }
   }, [
     clearPendingPausedLoad,
@@ -138,8 +169,51 @@ export function useLibraryMenuActions() {
     setActiveTrackIds,
     setCursorTrackId,
     setPlayback,
-    setView,
+    view,
   ]);
+
+  const requestCloseLibrary = useCallback(() => {
+    setCloseLibraryConfirmOpen(true);
+  }, []);
+
+  const cancelCloseLibrary = useCallback(() => {
+    if (closingLibrary || savingConfig) return;
+    setCloseLibraryConfirmOpen(false);
+  }, [closingLibrary, savingConfig]);
+
+  const confirmCloseLibrary = useCallback(async () => {
+    const closed = await closeLibrary();
+    if (closed) {
+      setConfigMessage("Library closed");
+    }
+  }, [closeLibrary]);
+
+  const confirmSaveAndCloseLibrary = useCallback(async () => {
+    const saved = await saveConfiguration();
+    if (!saved) return;
+    const closed = await closeLibrary();
+    if (closed) {
+      setConfigMessage("Saved and library closed");
+    }
+  }, [closeLibrary, saveConfiguration]);
+
+  const importCollection = useCallback(async () => {
+    setImportingCollection(true);
+    setConfigMessage(null);
+    setConfigError(null);
+    clearUploadFeedback();
+    try {
+      const collectionId = await importCollectionFromDialog();
+      if (collectionId == null) return;
+      await refresh();
+      setView({ collectionId });
+      setConfigMessage("Collection imported");
+    } catch (err) {
+      setConfigError(String(err));
+    } finally {
+      setImportingCollection(false);
+    }
+  }, [clearUploadFeedback, refresh, setView]);
 
   const loadConfigConfirmDialog = loadConfigConfirmOpen ? (
     <ConfirmDialog
@@ -154,45 +228,65 @@ export function useLibraryMenuActions() {
     />
   ) : null;
 
-  const resetConfirmDialog = resetConfirmOpen ? (
+  const closeLibraryConfirmDialog = closeLibraryConfirmOpen ? (
     <ConfirmDialog
-      title="Reset to initial state"
-      message="Clear the library folder, all indexed tracks, playlists, and taglists from the app? Audio files and trackvault.json on disk are not deleted."
-      confirmLabel="Reset"
+      title="Close library?"
+      message={
+        "Remove the current library folder and clear all indexed tracks, playlists, and taglists from the app? Audio files on disk are not deleted. Collections are kept.\n\nSave configuration first if you want playlists and taglists written to trackvault.json."
+      }
+      confirmLabel="Close library"
+      secondaryLabel="Save & close library"
       cancelLabel="Cancel"
       destructive
-      busy={resetting}
-      onConfirm={() => void confirmResetLibrary()}
-      onCancel={cancelResetLibrary}
+      busy={closingLibrary || savingConfig}
+      onConfirm={() => void confirmCloseLibrary()}
+      onSecondary={() => void confirmSaveAndCloseLibrary()}
+      onCancel={cancelCloseLibrary}
     />
   ) : null;
 
   const fileOperationBusy =
-    scanning || uploading || savingConfig || loadingConfig || resetting;
+    scanning ||
+    uploading ||
+    savingConfig ||
+    loadingConfig ||
+    closingLibrary ||
+    importingCollection;
   const actionsDisabled = fileOperationBusy;
   const libraryActionsDisabled = fileOperationBusy || !libraryFolder;
+  const libraryUploadDisabled = fileOperationBusy || !libraryFolder;
+  const collectionUploadDisabled = fileOperationBusy || collectionId == null;
 
   return {
     libraryFolder,
+    collectionId,
+    collectionName,
     scanning,
-    uploading,
+    libraryUploading,
+    collectionUploading,
     savingConfig,
     loadingConfig,
-    resetting,
+    closingLibrary,
+    importingCollection,
     uploadMessage,
     uploadError,
     configMessage,
     configError,
-    uploadConfirmDialog,
+    libraryUploadConfirmDialog,
+    collectionUploadConfirmDialog,
     loadConfigConfirmDialog,
-    resetConfirmDialog,
+    closeLibraryConfirmDialog,
     chooseLibraryFolder,
-    uploadTracks,
+    uploadToLibrary,
+    uploadToCollection,
     scanLibrary,
     saveConfiguration,
     requestLoadConfiguration,
-    requestResetLibrary,
+    requestCloseLibrary,
+    importCollection,
     actionsDisabled,
     libraryActionsDisabled,
+    libraryUploadDisabled,
+    collectionUploadDisabled,
   };
 }

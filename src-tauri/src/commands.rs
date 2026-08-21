@@ -6,7 +6,7 @@ use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::audio_scan::scan_audio;
 use crate::db::Database;
-use crate::models::{PlaybackState, Playlist, ScanProgress, Taglist, TaglistValue, Track, UploadResult, WaveformPeaks};
+use crate::models::{Collection, PlaybackState, Playlist, ScanProgress, Taglist, TaglistValue, Track, UploadResult, WaveformPeaks};
 use crate::player::AudioPlayer;
 use crate::scanner;
 use crate::seek_index::{parse_seek_index, serialize_seek_index, SeekKeyframe};
@@ -14,6 +14,7 @@ use crate::seek_index::{parse_seek_index, serialize_seek_index, SeekKeyframe};
 pub struct AppState {
     pub db: Mutex<Database>,
     pub player: Arc<AudioPlayer>,
+    pub app_data_dir: PathBuf,
 }
 
 fn load_or_build_seek_index(
@@ -34,6 +35,16 @@ fn load_or_build_seek_index(
     db.set_seek_index(track_id, &json)
         .map_err(|e| e.to_string())?;
     Ok(scan.seek_index)
+}
+
+#[tauri::command]
+pub fn get_track(state: State<'_, AppState>, track_id: i64) -> Result<Track, String> {
+    state
+        .db
+        .lock()
+        .get_track(track_id)
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "Track not found".to_string())
 }
 
 #[tauri::command]
@@ -138,14 +149,17 @@ pub fn load_library_config(app: AppHandle, state: State<'_, AppState>) -> Result
 }
 
 #[tauri::command]
-pub fn reset_library(app: AppHandle, state: State<'_, AppState>) -> Result<PlaybackState, String> {
+pub fn close_library(app: AppHandle, state: State<'_, AppState>) -> Result<PlaybackState, String> {
     state.player.stop();
     {
         let db = state.db.lock();
-        db.reset_library_state().map_err(|e| e.to_string())?;
+        db.close_library_state().map_err(|e| e.to_string())?;
     }
     let mut playback = state.player.state();
+    playback.track_id = None;
     playback.position_ms = 0;
+    playback.duration_ms = 0;
+    playback.is_playing = false;
     let _ = app.emit("library-updated", ());
     Ok(playback)
 }
@@ -199,6 +213,9 @@ pub fn delete_track(
             .get_track_path(track_id)
             .map_err(|e| e.to_string())?
             .ok_or("Track not found")?;
+        if !db.is_library_track(track_id).map_err(|e| e.to_string())? {
+            return Err("Use delete collection track for collection tracks".to_string());
+        }
         crate::library_path::ensure_under_library_folder(&db, Path::new(&path))?;
         if state.player.state().track_id == Some(track_id) {
             state.player.stop();
@@ -266,10 +283,11 @@ pub fn add_track_to_playlist(
     playlist_id: i64,
     track_id: i64,
 ) -> Result<(), String> {
-    state
-        .db
-        .lock()
-        .add_track_to_playlist(playlist_id, track_id)
+    let db = state.db.lock();
+    if !db.is_library_track(track_id).map_err(|e| e.to_string())? {
+        return Err("Collection tracks cannot be added to playlists".to_string());
+    }
+    db.add_track_to_playlist(playlist_id, track_id)
         .map_err(|e| e.to_string())
 }
 
@@ -638,6 +656,177 @@ pub fn set_app_settings(
     crate::app_settings::set_theme(&db, settings)
 }
 
+#[tauri::command]
+pub fn create_collection(state: State<'_, AppState>, name: String) -> Result<i64, String> {
+    state
+        .db
+        .lock()
+        .create_collection(name.trim())
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn delete_collection(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: i64,
+) -> Result<(), String> {
+    {
+        let db = state.db.lock();
+        crate::collections::delete_collection_with_files(&db, &state.app_data_dir, id)?;
+    }
+    let _ = app.emit("library-updated", ());
+    Ok(())
+}
+
+#[tauri::command]
+pub fn list_collections(state: State<'_, AppState>) -> Result<Vec<Collection>, String> {
+    state
+        .db
+        .lock()
+        .list_collections()
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_collection_tracks(
+    state: State<'_, AppState>,
+    collection_id: i64,
+) -> Result<Vec<Track>, String> {
+    state
+        .db
+        .lock()
+        .list_collection_tracks(collection_id)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn reorder_collection_tracks(
+    state: State<'_, AppState>,
+    collection_id: i64,
+    track_ids: Vec<i64>,
+) -> Result<(), String> {
+    state
+        .db
+        .lock()
+        .reorder_collection_tracks(collection_id, &track_ids)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn reorder_collections(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    collection_ids: Vec<i64>,
+) -> Result<(), String> {
+    state
+        .db
+        .lock()
+        .reorder_collections(&collection_ids)
+        .map_err(|e| e.to_string())?;
+    let _ = app.emit("library-updated", ());
+    Ok(())
+}
+
+#[tauri::command]
+pub fn check_collection_upload_conflicts(
+    state: State<'_, AppState>,
+    collection_id: i64,
+    source_paths: Vec<String>,
+) -> Result<Vec<String>, String> {
+    let paths: Vec<PathBuf> = source_paths.into_iter().map(PathBuf::from).collect();
+    crate::collections::check_collection_upload_conflicts(
+        &state.app_data_dir,
+        collection_id,
+        &paths,
+    )
+}
+
+#[tauri::command]
+pub fn upload_collection_tracks(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    collection_id: i64,
+    source_paths: Vec<String>,
+    overwrite: Option<bool>,
+) -> Result<UploadResult, String> {
+    let paths: Vec<PathBuf> = source_paths.into_iter().map(PathBuf::from).collect();
+    let overwrite = overwrite.unwrap_or(false);
+    let result = {
+        let db = state.db.lock();
+        crate::collections::upload_to_collection(
+            &db,
+            &state.app_data_dir,
+            collection_id,
+            &paths,
+            overwrite,
+        )?
+    };
+    let _ = app.emit("library-updated", ());
+    Ok(result)
+}
+
+#[tauri::command]
+pub fn delete_collection_track(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    track_id: i64,
+) -> Result<PlaybackState, String> {
+    let path = {
+        let db = state.db.lock();
+        if state.player.state().track_id == Some(track_id) {
+            state.player.stop();
+        }
+        crate::collections::delete_collection_track(&db, track_id)?
+    };
+
+    if let Err(error) = std::fs::remove_file(&path) {
+        return Err(format!(
+            "Track removed from collection, but file could not be deleted: {error}"
+        ));
+    }
+
+    let mut playback = state.player.state();
+    if playback.track_id == Some(track_id) {
+        playback.track_id = None;
+        playback.position_ms = 0;
+        playback.duration_ms = 0;
+        playback.is_playing = false;
+    }
+
+    let _ = app.emit("library-updated", ());
+    Ok(playback)
+}
+
+#[tauri::command]
+pub fn export_collection(
+    state: State<'_, AppState>,
+    collection_id: i64,
+    destination: String,
+) -> Result<(), String> {
+    let db = state.db.lock();
+    crate::collections::export_collection(
+        &db,
+        &state.app_data_dir,
+        collection_id,
+        Path::new(&destination),
+    )
+}
+
+#[tauri::command]
+pub fn import_collection(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    source: String,
+) -> Result<i64, String> {
+    let collection_id = {
+        let db = state.db.lock();
+        crate::collections::import_collection(&db, &state.app_data_dir, Path::new(&source))?
+    };
+    let _ = app.emit("library-updated", ());
+    Ok(collection_id)
+}
+
 pub fn init_state(app: &AppHandle) -> Result<AppState, String> {
     let data_dir = app
         .path()
@@ -651,5 +840,6 @@ pub fn init_state(app: &AppHandle) -> Result<AppState, String> {
     Ok(AppState {
         db: Mutex::new(db),
         player,
+        app_data_dir: data_dir,
     })
 }

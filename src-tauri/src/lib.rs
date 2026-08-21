@@ -1,5 +1,6 @@
 mod app_settings;
 mod audio_scan;
+mod collections;
 mod commands;
 mod config;
 mod db;
@@ -17,14 +18,19 @@ mod upload;
 mod waveform;
 
 use commands::{
-    add_track_to_playlist, check_upload_conflicts, create_playlist, create_taglist, delete_playlist,
-    delete_taglist, delete_track, get_app_settings, get_library_folder, get_playback_state, get_playlist_tracks, get_taglist_tracks,
-    get_track_peaks, get_track_tags, get_volume, import_taglist_titles, init_state,
-    list_playlists, list_taglist_values, list_taglists, list_tracks, pause_playback, play_track,
-    remove_track_from_playlist, reorder_playlist_tracks, reorder_taglist_tracks,
-    reorder_taglist_values, resume_playback,
-    load_library_config, reset_library, save_library_config, scan_library, seek_playback, set_app_settings, set_library_folder,
-    set_taglist_value_title, set_volume, stop_playback, update_track_tags, upload_tracks,
+    add_track_to_playlist, check_collection_upload_conflicts, check_upload_conflicts,
+    close_library, create_collection, create_playlist, create_taglist, delete_collection,
+    delete_collection_track, delete_playlist, delete_taglist, delete_track, export_collection,
+    get_app_settings, get_collection_tracks, get_library_folder, get_playback_state,
+    get_playlist_tracks, get_taglist_tracks, get_track, get_track_peaks, get_track_tags,
+    get_volume, import_collection, import_taglist_titles, init_state, list_collections,
+    list_playlists, list_taglist_values, list_taglists, list_tracks, pause_playback,
+    play_track, remove_track_from_playlist, reorder_collection_tracks, reorder_collections,
+    reorder_playlist_tracks,
+    reorder_taglist_tracks, reorder_taglist_values, resume_playback, load_library_config,
+    save_library_config, scan_library, seek_playback, set_app_settings, set_library_folder,
+    set_taglist_value_title, set_volume, stop_playback, update_track_tags,
+    upload_collection_tracks, upload_tracks,
 };
 use tauri::Manager;
 
@@ -40,15 +46,27 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             list_tracks,
+            get_track,
             get_library_folder,
             set_library_folder,
             save_library_config,
             load_library_config,
-            reset_library,
+            close_library,
             scan_library,
             upload_tracks,
             check_upload_conflicts,
             delete_track,
+            create_collection,
+            delete_collection,
+            list_collections,
+            get_collection_tracks,
+            reorder_collection_tracks,
+            reorder_collections,
+            upload_collection_tracks,
+            check_collection_upload_conflicts,
+            delete_collection_track,
+            export_collection,
+            import_collection,
             create_playlist,
             delete_playlist,
             list_playlists,

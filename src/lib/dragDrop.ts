@@ -2,6 +2,8 @@ export const TRACK_DRAG_MIME = "application/x-trackvault-track-id";
 export const REORDER_DRAG_MIME = "application/x-trackvault-reorder-index";
 export const SUBLIST_REORDER_DRAG_MIME =
   "application/x-trackvault-sublist-reorder-index";
+export const COLLECTION_REORDER_DRAG_MIME =
+  "application/x-trackvault-collection-reorder-index";
 const TRACK_DRAG_TEXT_PREFIX = "trackvault:";
 
 export function setTrackDragData(dataTransfer: DataTransfer, trackId: number): void {
@@ -72,6 +74,27 @@ export function isReorderDrag(dataTransfer: DataTransfer): boolean {
 
 export function isSublistReorderDrag(dataTransfer: DataTransfer): boolean {
   return dataTransfer.types.includes(SUBLIST_REORDER_DRAG_MIME);
+}
+
+export function setCollectionReorderDragData(
+  dataTransfer: DataTransfer,
+  index: number,
+): void {
+  dataTransfer.setData(COLLECTION_REORDER_DRAG_MIME, String(index));
+  dataTransfer.effectAllowed = "move";
+}
+
+export function getCollectionReorderDragData(
+  dataTransfer: DataTransfer,
+): number | null {
+  const raw = dataTransfer.getData(COLLECTION_REORDER_DRAG_MIME);
+  if (!raw) return null;
+  const index = Number.parseInt(raw, 10);
+  return Number.isFinite(index) ? index : null;
+}
+
+export function isCollectionReorderDrag(dataTransfer: DataTransfer): boolean {
+  return dataTransfer.types.includes(COLLECTION_REORDER_DRAG_MIME);
 }
 
 export function reorderItemsByIndex<T>(
