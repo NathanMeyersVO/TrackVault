@@ -1,11 +1,12 @@
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender, TryRecvError};
 use std::sync::Arc;
 use std::thread;
+use std::time::Duration;
 
-use parking_lot::Mutex;
+use parking_lot::{Condvar, Mutex};
 use tauri::{AppHandle, Emitter};
 
 use crate::audio_scan::{scan_audio, AudioScanResult};
@@ -18,6 +19,16 @@ enum CacheCommand {
     Kick,
     Prioritize(i64),
     Reset,
+}
+
+struct JobFinished {
+    track_id: i64,
+    generation: u64,
+}
+
+struct JobQueue {
+    items: VecDeque<(i64, String)>,
+    shutdown: bool,
 }
 
 pub struct AudioCacheWorker {
@@ -36,7 +47,7 @@ impl AudioCacheWorker {
         let generation_for_thread = Arc::clone(&generation);
 
         thread::spawn(move || {
-            run_worker(app, db, player, rx, generation_for_thread);
+            run_coordinator(app, db, player, rx, generation_for_thread);
         });
 
         let worker = Self { tx, generation };
@@ -56,6 +67,18 @@ impl AudioCacheWorker {
         self.generation.fetch_add(1, Ordering::SeqCst);
         let _ = self.tx.send(CacheCommand::Reset);
     }
+}
+
+pub fn cache_thread_count_from(cores: usize) -> usize {
+    let cores = cores.max(1);
+    (cores / 2).clamp(1, cores.saturating_sub(1).max(1))
+}
+
+fn cache_thread_count() -> usize {
+    let cores = thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(2);
+    cache_thread_count_from(cores)
 }
 
 pub fn cached_seek_index(
@@ -109,73 +132,248 @@ pub fn persist_audio_scan(
     Ok(())
 }
 
-fn run_worker(
+fn run_coordinator(
     app: AppHandle,
     db: Arc<Mutex<Database>>,
     player: Arc<AudioPlayer>,
-    rx: Receiver<CacheCommand>,
+    cmd_rx: Receiver<CacheCommand>,
     generation: Arc<AtomicU64>,
 ) {
-    let mut queue: VecDeque<(i64, String)> = VecDeque::new();
+    let queue = Arc::new(Mutex::new(JobQueue {
+        items: VecDeque::new(),
+        shutdown: false,
+    }));
+    let condvar = Arc::new(Condvar::new());
+    let in_flight = Arc::new(Mutex::new(HashSet::new()));
+    let (done_tx, done_rx) = mpsc::channel();
+
+    for _ in 0..cache_thread_count() {
+        let queue = Arc::clone(&queue);
+        let condvar = Arc::clone(&condvar);
+        let in_flight = Arc::clone(&in_flight);
+        let db = Arc::clone(&db);
+        let player = Arc::clone(&player);
+        let app = app.clone();
+        let generation = Arc::clone(&generation);
+        let done_tx = done_tx.clone();
+        thread::spawn(move || {
+            run_decode_worker(queue, condvar, in_flight, db, player, app, generation, done_tx);
+        });
+    }
+    drop(done_tx);
+
     let mut done = 0u32;
     let mut total = 0u32;
 
     loop {
-        let command = if queue.is_empty() {
-            match rx.recv() {
+        let busy = is_busy(&queue, &in_flight);
+        let command = if busy {
+            match cmd_rx.recv_timeout(Duration::from_millis(50)) {
+                Ok(command) => Some(command),
+                Err(RecvTimeoutError::Timeout) => None,
+                Err(RecvTimeoutError::Disconnected) => break,
+            }
+        } else {
+            match cmd_rx.recv() {
                 Ok(command) => Some(command),
                 Err(_) => break,
             }
-        } else {
-            match rx.try_recv() {
-                Ok(command) => Some(command),
-                Err(TryRecvError::Empty) => None,
-                Err(TryRecvError::Disconnected) => break,
-            }
         };
+
+        drain_finished(
+            &done_rx,
+            &queue,
+            &in_flight,
+            &generation,
+            &app,
+            &mut done,
+            &mut total,
+        );
 
         match command {
             Some(CacheCommand::Kick) => {
-                queue = load_uncached(&db);
-                done = 0;
-                total = queue.len() as u32;
-                emit_progress(&app, done, total, queue.is_empty());
+                apply_kick(&db, &queue, &in_flight, &condvar, &mut done, &mut total);
+                emit_progress(
+                    &app,
+                    done,
+                    total,
+                    total == 0 && !is_busy(&queue, &in_flight),
+                );
             }
             Some(CacheCommand::Prioritize(track_id)) => {
-                if let Some(item) = load_track_if_uncached(&db, track_id) {
-                    let already_queued = queue.iter().any(|(id, _)| *id == track_id);
-                    queue.retain(|(id, _)| *id != track_id);
-                    if !already_queued {
-                        if total == 0 {
-                            done = 0;
-                            total = 1;
-                        } else {
-                            total = total.saturating_add(1);
-                        }
-                    }
-                    queue.push_front(item);
-                    emit_progress(&app, done, total.max(queue.len() as u32), false);
+                if apply_prioritize(&db, &queue, &in_flight, &condvar, track_id, &mut done, &mut total)
+                {
+                    emit_progress(&app, done, total.max(1), false);
                 }
             }
             Some(CacheCommand::Reset) => {
-                queue.clear();
+                apply_reset(&queue, &condvar);
                 done = 0;
                 total = 0;
                 emit_progress(&app, 0, 0, true);
             }
-            None => {
-                let Some((track_id, path)) = queue.pop_front() else {
-                    continue;
-                };
-                let gen = generation.load(Ordering::SeqCst);
-                cache_one_track(&app, &db, &player, &generation, gen, track_id, &path);
-                if generation.load(Ordering::SeqCst) != gen {
-                    continue;
-                }
-                done = done.saturating_add(1);
-                emit_progress(&app, done, total.max(done), queue.is_empty());
-            }
+            None => {}
         }
+    }
+
+    let mut queue = queue.lock();
+    queue.shutdown = true;
+    queue.items.clear();
+    condvar.notify_all();
+}
+
+fn is_busy(queue: &Mutex<JobQueue>, in_flight: &Mutex<HashSet<i64>>) -> bool {
+    let queue = queue.lock();
+    let in_flight = in_flight.lock();
+    !queue.items.is_empty() || !in_flight.is_empty()
+}
+
+fn drain_finished(
+    done_rx: &Receiver<JobFinished>,
+    queue: &Mutex<JobQueue>,
+    in_flight: &Mutex<HashSet<i64>>,
+    generation: &AtomicU64,
+    app: &AppHandle,
+    done: &mut u32,
+    total: &mut u32,
+) {
+    loop {
+        match done_rx.try_recv() {
+            Ok(finished) => handle_finished(
+                finished, queue, in_flight, generation, app, done, total,
+            ),
+            Err(TryRecvError::Empty) => break,
+            Err(TryRecvError::Disconnected) => break,
+        }
+    }
+}
+
+fn handle_finished(
+    finished: JobFinished,
+    queue: &Mutex<JobQueue>,
+    in_flight: &Mutex<HashSet<i64>>,
+    generation: &AtomicU64,
+    app: &AppHandle,
+    done: &mut u32,
+    total: &mut u32,
+) {
+    let (queue_empty, inf_empty) = {
+        let queue = queue.lock();
+        let mut in_flight = in_flight.lock();
+        in_flight.remove(&finished.track_id);
+        (queue.items.is_empty(), in_flight.is_empty())
+    };
+
+    if finished.generation != generation.load(Ordering::SeqCst) {
+        return;
+    }
+    if *total == 0 {
+        return;
+    }
+
+    *done = done.saturating_add(1);
+    let finished_all = queue_empty && inf_empty;
+    emit_progress(app, *done, (*total).max(*done), finished_all);
+    if finished_all {
+        *done = 0;
+        *total = 0;
+    }
+}
+
+fn apply_kick(
+    db: &Mutex<Database>,
+    queue: &Mutex<JobQueue>,
+    in_flight: &Mutex<HashSet<i64>>,
+    condvar: &Condvar,
+    done: &mut u32,
+    total: &mut u32,
+) {
+    let mut items = load_uncached(db);
+    let mut queue = queue.lock();
+    let in_flight = in_flight.lock();
+    let in_flight_needed = items
+        .iter()
+        .filter(|(id, _)| in_flight.contains(id))
+        .count() as u32;
+    items.retain(|(id, _)| !in_flight.contains(id));
+    queue.items = items;
+    *done = 0;
+    *total = queue.items.len() as u32 + in_flight_needed;
+    condvar.notify_all();
+}
+
+fn apply_prioritize(
+    db: &Mutex<Database>,
+    queue: &Mutex<JobQueue>,
+    in_flight: &Mutex<HashSet<i64>>,
+    condvar: &Condvar,
+    track_id: i64,
+    done: &mut u32,
+    total: &mut u32,
+) -> bool {
+    let Some(item) = load_track_if_uncached(db, track_id) else {
+        return false;
+    };
+
+    let mut queue = queue.lock();
+    let in_flight = in_flight.lock();
+    if in_flight.contains(&track_id) {
+        return false;
+    }
+
+    let already_queued = queue.items.iter().any(|(id, _)| *id == track_id);
+    queue.items.retain(|(id, _)| *id != track_id);
+    if !already_queued {
+        if *total == 0 {
+            *done = 0;
+            *total = 1;
+        } else {
+            *total = total.saturating_add(1);
+        }
+    }
+    queue.items.push_front(item);
+    condvar.notify_one();
+    true
+}
+
+fn apply_reset(queue: &Mutex<JobQueue>, condvar: &Condvar) {
+    let mut queue = queue.lock();
+    queue.items.clear();
+    condvar.notify_all();
+}
+
+fn run_decode_worker(
+    queue: Arc<Mutex<JobQueue>>,
+    condvar: Arc<Condvar>,
+    in_flight: Arc<Mutex<HashSet<i64>>>,
+    db: Arc<Mutex<Database>>,
+    player: Arc<AudioPlayer>,
+    app: AppHandle,
+    generation: Arc<AtomicU64>,
+    done_tx: Sender<JobFinished>,
+) {
+    loop {
+        let (track_id, path, gen) = {
+            let mut queue = queue.lock();
+            while queue.items.is_empty() && !queue.shutdown {
+                condvar.wait(&mut queue);
+            }
+            if queue.shutdown && queue.items.is_empty() {
+                return;
+            }
+            let Some((track_id, path)) = queue.items.pop_front() else {
+                continue;
+            };
+            let gen = generation.load(Ordering::SeqCst);
+            in_flight.lock().insert(track_id);
+            (track_id, path, gen)
+        };
+
+        cache_one_track(&app, &db, &player, &generation, gen, track_id, &path);
+        let _ = done_tx.send(JobFinished {
+            track_id,
+            generation: gen,
+        });
     }
 }
 
@@ -286,6 +484,16 @@ mod tests {
         )
         .expect("insert track")
         .0
+    }
+
+    #[test]
+    fn cache_thread_count_uses_half_the_cores() {
+        assert_eq!(cache_thread_count_from(1), 1);
+        assert_eq!(cache_thread_count_from(2), 1);
+        assert_eq!(cache_thread_count_from(3), 1);
+        assert_eq!(cache_thread_count_from(4), 2);
+        assert_eq!(cache_thread_count_from(8), 4);
+        assert_eq!(cache_thread_count_from(16), 8);
     }
 
     #[test]

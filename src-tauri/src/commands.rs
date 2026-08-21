@@ -62,7 +62,7 @@ pub fn set_library_folder(
         Err(e) => {
             let _progress = {
                 let db = state.db.lock();
-                scanner::scan_library_folder(&db)?
+                scanner::scan_library_folder(&db, &app)?
             };
             let _ = app.emit("library-updated", ());
             state.audio_cache.kick();
@@ -74,7 +74,7 @@ pub fn set_library_folder(
 
     let progress = {
         let db = state.db.lock();
-        scanner::scan_library_folder(&db)?
+        scanner::scan_library_folder(&db, &app)?
     };
 
     if let Some(config) = pending_config {
@@ -154,7 +154,7 @@ pub fn close_library(app: AppHandle, state: State<'_, AppState>) -> Result<Playb
 pub fn scan_library(app: AppHandle, state: State<'_, AppState>) -> Result<ScanProgress, String> {
     let progress = {
         let db = state.db.lock();
-        scanner::scan_library_folder(&db)?
+        scanner::scan_library_folder(&db, &app)?
     };
     let _ = app.emit("library-updated", ());
     state.audio_cache.kick();

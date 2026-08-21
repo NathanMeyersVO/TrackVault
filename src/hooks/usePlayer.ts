@@ -14,7 +14,7 @@ import { usePlayerStore } from "../store/playerStore";
 
 export function useLibrary() {
 
-  const { setTracks, setPlaylists, setTaglists, setCollections, setScanning, setLibraryFolder, setAudioCacheProgress } =
+  const { setTracks, setPlaylists, setTaglists, setCollections, setScanning, setLibraryFolder, setAudioCacheProgress, setLibraryScanProgress } =
 
     usePlayerStore();
 
@@ -91,6 +91,26 @@ export function useLibrary() {
     };
 
   }, [setAudioCacheProgress]);
+
+
+
+  useEffect(() => {
+
+    const unlisten = listen<AudioCacheProgress>("library-scan-progress", (event) => {
+
+      setLibraryScanProgress(event.payload);
+
+    });
+
+
+
+    return () => {
+
+      unlisten.then((fn) => fn());
+
+    };
+
+  }, [setLibraryScanProgress]);
 
 
 

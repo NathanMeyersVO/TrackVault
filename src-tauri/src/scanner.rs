@@ -4,10 +4,11 @@ use std::path::{Path, PathBuf};
 use lofty::file::TaggedFileExt;
 use lofty::probe::Probe;
 use lofty::tag::Accessor;
+use tauri::{AppHandle, Emitter};
 use walkdir::WalkDir;
 
 use crate::db::Database;
-use crate::models::ScanProgress;
+use crate::models::{AudioCacheProgress, ScanProgress};
 use crate::waveform::probe_duration_ms;
 
 const AUDIO_EXTENSIONS: &[&str] = &["mp3", "flac", "wav", "ogg", "m4a", "aac", "mp4", "aiff"];
@@ -50,28 +51,42 @@ pub fn read_tags(path: &Path) -> (String, String, String, Option<i32>, i64) {
     (title, artist, album, track_number, duration_ms)
 }
 
+fn emit_scan_progress(app: &AppHandle, done: u32, total: u32, finished: bool) {
+    let _ = app.emit(
+        "library-scan-progress",
+        AudioCacheProgress {
+            done,
+            total,
+            finished,
+        },
+    );
+}
+
 pub fn scan_folder(
     db: &Database,
     folder: &Path,
     seen: &mut HashSet<String>,
+    app: &AppHandle,
 ) -> Result<ScanProgress, String> {
-    let mut scanned = 0u32;
-    let mut added = 0u32;
-
-    for entry in WalkDir::new(folder)
+    let files: Vec<PathBuf> = WalkDir::new(folder)
         .follow_links(false)
         .into_iter()
         .filter_map(|e| e.ok())
-    {
-        let path = entry.path();
-        if !path.is_file() || !is_audio_file(path) {
-            continue;
-        }
+        .map(|entry| entry.into_path())
+        .filter(|path| path.is_file() && is_audio_file(path))
+        .collect();
 
+    let total = files.len() as u32;
+    emit_scan_progress(app, 0, total, false);
+
+    let mut scanned = 0u32;
+    let mut added = 0u32;
+
+    for path in files {
         scanned += 1;
         let path_str = path.to_string_lossy().to_string();
         seen.insert(path_str.clone());
-        let (title, artist, album, track_number, duration_ms) = read_tags(path);
+        let (title, artist, album, track_number, duration_ms) = read_tags(&path);
 
         match db.upsert_track(
             &path_str,
@@ -85,12 +100,14 @@ pub fn scan_folder(
                 if is_new {
                     added += 1;
                 }
-                if let Err(e) = crate::tag_index::index_track_tags(db, track_id, path) {
+                if let Err(e) = crate::tag_index::index_track_tags(db, track_id, &path) {
                     eprintln!("Failed to index tags for {}: {}", path_str, e);
                 }
             }
             Err(e) => eprintln!("Failed to upsert {}: {}", path_str, e),
         }
+
+        emit_scan_progress(app, scanned, total, false);
     }
 
     Ok(ScanProgress {
@@ -101,7 +118,9 @@ pub fn scan_folder(
     })
 }
 
-pub fn scan_library_folder(db: &Database) -> Result<ScanProgress, String> {
+pub fn scan_library_folder(db: &Database, app: &AppHandle) -> Result<ScanProgress, String> {
+    emit_scan_progress(app, 0, 0, false);
+
     let mut seen = HashSet::new();
     let mut total = ScanProgress {
         scanned: 0,
@@ -112,12 +131,13 @@ pub fn scan_library_folder(db: &Database) -> Result<ScanProgress, String> {
 
     let folder = db.get_library_folder().map_err(|e| e.to_string())?;
     let Some(folder) = folder else {
+        emit_scan_progress(app, 0, 0, true);
         return Ok(total);
     };
 
     let path = PathBuf::from(&folder);
     if path.exists() {
-        let progress = scan_folder(db, &path, &mut seen)?;
+        let progress = scan_folder(db, &path, &mut seen, app)?;
         total.scanned += progress.scanned;
         total.added += progress.added;
     }
@@ -133,5 +153,6 @@ pub fn scan_library_folder(db: &Database) -> Result<ScanProgress, String> {
         .delete_library_tracks_by_paths(&missing)
         .map_err(|e| e.to_string())?;
 
+    emit_scan_progress(app, total.scanned, total.scanned, true);
     Ok(total)
 }

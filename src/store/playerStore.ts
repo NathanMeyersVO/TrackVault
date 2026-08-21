@@ -63,6 +63,7 @@ interface PlayerStore {
   scanning: boolean;
   libraryFolder: string | null;
   audioCacheProgress: AudioCacheProgress;
+  libraryScanProgress: AudioCacheProgress;
   transportBusy: boolean;
   transportMode: TransportMode;
   lockedPositionMs: number | null;
@@ -87,6 +88,7 @@ interface PlayerStore {
   setScanning: (scanning: boolean) => void;
   setLibraryFolder: (libraryFolder: string | null) => void;
   setAudioCacheProgress: (progress: AudioCacheProgress) => void;
+  setLibraryScanProgress: (progress: AudioCacheProgress) => void;
   beginTransport: (targetMs: number) => void;
   beginTrackLoad: (targetMs: number, autoplay: boolean) => void;
   endTrackLoad: (result: PlaybackState) => void;
@@ -138,6 +140,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   scanning: false,
   libraryFolder: null,
   audioCacheProgress: { done: 0, total: 0, finished: true },
+  libraryScanProgress: { done: 0, total: 0, finished: true },
   transportBusy: false,
   transportMode: "idle",
   lockedPositionMs: null,
@@ -167,6 +170,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   setScanning: (scanning) => set({ scanning }),
   setLibraryFolder: (libraryFolder) => set({ libraryFolder }),
   setAudioCacheProgress: (audioCacheProgress) => set({ audioCacheProgress }),
+  setLibraryScanProgress: (libraryScanProgress) => set({ libraryScanProgress }),
   beginTransport: (targetMs) =>
     set((state) => ({
       transportBusy: true,

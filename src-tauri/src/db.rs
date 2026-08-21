@@ -1222,10 +1222,11 @@ impl Database {
         let mut counts: HashMap<String, i64> = HashMap::new();
 
         let mut stmt = self.conn.prepare(
-            "SELECT tag_value, COUNT(DISTINCT track_id)
-             FROM track_tags
-             WHERE tag_key = ?1
-             GROUP BY tag_value",
+            "SELECT tt.tag_value, COUNT(DISTINCT tt.track_id)
+             FROM track_tags tt
+             JOIN tracks t ON t.id = tt.track_id
+             WHERE tt.tag_key = ?1 AND t.collection_id IS NULL
+             GROUP BY tt.tag_value",
         )?;
         let rows = stmt.query_map(params![tag_key], |row| {
             Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
@@ -1248,10 +1249,11 @@ impl Database {
 
         let no_tag_count: i64 = self.conn.query_row(
             "SELECT COUNT(*) FROM tracks t
-             WHERE NOT EXISTS (
-               SELECT 1 FROM track_tags tt
-               WHERE tt.track_id = t.id AND tt.tag_key = ?1
-             )",
+             WHERE t.collection_id IS NULL
+               AND NOT EXISTS (
+                 SELECT 1 FROM track_tags tt
+                 WHERE tt.track_id = t.id AND tt.tag_key = ?1
+               )",
             params![tag_key],
             |row| row.get(0),
         )?;
@@ -1281,6 +1283,7 @@ impl Database {
                  LEFT JOIN taglist_track_order o
                    ON o.taglist_id = ?1 AND o.tag_value = ?2 AND o.track_id = t.id
                  WHERE tt.tag_key = ?3 AND tt.tag_value = ?4
+                   AND t.collection_id IS NULL
                  ORDER BY CASE WHEN o.position IS NULL THEN 1 ELSE 0 END,
                           o.position,
                           t.artist COLLATE NOCASE, t.album COLLATE NOCASE,
@@ -1298,7 +1301,8 @@ impl Database {
                  FROM tracks t
                  LEFT JOIN taglist_track_order o
                    ON o.taglist_id = ?1 AND o.tag_value = ?2 AND o.track_id = t.id
-                 WHERE NOT EXISTS (
+                 WHERE t.collection_id IS NULL
+                   AND NOT EXISTS (
                    SELECT 1 FROM track_tags tt
                    WHERE tt.track_id = t.id AND tt.tag_key = ?3
                  )
@@ -1458,6 +1462,9 @@ impl Database {
         taglist_id: i64,
         tag_key: &str,
     ) -> Result<(), DbError> {
+        if !self.is_library_track(track_id)? {
+            return Ok(());
+        }
         let current_values = self.get_track_tag_values(track_id, tag_key)?;
 
         let mut stmt = self.conn.prepare(
@@ -1802,6 +1809,67 @@ mod tests {
         let no_tag = db.list_taglist_tracks(1, "Genre", None).unwrap();
         assert_eq!(no_tag.len(), 1);
         assert_eq!(no_tag[0].id, track_b);
+    }
+
+    #[test]
+    fn taglists_exclude_collection_tracks() {
+        let db = test_db();
+        let library_untagged = insert_track(&db, "LibraryUntagged");
+        let library_rock = insert_track(&db, "LibraryRock");
+        db.replace_track_tags(
+            library_rock,
+            &[("Genre".to_string(), "Rock".to_string())],
+        )
+        .unwrap();
+
+        let collection_id = db.create_collection("Pack").unwrap();
+        let (collection_untagged, _) = db
+            .upsert_collection_track(
+                collection_id,
+                "/collections/untagged.mp3",
+                "CollectionUntagged",
+                "Artist",
+                "Album",
+                1000,
+                None,
+            )
+            .unwrap();
+        db.replace_track_tags(collection_untagged, &[]).unwrap();
+        let (collection_rock, _) = db
+            .upsert_collection_track(
+                collection_id,
+                "/collections/rock.mp3",
+                "CollectionRock",
+                "Artist",
+                "Album",
+                1000,
+                None,
+            )
+            .unwrap();
+        db.replace_track_tags(
+            collection_rock,
+            &[("Genre".to_string(), "Rock".to_string())],
+        )
+        .unwrap();
+
+        let values = db.list_taglist_values("Genre", 1).unwrap();
+        let rock = values
+            .iter()
+            .find(|value| value.value.as_deref() == Some("Rock"))
+            .unwrap();
+        let no_tag = values.iter().find(|value| value.value.is_none()).unwrap();
+        assert_eq!(rock.track_count, 1);
+        assert_eq!(no_tag.track_count, 1);
+
+        let rock_tracks = db
+            .list_taglist_tracks(1, "Genre", Some("Rock"))
+            .unwrap();
+        assert_eq!(rock_tracks.len(), 1);
+        assert_eq!(rock_tracks[0].id, library_rock);
+
+        let no_tag_tracks = db.list_taglist_tracks(1, "Genre", None).unwrap();
+        assert_eq!(no_tag_tracks.len(), 1);
+        assert_eq!(no_tag_tracks[0].id, library_untagged);
     }
 
     #[test]
