@@ -2,7 +2,6 @@ import { useCallback, useState } from "react";
 
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { api, type Taglist, type TaglistValue } from "../lib/tauri";
-import { formatTaglistLabel } from "../lib/taglistLabels";
 import { invalidateTrackTags } from "../lib/trackTagsCache";
 import { useLibrary } from "./usePlayer";
 import { usePlayerStore } from "../store/playerStore";
@@ -12,7 +11,6 @@ interface PendingTagDrop {
   trackTitle: string;
   taglist: Taglist;
   targetValue: string | null;
-  targetLabel: string;
 }
 
 function normalizeTagValue(value: string | null | undefined): string | null {
@@ -60,7 +58,6 @@ export function useTagDropConfirm() {
         trackTitle,
         taglist,
         targetValue: entry.value,
-        targetLabel: formatTaglistLabel(entry.value, entry.display_title),
       });
     },
     [tracks],
@@ -98,7 +95,7 @@ export function useTagDropConfirm() {
       message={
         pending.targetValue == null
           ? `Remove "${pending.taglist.tag_key}" from "${pending.trackTitle}"?\n\nThis updates the file's metadata.${error ? `\n\n${error}` : ""}`
-          : `Set "${pending.taglist.tag_key}" on "${pending.trackTitle}" to "${pending.targetLabel}"?\n\nThis updates the file's metadata.${error ? `\n\n${error}` : ""}`
+          : `Set tag "${pending.taglist.tag_key}" on "${pending.trackTitle}" to "${pending.targetValue}"?\n\nThis updates the file's metadata.${error ? `\n\n${error}` : ""}`
       }
       confirmLabel={pending.targetValue == null ? "Remove" : "Set tag"}
       cancelLabel="Cancel"
