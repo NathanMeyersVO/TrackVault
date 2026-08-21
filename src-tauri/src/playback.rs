@@ -65,6 +65,14 @@ impl TrackSession {
         })
     }
 
+    pub fn set_seek_index(&mut self, seek_index: Vec<SeekKeyframe>) {
+        self.seek_index = if seek_index.is_empty() {
+            default_index(self.duration_ms)
+        } else {
+            seek_index
+        };
+    }
+
     pub fn sample_rate(&self) -> u32 {
         self.sample_rate
     }

@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 
-import { api, formatDuration } from "../lib/tauri";
+import { listen } from "@tauri-apps/api/event";
+
+import { api, formatDuration, type AudioCacheTrackReady } from "../lib/tauri";
 import { usePlayer } from "../hooks/usePlayer";
 import { usePlayerStore, getDisplayPositionMs } from "../store/playerStore";
 import { TransportControls } from "./TransportControls";
@@ -21,6 +23,7 @@ export function NowPlayingBar() {
   } = usePlayer();
   const [peaks, setPeaks] = useState<number[]>([]);
   const [peakDurationMs, setPeakDurationMs] = useState(0);
+  const [peaksEpoch, setPeaksEpoch] = useState(0);
   const [previewPositionMs, setPreviewPositionMs] = useState(0);
   const [fetchedTrack, setFetchedTrack] = useState<Awaited<
     ReturnType<typeof api.getTrack>
@@ -95,7 +98,19 @@ export function NowPlayingBar() {
     return () => {
       cancelled = true;
     };
-  }, [displayTrackId, transportMode]);
+  }, [displayTrackId, transportMode, peaksEpoch]);
+
+  useEffect(() => {
+    const unlisten = listen<AudioCacheTrackReady>("audio-cache-track-ready", (event) => {
+      if (event.payload.track_id === displayTrackId) {
+        setPeaksEpoch((value) => value + 1);
+      }
+    });
+
+    return () => {
+      void unlisten.then((fn) => fn());
+    };
+  }, [displayTrackId]);
 
   useEffect(() => {
     if (hasLoadedTrack) {

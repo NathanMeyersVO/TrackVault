@@ -4,7 +4,7 @@ import { listen } from "@tauri-apps/api/event";
 
 
 
-import { api } from "../lib/tauri";
+import { api, type AudioCacheProgress } from "../lib/tauri";
 
 import { playerController } from "../playerController";
 
@@ -14,7 +14,7 @@ import { usePlayerStore } from "../store/playerStore";
 
 export function useLibrary() {
 
-  const { setTracks, setPlaylists, setTaglists, setCollections, setScanning, setLibraryFolder } =
+  const { setTracks, setPlaylists, setTaglists, setCollections, setScanning, setLibraryFolder, setAudioCacheProgress } =
 
     usePlayerStore();
 
@@ -71,6 +71,26 @@ export function useLibrary() {
     };
 
   }, [refresh]);
+
+
+
+  useEffect(() => {
+
+    const unlisten = listen<AudioCacheProgress>("audio-cache-progress", (event) => {
+
+      setAudioCacheProgress(event.payload);
+
+    });
+
+
+
+    return () => {
+
+      unlisten.then((fn) => fn());
+
+    };
+
+  }, [setAudioCacheProgress]);
 
 
 

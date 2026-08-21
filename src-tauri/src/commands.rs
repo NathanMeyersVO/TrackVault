@@ -4,37 +4,20 @@ use std::sync::Arc;
 use parking_lot::Mutex;
 use tauri::{AppHandle, Emitter, Manager, State};
 
-use crate::audio_scan::scan_audio;
+use crate::audio_cache::{cached_seek_index, peaks_from_cache, AudioCacheWorker};
 use crate::db::Database;
-use crate::models::{Collection, PlaybackState, Playlist, ScanProgress, Taglist, TaglistValue, Track, UploadResult, WaveformPeaks};
+use crate::models::{
+    Collection, PlaybackState, Playlist, ScanProgress, Taglist, TaglistValue, Track, UploadResult,
+    WaveformPeaks,
+};
 use crate::player::AudioPlayer;
 use crate::scanner;
-use crate::seek_index::{parse_seek_index, serialize_seek_index, SeekKeyframe};
 
 pub struct AppState {
-    pub db: Mutex<Database>,
+    pub db: Arc<Mutex<Database>>,
     pub player: Arc<AudioPlayer>,
     pub app_data_dir: PathBuf,
-}
-
-fn load_or_build_seek_index(
-    db: &Database,
-    track_id: i64,
-    path: &Path,
-) -> Result<Vec<SeekKeyframe>, String> {
-    if let Some(json) = db.get_seek_index(track_id).map_err(|e| e.to_string())? {
-        if let Some(index) = parse_seek_index(&json) {
-            if !index.is_empty() {
-                return Ok(index);
-            }
-        }
-    }
-
-    let scan = scan_audio(path)?;
-    let json = serialize_seek_index(&scan.seek_index)?;
-    db.set_seek_index(track_id, &json)
-        .map_err(|e| e.to_string())?;
-    Ok(scan.seek_index)
+    pub audio_cache: AudioCacheWorker,
 }
 
 #[tauri::command]
@@ -82,6 +65,7 @@ pub fn set_library_folder(
                 scanner::scan_library_folder(&db)?
             };
             let _ = app.emit("library-updated", ());
+            state.audio_cache.kick();
             return Err(format!(
                 "Library folder set and scanned, but config could not be loaded: {e}"
             ));
@@ -104,6 +88,7 @@ pub fn set_library_folder(
     }
 
     let _ = app.emit("library-updated", ());
+    state.audio_cache.kick();
     Ok(progress)
 }
 
@@ -155,6 +140,7 @@ pub fn close_library(app: AppHandle, state: State<'_, AppState>) -> Result<Playb
         let db = state.db.lock();
         db.close_library_state().map_err(|e| e.to_string())?;
     }
+    state.audio_cache.reset();
     let mut playback = state.player.state();
     playback.track_id = None;
     playback.position_ms = 0;
@@ -171,6 +157,7 @@ pub fn scan_library(app: AppHandle, state: State<'_, AppState>) -> Result<ScanPr
         scanner::scan_library_folder(&db)?
     };
     let _ = app.emit("library-updated", ());
+    state.audio_cache.kick();
     Ok(progress)
 }
 
@@ -198,6 +185,7 @@ pub fn upload_tracks(
         crate::upload::upload_tracks(&db, &paths, overwrite)?
     };
     let _ = app.emit("library-updated", ());
+    state.audio_cache.kick();
     Ok(result)
 }
 
@@ -510,19 +498,20 @@ pub fn play_track(
     let autoplay = autoplay.unwrap_or(true);
     state.player.interrupt();
 
-    let (path, duration_ms, seek_index) = {
+    let (path, duration_ms, seek_index, needs_cache) = {
         let db = state.db.lock();
         let track = db
             .get_track(track_id)
             .map_err(|e| e.to_string())?
             .ok_or("Track not found")?;
-        let seek_index = load_or_build_seek_index(
-            &db,
-            track_id,
-            Path::new(&track.path),
-        )?;
-        (track.path, track.duration_ms as u64, seek_index)
+        let (seek_index, needs_cache) =
+            cached_seek_index(&db, track_id, track.duration_ms as u64)?;
+        (track.path, track.duration_ms as u64, seek_index, needs_cache)
     };
+
+    if needs_cache {
+        state.audio_cache.prioritize(track_id);
+    }
 
     let start = start_ms.unwrap_or(0).min(duration_ms);
     state.player.play(
@@ -582,40 +571,21 @@ pub fn set_volume(state: State<'_, AppState>, volume: f32) -> f32 {
 
 #[tauri::command]
 pub fn get_track_peaks(state: State<'_, AppState>, track_id: i64) -> Result<WaveformPeaks, String> {
-    let cached = {
+    let (peaks, needs_cache) = {
         let db = state.db.lock();
-        let peaks = db.get_peaks(track_id).map_err(|e| e.to_string())?;
-        let seek_index = db.get_seek_index(track_id).map_err(|e| e.to_string())?;
         let track = db
             .get_track(track_id)
             .map_err(|e| e.to_string())?
             .ok_or("Track not found")?;
-        (peaks, seek_index, track.path, track.duration_ms)
+        let json = db.get_peaks(track_id).map_err(|e| e.to_string())?;
+        let peaks = peaks_from_cache(json.as_deref(), track.duration_ms);
+        let needs_cache = peaks.peaks.is_empty();
+        (peaks, needs_cache)
     };
-
-    if let Some(json) = cached.0 {
-        if let Ok(peaks) = serde_json::from_str::<Vec<f32>>(&json) {
-            return Ok(WaveformPeaks {
-                peaks,
-                duration_ms: cached.3,
-            });
-        }
+    if needs_cache {
+        state.audio_cache.prioritize(track_id);
     }
-
-    let scan = scan_audio(PathBuf::from(&cached.2).as_path())?;
-    let peaks_json = serde_json::to_string(&scan.peaks.peaks).map_err(|e| e.to_string())?;
-    let seek_index_json = serialize_seek_index(&scan.seek_index)?;
-    {
-        let db = state.db.lock();
-        db.set_peaks(track_id, &peaks_json)
-            .map_err(|e| e.to_string())?;
-        if cached.1.is_none() {
-            db.set_seek_index(track_id, &seek_index_json)
-                .map_err(|e| e.to_string())?;
-        }
-    }
-
-    Ok(scan.peaks)
+    Ok(peaks)
 }
 
 #[tauri::command]
@@ -827,6 +797,7 @@ pub fn upload_collection_tracks(
         )?
     };
     let _ = app.emit("library-updated", ());
+    state.audio_cache.kick();
     Ok(result)
 }
 
@@ -888,6 +859,7 @@ pub fn import_collection(
         crate::collections::import_collection(&db, &state.app_data_dir, Path::new(&source))?
     };
     let _ = app.emit("library-updated", ());
+    state.audio_cache.kick();
     Ok(collection_id)
 }
 
@@ -897,13 +869,15 @@ pub fn init_state(app: &AppHandle) -> Result<AppState, String> {
         .app_data_dir()
         .map_err(|e| e.to_string())?;
     let db_path = data_dir.join("trackvault.db");
-    let db = Database::open(&db_path).map_err(|e| e.to_string())?;
+    let db = Arc::new(Mutex::new(Database::open(&db_path).map_err(|e| e.to_string())?));
     let player = Arc::new(AudioPlayer::new()?);
     player.start_position_emitter(app.clone());
+    let audio_cache = AudioCacheWorker::start(app.clone(), Arc::clone(&db), Arc::clone(&player));
 
     Ok(AppState {
-        db: Mutex::new(db),
+        db,
         player,
         app_data_dir: data_dir,
+        audio_cache,
     })
 }

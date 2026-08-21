@@ -58,6 +58,16 @@ export interface ScanProgress {
   done: boolean;
 }
 
+export interface AudioCacheProgress {
+  done: number;
+  total: number;
+  finished: boolean;
+}
+
+export interface AudioCacheTrackReady {
+  track_id: number;
+}
+
 export interface UploadResult {
   uploaded: number;
   skipped: number;

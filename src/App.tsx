@@ -7,6 +7,7 @@ import { PlaylistView } from "./components/PlaylistView";
 import { TaglistView } from "./components/TaglistView";
 import { CollectionView } from "./components/CollectionView";
 import { NowPlayingBar } from "./components/NowPlayingBar";
+import { AudioCacheBanner } from "./components/AudioCacheBanner";
 import { useLibrary, usePlayer } from "./hooks/usePlayer";
 import { initPlayerController } from "./playerController";
 import { useSidebarWidth } from "./hooks/useSidebarWidth";
@@ -33,6 +34,7 @@ function MainContent() {
 
   return (
     <main className="flex min-w-0 flex-1 flex-col">
+      <AudioCacheBanner />
       <div className="min-h-0 flex-1">
         {view === "library" ? (
           <LibraryView />

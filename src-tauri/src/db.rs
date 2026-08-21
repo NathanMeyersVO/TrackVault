@@ -576,6 +576,22 @@ impl Database {
         Ok(())
     }
 
+    pub fn list_uncached_audio_tracks(&self) -> Result<Vec<(i64, String)>, DbError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, path FROM tracks
+             WHERE seek_index_json IS NULL OR peaks_json IS NULL
+             ORDER BY id",
+        )?;
+        let rows = stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?;
+        Ok(rows.filter_map(Result::ok).collect())
+    }
+
+    pub fn audio_cache_incomplete(&self, id: i64) -> Result<bool, DbError> {
+        let peaks = self.get_peaks(id)?;
+        let seek = self.get_seek_index(id)?;
+        Ok(peaks.is_none() || seek.is_none())
+    }
+
     pub fn clear_user_config(&self) -> Result<(), DbError> {
         let tx = self.conn.unchecked_transaction()?;
         tx.execute("DELETE FROM playlist_tracks", [])?;
@@ -2052,5 +2068,44 @@ mod tests {
             )
             .unwrap();
         assert_eq!(order_count, 0);
+    }
+
+    #[test]
+    fn uncached_audio_tracks_lists_missing_peaks_or_seek_index() {
+        let db = test_db();
+        let complete = insert_track(&db, "Complete");
+        let missing_seek = insert_track(&db, "MissingSeek");
+        let missing_both = insert_track(&db, "MissingBoth");
+
+        db.set_peaks(complete, "[0.1]").unwrap();
+        db.set_seek_index(complete, "[{\"ts_ms\":0,\"sample_index\":0}]")
+            .unwrap();
+        db.set_peaks(missing_seek, "[0.1]").unwrap();
+
+        let ids: Vec<i64> = db
+            .list_uncached_audio_tracks()
+            .unwrap()
+            .into_iter()
+            .map(|(id, _)| id)
+            .collect();
+        assert!(!ids.contains(&complete));
+        assert!(ids.contains(&missing_seek));
+        assert!(ids.contains(&missing_both));
+    }
+
+    #[test]
+    fn duration_change_clears_audio_cache() {
+        let db = test_db();
+        let track_id = insert_track(&db, "A");
+        db.set_peaks(track_id, "[0.1]").unwrap();
+        db.set_seek_index(track_id, "[{\"ts_ms\":0,\"sample_index\":0}]")
+            .unwrap();
+
+        db.upsert_track("/music/A.mp3", "A", "Artist", "Album", 2000, None)
+            .unwrap();
+
+        assert!(db.get_peaks(track_id).unwrap().is_none());
+        assert!(db.get_seek_index(track_id).unwrap().is_none());
+        assert!(db.audio_cache_incomplete(track_id).unwrap());
     }
 }

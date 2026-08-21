@@ -72,3 +72,15 @@ pub struct UploadResult {
     pub skipped: u32,
     pub errors: Vec<String>,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AudioCacheProgress {
+    pub done: u32,
+    pub total: u32,
+    pub finished: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AudioCacheTrackReady {
+    pub track_id: i64,
+}

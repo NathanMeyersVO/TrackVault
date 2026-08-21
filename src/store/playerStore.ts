@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-import type { Collection, PlaybackState, Playlist, Taglist, Track } from "../lib/tauri";
+import type { Collection, PlaybackState, Playlist, Taglist, Track, AudioCacheProgress } from "../lib/tauri";
 
 export type View =
   | "library"
@@ -62,6 +62,7 @@ interface PlayerStore {
   playback: PlaybackState;
   scanning: boolean;
   libraryFolder: string | null;
+  audioCacheProgress: AudioCacheProgress;
   transportBusy: boolean;
   transportMode: TransportMode;
   lockedPositionMs: number | null;
@@ -85,6 +86,7 @@ interface PlayerStore {
   setPlayback: (playback: PlaybackState) => void;
   setScanning: (scanning: boolean) => void;
   setLibraryFolder: (libraryFolder: string | null) => void;
+  setAudioCacheProgress: (progress: AudioCacheProgress) => void;
   beginTransport: (targetMs: number) => void;
   beginTrackLoad: (targetMs: number, autoplay: boolean) => void;
   endTrackLoad: (result: PlaybackState) => void;
@@ -135,6 +137,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   },
   scanning: false,
   libraryFolder: null,
+  audioCacheProgress: { done: 0, total: 0, finished: true },
   transportBusy: false,
   transportMode: "idle",
   lockedPositionMs: null,
@@ -163,6 +166,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   setPlayback: (playback) => set({ playback }),
   setScanning: (scanning) => set({ scanning }),
   setLibraryFolder: (libraryFolder) => set({ libraryFolder }),
+  setAudioCacheProgress: (audioCacheProgress) => set({ audioCacheProgress }),
   beginTransport: (targetMs) =>
     set((state) => ({
       transportBusy: true,

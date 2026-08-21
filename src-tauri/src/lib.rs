@@ -1,4 +1,5 @@
 mod app_settings;
+mod audio_cache;
 mod audio_scan;
 mod collections;
 mod commands;

@@ -31,6 +31,10 @@ enum PlayerCommand {
     SetVolume {
         volume: f32,
     },
+    UpdateSeekIndex {
+        track_id: i64,
+        seek_index: Vec<SeekKeyframe>,
+    },
 }
 
 struct PlayerRuntime {
@@ -230,6 +234,18 @@ impl PlayerRuntime {
             sink.set_volume(self.volume);
         }
     }
+
+    fn apply_seek_index(&mut self, track_id: i64, seek_index: Vec<SeekKeyframe>) {
+        if self.track_id != Some(track_id) {
+            return;
+        }
+        self.seek_index = seek_index.clone();
+        if let Some(session) = &self.session {
+            if let Ok(mut locked) = session.lock() {
+                locked.set_seek_index(seek_index);
+            }
+        }
+    }
 }
 
 pub struct AudioPlayer {
@@ -294,6 +310,13 @@ impl AudioPlayer {
                             }
                             PlayerCommand::SetVolume { volume } => {
                                 runtime.set_volume(volume);
+                                Ok(())
+                            }
+                            PlayerCommand::UpdateSeekIndex {
+                                track_id,
+                                seek_index,
+                            } => {
+                                runtime.apply_seek_index(track_id, seek_index);
                                 Ok(())
                             }
                         };
@@ -405,6 +428,13 @@ impl AudioPlayer {
         *self.volume.lock() = clamped;
         let _ = self.tx.send(PlayerCommand::SetVolume { volume: clamped });
         clamped
+    }
+
+    pub fn update_seek_index(&self, track_id: i64, seek_index: Vec<SeekKeyframe>) {
+        let _ = self.tx.send(PlayerCommand::UpdateSeekIndex {
+            track_id,
+            seek_index,
+        });
     }
 
     fn wait_for_position(&self, position_ms: u64) -> Result<(), String> {
