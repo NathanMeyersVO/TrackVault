@@ -1,12 +1,14 @@
 import { useState } from "react";
 
 import { AppearanceSettingsModal } from "./AppearanceSettingsModal";
+import { AboutDialog } from "./AboutDialog";
 import { KeyboardShortcutsModal } from "./KeyboardShortcutsModal";
 import { MenuBarStatus, MenuDropdown, type MenuEntry } from "./MenuDropdown";
 import { useLibraryMenuActions } from "../hooks/useLibraryMenuActions";
 
 export function AppMenuBar() {
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
   const [appearanceOpen, setAppearanceOpen] = useState(false);
   const {
     libraryFolder,
@@ -105,6 +107,10 @@ export function AppMenuBar() {
       label: "Keyboard shortcuts…",
       onClick: () => setShortcutsOpen(true),
     },
+    {
+      label: "About TrackVault…",
+      onClick: () => setAboutOpen(true),
+    },
   ];
 
   const statusMessage =
@@ -150,6 +156,7 @@ export function AppMenuBar() {
       {appearanceOpen ? (
         <AppearanceSettingsModal onClose={() => setAppearanceOpen(false)} />
       ) : null}
+      {aboutOpen ? <AboutDialog onClose={() => setAboutOpen(false)} /> : null}
     </>
   );
 }
