@@ -48,27 +48,27 @@ export function useTrackTooltip(trackId: number) {
     visible &&
     createPortal(
       <div
-        className="pointer-events-none fixed z-50 w-72 rounded-md border border-neutral-700 bg-neutral-900 p-3 text-xs shadow-lg"
+        className="pointer-events-none fixed z-50 w-72 rounded-md border border-border bg-surface p-3 text-xs shadow-lg"
         style={{ top: position.top, left: position.left, transform: "translateY(-8px) translateY(-100%)" }}
       >
-        {loading && <div className="text-neutral-500">Loading tags…</div>}
+        {loading && <div className="text-muted">Loading tags…</div>}
         {!loading && tags && (
           <>
-            <div className="mb-2 truncate font-medium text-white">{tags.file_name}</div>
+            <div className="mb-2 truncate font-medium text-foreground">{tags.file_name}</div>
             {tags.fields.length === 0 ? (
-              <div className="text-neutral-500">No tags found.</div>
+              <div className="text-muted">No tags found.</div>
             ) : (
               <ul className="max-h-48 space-y-1 overflow-y-auto">
                 {tags.fields.map((field) => (
-                  <li key={`${field.key}-${field.value}`} className="text-neutral-300">
-                    <span className="text-neutral-500">{field.key}:</span> {field.value}
+                  <li key={`${field.key}-${field.value}`} className="text-foreground">
+                    <span className="text-muted">{field.key}:</span> {field.value}
                   </li>
                 ))}
               </ul>
             )}
           </>
         )}
-        {!loading && !tags && <div className="text-neutral-500">Could not load tags.</div>}
+        {!loading && !tags && <div className="text-muted">Could not load tags.</div>}
       </div>,
       document.body,
     );

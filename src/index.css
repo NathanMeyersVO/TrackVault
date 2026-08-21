@@ -1,5 +1,37 @@
 @import "tailwindcss";
 
+@theme {
+  --color-background: var(--tv-background);
+  --color-surface: var(--tv-surface);
+  --color-surface-hover: var(--tv-surface-hover);
+  --color-border: var(--tv-border);
+  --color-foreground: var(--tv-foreground);
+  --color-muted: var(--tv-muted);
+  --color-accent: var(--tv-accent);
+  --color-accent-hover: var(--tv-accent-hover);
+  --color-accent-subtle: var(--tv-accent-subtle);
+  --color-drop: var(--tv-drop-indicator);
+}
+
+:root {
+  --tv-background: #0a0a0a;
+  --tv-surface: #171717;
+  --tv-surface-hover: #262626;
+  --tv-border: #262626;
+  --tv-foreground: #f5f5f5;
+  --tv-muted: #a3a3a3;
+  --tv-accent: #2563eb;
+  --tv-accent-hover: #3b82f6;
+  --tv-accent-subtle: #172554;
+  --tv-drop-indicator: #38bdf8;
+  --tv-playing-text: #93c5fd;
+  --tv-cursor-background: #262626;
+  --tv-cursor-background-playing: #1e3a5f;
+  --tv-waveform-wave: #525252;
+  --tv-waveform-progress: #60a5fa;
+  --tv-waveform-cursor: #ffffff;
+}
+
 html,
 body,
 #root {
@@ -8,7 +40,7 @@ body,
 }
 
 body {
-  @apply bg-neutral-950 text-neutral-100 antialiased;
+  @apply bg-background text-foreground antialiased;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
@@ -22,5 +54,5 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  @apply rounded-full bg-neutral-700;
+  @apply rounded-full bg-border;
 }

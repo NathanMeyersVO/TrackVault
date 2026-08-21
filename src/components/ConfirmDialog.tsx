@@ -36,25 +36,25 @@ export function ConfirmDialog({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
       <div
-        className="w-full max-w-md rounded-lg border border-neutral-700 bg-neutral-900 shadow-xl"
+        className="w-full max-w-md rounded-lg border border-border bg-surface shadow-xl"
         role="dialog"
         aria-modal="true"
         aria-labelledby="confirm-dialog-title"
       >
-        <div className="border-b border-neutral-800 px-4 py-3">
-          <h2 id="confirm-dialog-title" className="text-sm font-semibold text-white">
+        <div className="border-b border-border px-4 py-3">
+          <h2 id="confirm-dialog-title" className="text-sm font-semibold text-foreground">
             {title}
           </h2>
         </div>
         <div className="px-4 py-3">
-          <p className="whitespace-pre-wrap text-sm text-neutral-300">{message}</p>
+          <p className="whitespace-pre-wrap text-sm text-foreground">{message}</p>
         </div>
-        <div className="flex flex-wrap justify-end gap-2 border-t border-neutral-800 px-4 py-3">
+        <div className="flex flex-wrap justify-end gap-2 border-t border-border px-4 py-3">
           <button
             type="button"
             onClick={onCancel}
             disabled={busy}
-            className="rounded-md px-3 py-1.5 text-sm text-neutral-300 hover:bg-neutral-800 disabled:opacity-40"
+            className="rounded-md px-3 py-1.5 text-sm text-foreground hover:bg-surface-hover disabled:opacity-40"
           >
             {cancelLabel}
           </button>
@@ -63,7 +63,7 @@ export function ConfirmDialog({
               type="button"
               onClick={onSecondary}
               disabled={busy}
-              className="rounded-md bg-neutral-800 px-3 py-1.5 text-sm text-white hover:bg-neutral-700 disabled:opacity-40"
+              className="rounded-md bg-surface-hover px-3 py-1.5 text-sm text-foreground hover:bg-border disabled:opacity-40"
             >
               {secondaryLabel}
             </button>
@@ -75,7 +75,7 @@ export function ConfirmDialog({
             className={`rounded-md px-3 py-1.5 text-sm font-medium disabled:opacity-40 ${
               destructive
                 ? "bg-red-600 text-white hover:bg-red-500"
-                : "bg-white text-neutral-950 hover:bg-neutral-200"
+                : "bg-accent text-white hover:bg-accent-hover"
             }`}
           >
             {confirmLabel}

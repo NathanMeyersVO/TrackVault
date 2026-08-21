@@ -118,6 +118,11 @@ impl Database {
 
             CREATE INDEX IF NOT EXISTS idx_taglist_value_order_position
                 ON taglist_value_order(taglist_id, position);
+
+            CREATE TABLE IF NOT EXISTS app_settings (
+                key TEXT PRIMARY KEY NOT NULL,
+                value_json TEXT NOT NULL
+            );
             ",
         )?;
         let _ = self.conn.execute(
@@ -164,6 +169,23 @@ impl Database {
             params![path],
         )?;
         tx.commit()?;
+        Ok(())
+    }
+
+    pub fn get_app_setting(&self, key: &str) -> Result<Option<String>, DbError> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT value_json FROM app_settings WHERE key = ?1")?;
+        let mut rows = stmt.query_map(params![key], |row| row.get(0))?;
+        Ok(rows.next().transpose()?)
+    }
+
+    pub fn set_app_setting(&self, key: &str, value_json: &str) -> Result<(), DbError> {
+        self.conn.execute(
+            "INSERT INTO app_settings (key, value_json) VALUES (?1, ?2)
+             ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json",
+            params![key, value_json],
+        )?;
         Ok(())
     }
 

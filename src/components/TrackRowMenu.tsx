@@ -54,12 +54,12 @@ export function TrackRowMenu({
             return !value;
           });
         }}
-        className="flex h-8 w-8 items-center justify-center rounded-md text-neutral-400 hover:bg-neutral-800 hover:text-white"
+        className="flex h-8 w-8 items-center justify-center rounded-md text-muted hover:bg-surface-hover hover:text-foreground"
       >
         ⋮
       </button>
       {open && (
-        <div className="absolute right-0 z-20 mt-1 min-w-[10rem] rounded-md border border-neutral-700 bg-neutral-900 py-1 shadow-lg">
+        <div className="absolute right-0 z-20 mt-1 min-w-[10rem] rounded-md border border-border bg-surface py-1 shadow-lg">
           <button
             type="button"
             onClick={(event) => {
@@ -67,7 +67,7 @@ export function TrackRowMenu({
               closeMenu();
               onEditTags();
             }}
-            className="block w-full px-3 py-1.5 text-left text-xs text-neutral-200 hover:bg-neutral-800"
+            className="block w-full px-3 py-1.5 text-left text-xs text-foreground hover:bg-surface-hover"
           >
             Edit tags…
           </button>
@@ -80,13 +80,13 @@ export function TrackRowMenu({
                   event.stopPropagation();
                   setSubmenuOpen((value) => !value);
                 }}
-                className="flex w-full items-center justify-between px-3 py-1.5 text-left text-xs text-neutral-200 hover:bg-neutral-800"
+                className="flex w-full items-center justify-between px-3 py-1.5 text-left text-xs text-foreground hover:bg-surface-hover"
               >
                 <span>Add to playlist</span>
                 <span aria-hidden="true">›</span>
               </button>
               {submenuOpen && (
-                <div className="absolute right-full top-0 z-30 mr-1 min-w-[10rem] rounded-md border border-neutral-700 bg-neutral-900 py-1 shadow-lg">
+                <div className="absolute right-full top-0 z-30 mr-1 min-w-[10rem] rounded-md border border-border bg-surface py-1 shadow-lg">
                   {playlists.map((playlist) => (
                     <button
                       key={playlist.id}
@@ -96,7 +96,7 @@ export function TrackRowMenu({
                         closeMenu();
                         onAddToPlaylist(playlist.id);
                       }}
-                      className="block w-full truncate px-3 py-1.5 text-left text-xs text-neutral-200 hover:bg-neutral-800"
+                      className="block w-full truncate px-3 py-1.5 text-left text-xs text-foreground hover:bg-surface-hover"
                     >
                       {playlist.name}
                     </button>
@@ -114,7 +114,7 @@ export function TrackRowMenu({
                 closeMenu();
                 onRemoveFromPlaylist();
               }}
-              className="block w-full px-3 py-1.5 text-left text-xs text-red-400 hover:bg-neutral-800"
+              className="block w-full px-3 py-1.5 text-left text-xs text-red-400 hover:bg-surface-hover"
             >
               Remove from playlist
             </button>
@@ -128,7 +128,7 @@ export function TrackRowMenu({
                 closeMenu();
                 onDeleteTrack();
               }}
-              className="block w-full px-3 py-1.5 text-left text-xs text-red-400 hover:bg-neutral-800"
+              className="block w-full px-3 py-1.5 text-left text-xs text-red-400 hover:bg-surface-hover"
             >
               Delete track
             </button>

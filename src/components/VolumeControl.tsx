@@ -8,7 +8,7 @@ export function VolumeControl({ volume, onChange }: VolumeControlProps) {
 
   return (
     <div className="flex w-28 shrink-0 items-center gap-2">
-      <span className="text-xs text-neutral-500" aria-hidden="true">
+      <span className="text-xs text-muted" aria-hidden="true">
         Vol
       </span>
       <input
@@ -17,7 +17,7 @@ export function VolumeControl({ volume, onChange }: VolumeControlProps) {
         max={100}
         value={percent}
         onChange={(event) => onChange(Number(event.target.value) / 100)}
-        className="h-1 w-full cursor-pointer accent-white"
+        className="h-1 w-full cursor-pointer accent-accent"
         aria-label="Volume"
         title={`Volume ${percent}%`}
       />

@@ -72,17 +72,17 @@ export function PlaylistView({ playlistId }: PlaylistViewProps) {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="border-b border-neutral-800 px-4 py-3">
+      <div className="border-b border-border px-4 py-3">
         <h2 className="text-base font-semibold text-white">
           {playlist?.name ?? "Playlist"}
         </h2>
-        <p className="text-xs text-neutral-500">
+        <p className="text-xs text-muted">
           {isSearching
             ? `${filteredTracks.length} of ${tracks.length} track${tracks.length === 1 ? "" : "s"}`
             : `${tracks.length} track${tracks.length === 1 ? "" : "s"}`}
         </p>
       </div>
-      <div className="border-b border-neutral-800 px-4 py-2">
+      <div className="border-b border-border px-4 py-2">
         <TrackSearchInput value={query} onChange={setQuery} />
       </div>
       <div className="min-h-0 flex-1">

@@ -98,20 +98,20 @@ export function TagEditorModal({ trackId, onClose }: TagEditorModalProps) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
       <div
-        className="flex max-h-[85vh] w-full max-w-lg flex-col rounded-lg border border-neutral-700 bg-neutral-900 shadow-xl"
+        className="flex max-h-[85vh] w-full max-w-lg flex-col rounded-lg border border-border bg-surface shadow-xl"
         role="dialog"
         aria-modal="true"
         aria-labelledby="tag-editor-title"
       >
-        <div className="flex items-center justify-between border-b border-neutral-800 px-4 py-3">
-          <h2 id="tag-editor-title" className="text-sm font-semibold text-white">
+        <div className="flex items-center justify-between border-b border-border px-4 py-3">
+          <h2 id="tag-editor-title" className="text-sm font-semibold text-foreground">
             Edit Tags
           </h2>
           <button
             type="button"
             onClick={onClose}
             disabled={saving}
-            className="rounded-md px-2 py-1 text-neutral-400 hover:bg-neutral-800 hover:text-white disabled:opacity-40"
+            className="rounded-md px-2 py-1 text-muted hover:bg-surface-hover hover:text-foreground disabled:opacity-40"
             aria-label="Close"
           >
             ×
@@ -119,16 +119,16 @@ export function TagEditorModal({ trackId, onClose }: TagEditorModalProps) {
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
-          {loading && <div className="text-sm text-neutral-500">Loading tags…</div>}
+          {loading && <div className="text-sm text-muted">Loading tags…</div>}
 
           {!loading && info && (
             <>
-              <div className="mb-3 text-xs text-neutral-500">
-                File: <span className="text-neutral-300">{info.file_name}</span>
+              <div className="mb-3 text-xs text-muted">
+                File: <span className="text-foreground">{info.file_name}</span>
                 {info.tag_type && (
                   <>
                     {" "}
-                    · Tag type: <span className="text-neutral-300">{info.tag_type}</span>
+                    · Tag type: <span className="text-foreground">{info.tag_type}</span>
                   </>
                 )}
               </div>
@@ -136,16 +136,16 @@ export function TagEditorModal({ trackId, onClose }: TagEditorModalProps) {
               <div className="space-y-2">
                 {fields.map((field, index) => (
                   <label key={field.key} className="block text-xs">
-                    <span className="mb-1 block text-neutral-500">{field.key}</span>
+                    <span className="mb-1 block text-muted">{field.key}</span>
                     {field.editable ? (
                       <input
                         value={field.value}
                         onChange={(event) => updateField(index, event.target.value)}
                         disabled={saving}
-                        className="w-full rounded-md border border-neutral-700 bg-neutral-950 px-2 py-1.5 text-sm text-neutral-100"
+                        className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground"
                       />
                     ) : (
-                      <div className="rounded-md border border-neutral-800 bg-neutral-950 px-2 py-1.5 text-sm text-neutral-400">
+                      <div className="rounded-md border border-border bg-background px-2 py-1.5 text-sm text-muted">
                         {field.value}
                       </div>
                     )}
@@ -154,14 +154,14 @@ export function TagEditorModal({ trackId, onClose }: TagEditorModalProps) {
               </div>
 
               {availableKeys.length > 0 && (
-                <div className="mt-4 border-t border-neutral-800 pt-3">
-                  <div className="mb-2 text-xs font-medium text-neutral-400">Add tag</div>
+                <div className="mt-4 border-t border-border pt-3">
+                  <div className="mb-2 text-xs font-medium text-muted">Add tag</div>
                   <div className="flex gap-2">
                     <select
                       value={newTagKey}
                       onChange={(event) => setNewTagKey(event.target.value)}
                       disabled={saving}
-                      className="min-w-0 flex-1 rounded-md border border-neutral-700 bg-neutral-950 px-2 py-1.5 text-sm text-neutral-100"
+                      className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground"
                     >
                       <option value="">Select key…</option>
                       {availableKeys.map((key) => (
@@ -175,13 +175,13 @@ export function TagEditorModal({ trackId, onClose }: TagEditorModalProps) {
                       onChange={(event) => setNewTagValue(event.target.value)}
                       disabled={saving}
                       placeholder="Value"
-                      className="min-w-0 flex-1 rounded-md border border-neutral-700 bg-neutral-950 px-2 py-1.5 text-sm text-neutral-100"
+                      className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground"
                     />
                     <button
                       type="button"
                       onClick={addField}
                       disabled={saving || !newTagKey}
-                      className="rounded-md bg-neutral-800 px-3 py-1.5 text-xs text-white hover:bg-neutral-700 disabled:opacity-40"
+                      className="rounded-md bg-surface-hover px-3 py-1.5 text-xs text-foreground hover:bg-border disabled:opacity-40"
                     >
                       Add
                     </button>
@@ -198,12 +198,12 @@ export function TagEditorModal({ trackId, onClose }: TagEditorModalProps) {
           )}
         </div>
 
-        <div className="flex justify-end gap-2 border-t border-neutral-800 px-4 py-3">
+        <div className="flex justify-end gap-2 border-t border-border px-4 py-3">
           <button
             type="button"
             onClick={onClose}
             disabled={saving}
-            className="rounded-md px-3 py-1.5 text-sm text-neutral-300 hover:bg-neutral-800 disabled:opacity-40"
+            className="rounded-md px-3 py-1.5 text-sm text-foreground hover:bg-surface-hover disabled:opacity-40"
           >
             Cancel
           </button>
@@ -211,7 +211,7 @@ export function TagEditorModal({ trackId, onClose }: TagEditorModalProps) {
             type="button"
             onClick={() => void handleSave()}
             disabled={saving || loading}
-            className="rounded-md bg-white px-3 py-1.5 text-sm font-medium text-neutral-950 hover:bg-neutral-200 disabled:opacity-40"
+            className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-40"
           >
             {saving ? "Saving…" : "Save"}
           </button>

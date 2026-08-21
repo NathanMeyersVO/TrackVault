@@ -34,7 +34,7 @@ export function SidebarResizeHandle({
       aria-label="Resize sidebar"
       onMouseDown={handleMouseDown}
       className={`w-1 shrink-0 cursor-col-resize touch-none ${
-        active ? "bg-neutral-600" : "bg-neutral-800 hover:bg-neutral-700"
+        active ? "bg-border" : "bg-surface-hover hover:bg-border"
       }`}
     />
   );

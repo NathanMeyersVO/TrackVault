@@ -89,6 +89,10 @@ export const COMMON_TAG_KEYS = [
   "Copyright",
 ] as const;
 
+export interface ThemeSettings {
+  theme_id: string;
+}
+
 export const api = {
   listTracks: () => invoke<Track[]>("list_tracks"),
   getLibraryFolder: () => invoke<string | null>("get_library_folder"),
@@ -161,6 +165,9 @@ export const api = {
     trackId: number,
     fields: { key: string; value: string }[],
   ) => invoke<Track>("update_track_tags", { trackId, fields }),
+  getAppSettings: () => invoke<ThemeSettings>("get_app_settings"),
+  setAppSettings: (settings: ThemeSettings) =>
+    invoke<ThemeSettings>("set_app_settings", { settings }),
 };
 
 export function formatDuration(ms: number): string {

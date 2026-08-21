@@ -6,7 +6,7 @@ import {
   isReorderDrag,
   setReorderDragData,
 } from "../lib/dragDrop";
-import { appearance } from "../lib/appearance";
+import { useAppearance } from "../hooks/useAppearance";
 import type { Playlist, Track } from "../lib/tauri";
 import { TrackTableRow } from "./TrackTableRow";
 
@@ -49,9 +49,12 @@ function reorderTrackIds(
   return next;
 }
 
-function footerRowStyle(isSelected: boolean): CSSProperties | undefined {
+function footerRowStyle(
+  isSelected: boolean,
+  cursorBackground: string,
+): CSSProperties | undefined {
   if (!isSelected) return undefined;
-  return { backgroundColor: appearance.cursorBackgroundColor };
+  return { backgroundColor: cursorBackground };
 }
 
 export function TrackTable({
@@ -70,6 +73,7 @@ export function TrackTable({
   draggable = true,
   footerRow,
 }: TrackTableProps) {
+  const { settings } = useAppearance();
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dropTarget, setDropTarget] = useState<{
     index: number;
@@ -121,22 +125,24 @@ export function TrackTable({
 
   if (tracks.length === 0 && !footerRow) {
     return (
-      <div className="flex h-full items-center justify-center text-neutral-500">
+      <div className="flex h-full items-center justify-center text-muted">
         {emptyMessage}
       </div>
     );
   }
 
-  const footerStyle = footerRow ? footerRowStyle(footerRow.isSelected) : undefined;
+  const footerStyle = footerRow
+    ? footerRowStyle(footerRow.isSelected, settings.cursorBackground)
+    : undefined;
 
   return (
     <div
       id={TRACK_LIST_ID}
       tabIndex={0}
-      className="h-full overflow-auto outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-neutral-600"
+      className="h-full overflow-auto outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-border"
     >
       <table className="w-full min-w-[640px] text-sm">
-        <thead className="sticky top-0 bg-neutral-950/95 text-left text-xs uppercase tracking-wide text-neutral-500">
+        <thead className="sticky top-0 bg-background/95 text-left text-xs uppercase tracking-wide text-muted">
           <tr>
             {reorderable && <th className="w-8 px-1 py-2" aria-label="Reorder" />}
             <th className="px-4 py-2 font-medium">Title</th>
@@ -148,7 +154,7 @@ export function TrackTable({
         </thead>
         <tbody>
           {tracks.length === 0 && (
-            <tr className="border-b border-neutral-900 text-neutral-500">
+            <tr className="border-b border-border text-muted">
               {reorderable && <td className="px-1 py-2" />}
               <td colSpan={4} className="px-4 py-6 text-center">
                 {emptyMessage}
@@ -204,17 +210,17 @@ export function TrackTable({
               }}
               onDoubleClick={() => footerRow.onActivate()}
               style={footerStyle}
-              className="cursor-pointer border-b border-neutral-900 text-neutral-200 hover:bg-neutral-900/70"
+              className="cursor-pointer border-b border-border text-foreground hover:bg-surface/70"
             >
               {reorderable && <td className="px-1 py-2" />}
               <td className="px-4 py-2">
-                <div className="truncate font-medium italic text-neutral-400">
+                <div className="truncate font-medium italic text-muted">
                   {footerRow.label}
                 </div>
               </td>
-              <td className="px-4 py-2 text-neutral-500">—</td>
-              <td className="px-4 py-2 text-neutral-500">—</td>
-              <td className="px-4 py-2 text-right text-neutral-500">—</td>
+              <td className="px-4 py-2 text-muted">—</td>
+              <td className="px-4 py-2 text-muted">—</td>
+              <td className="px-4 py-2 text-right text-muted">—</td>
               <td className="px-2 py-2" />
             </tr>
           )}

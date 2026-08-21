@@ -117,16 +117,16 @@ export function NowPlayingBar() {
   const canSeek = (hasLoadedTrack || cursorTrackId !== null) && !transportBusy;
 
   return (
-    <footer className="border-t border-neutral-800 bg-neutral-900 px-4 py-3">
+    <footer className="border-t border-border bg-surface px-4 py-3">
       <div className="mb-3 flex items-center gap-4">
-        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-md bg-neutral-800 text-lg text-neutral-500">
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-md bg-surface-hover text-lg text-muted">
           ♪
         </div>
         <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-medium text-white">
+          <div className="truncate text-sm font-medium text-foreground">
             {displayTrack?.title ?? "Not playing"}
           </div>
-          <div className="truncate text-xs text-neutral-400">
+          <div className="truncate text-xs text-muted">
             {displayTrack
               ? `${displayTrack.artist || "Unknown artist"} — ${displayTrack.album || "Unknown album"}`
               : "Choose a track from your library"}
@@ -143,7 +143,7 @@ export function NowPlayingBar() {
           onSeekToEnd={handleSeekToEnd}
         />
         <VolumeControl volume={volume} onChange={setVolume} />
-        <div className="flex w-36 shrink-0 items-center justify-end gap-1.5 text-xs tabular-nums text-neutral-400">
+        <div className="flex w-36 shrink-0 items-center justify-end gap-1.5 text-xs tabular-nums text-muted">
           {transportBusy && <SeekIndicator />}
           <span>
             {formatDuration(displayPositionMs)} / {formatDuration(durationMs)}
@@ -164,7 +164,7 @@ export function NowPlayingBar() {
           />
         </div>
         {transportBusy && (
-          <div className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-md bg-neutral-950/40">
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-md bg-background/40">
             <SeekIndicator className="text-2xl" />
           </div>
         )}

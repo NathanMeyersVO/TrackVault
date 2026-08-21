@@ -1,11 +1,13 @@
 import { useState } from "react";
 
+import { AppearanceSettingsModal } from "./AppearanceSettingsModal";
 import { KeyboardShortcutsModal } from "./KeyboardShortcutsModal";
 import { MenuBarStatus, MenuDropdown, type MenuEntry } from "./MenuDropdown";
 import { useLibraryMenuActions } from "../hooks/useLibraryMenuActions";
 
 export function AppMenuBar() {
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [appearanceOpen, setAppearanceOpen] = useState(false);
   const {
     libraryFolder,
     scanning,
@@ -65,6 +67,13 @@ export function AppMenuBar() {
     },
   ];
 
+  const viewItems: MenuEntry[] = [
+    {
+      label: "Appearance…",
+      onClick: () => setAppearanceOpen(true),
+    },
+  ];
+
   const helpItems: MenuEntry[] = [
     {
       label: "Keyboard shortcuts…",
@@ -79,23 +88,24 @@ export function AppMenuBar() {
       ? "text-red-400"
       : uploadMessage || configMessage
         ? "text-green-400"
-        : "text-neutral-400";
+        : "text-muted";
 
   return (
     <>
-      <header className="flex shrink-0 items-center gap-4 border-b border-neutral-800 bg-neutral-900 px-4 py-2">
-        <h1 className="shrink-0 text-sm font-semibold tracking-tight text-white">
+      <header className="flex shrink-0 items-center gap-4 border-b border-border bg-surface px-4 py-2">
+        <h1 className="shrink-0 text-sm font-semibold tracking-tight text-foreground">
           TrackVault
         </h1>
         <nav className="flex shrink-0 items-center gap-1">
           <MenuDropdown label="File" items={fileItems} />
+          <MenuDropdown label="View" items={viewItems} />
           <MenuDropdown label="Help" items={helpItems} />
         </nav>
         <div className="ml-auto min-w-0 max-w-[50%] text-right">
           {statusMessage ? (
             <MenuBarStatus className={statusClassName}>{statusMessage}</MenuBarStatus>
           ) : (
-            <MenuBarStatus className="text-neutral-500">
+            <MenuBarStatus className="text-muted">
               {libraryFolder ?? "No library folder chosen"}
             </MenuBarStatus>
           )}
@@ -106,6 +116,9 @@ export function AppMenuBar() {
       {resetConfirmDialog}
       {shortcutsOpen ? (
         <KeyboardShortcutsModal onClose={() => setShortcutsOpen(false)} />
+      ) : null}
+      {appearanceOpen ? (
+        <AppearanceSettingsModal onClose={() => setAppearanceOpen(false)} />
       ) : null}
     </>
   );

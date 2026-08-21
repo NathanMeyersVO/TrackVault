@@ -3,7 +3,7 @@ import type { CSSProperties, DragEvent } from "react";
 import { setTrackDragData } from "../lib/dragDrop";
 import type { Playlist, Track } from "../lib/tauri";
 import { formatDuration } from "../lib/tauri";
-import { appearance } from "../lib/appearance";
+import { useAppearance } from "../hooks/useAppearance";
 import { usePlayerStore } from "../store/playerStore";
 import { TrackRowMenu } from "./TrackRowMenu";
 import { useTrackTooltip } from "./TrackTooltip";
@@ -30,15 +30,21 @@ interface TrackTableRowProps {
   onReorderDrop?: (event: DragEvent<HTMLTableRowElement>) => void;
 }
 
-function rowStyle(isPlaying: boolean, isCursor: boolean): CSSProperties | undefined {
+function rowStyle(
+  isPlaying: boolean,
+  isCursor: boolean,
+  playingText: string,
+  cursorBackground: string,
+  cursorBackgroundPlaying: string,
+): CSSProperties | undefined {
   if (!isPlaying && !isCursor) return undefined;
 
   return {
-    color: isPlaying ? appearance.playingTextColor : undefined,
+    color: isPlaying ? playingText : undefined,
     backgroundColor: isCursor
       ? isPlaying
-        ? appearance.cursorBackgroundPlaying
-        : appearance.cursorBackgroundColor
+        ? cursorBackgroundPlaying
+        : cursorBackground
       : undefined,
   };
 }
@@ -81,9 +87,16 @@ export function TrackTableRow({
   onReorderDragOver,
   onReorderDrop,
 }: TrackTableRowProps) {
+  const { settings } = useAppearance();
   const setDraggingTrackId = usePlayerStore((state) => state.setDraggingTrackId);
   const { onMouseEnter, onMouseLeave, tooltip } = useTrackTooltip(track.id);
-  const style = rowStyle(isPlaying, isCursor);
+  const style = rowStyle(
+    isPlaying,
+    isCursor,
+    settings.playingText,
+    settings.cursorBackground,
+    settings.cursorBackgroundPlaying,
+  );
 
   return (
     <>
@@ -106,19 +119,19 @@ export function TrackTableRow({
         }}
         onDoubleClick={() => onPlay(track.id)}
         style={style}
-        className={`border-b border-neutral-900 text-neutral-200 hover:bg-neutral-900/70 ${
+        className={`border-b border-border text-foreground hover:bg-surface/70 ${
           draggable ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"
         } ${isDragging ? "opacity-40" : ""} ${
-          dropIndicator === "before" ? "border-t-2 border-t-sky-400" : ""
-        } ${dropIndicator === "after" ? "border-b-2 border-b-sky-400" : ""}`}
+          dropIndicator === "before" ? "border-t-2 border-t-drop" : ""
+        } ${dropIndicator === "after" ? "border-b-2 border-b-drop" : ""}`}
       >
         {reorderable && (
-          <td className="w-8 px-1 py-2 text-neutral-500">
+          <td className="w-8 px-1 py-2 text-muted">
             <button
               type="button"
               draggable
               aria-label={`Reorder ${track.title}`}
-              className="flex cursor-grab items-center justify-center rounded p-1 hover:bg-neutral-800 hover:text-neutral-300 active:cursor-grabbing"
+              className="flex cursor-grab items-center justify-center rounded p-1 hover:bg-surface-hover hover:text-foreground active:cursor-grabbing"
               onClick={(event) => event.stopPropagation()}
               onDragStart={(event) => {
                 event.stopPropagation();
@@ -142,23 +155,20 @@ export function TrackTableRow({
         </td>
         <td className="px-4 py-2">
           <div
-            className="truncate"
-            style={{ color: isPlaying ? undefined : "#a3a3a3" }}
+            className={`truncate ${isPlaying ? "" : "text-muted"}`}
           >
             {track.artist || "—"}
           </div>
         </td>
         <td className="px-4 py-2">
           <div
-            className="truncate"
-            style={{ color: isPlaying ? undefined : "#a3a3a3" }}
+            className={`truncate ${isPlaying ? "" : "text-muted"}`}
           >
             {track.album || "—"}
           </div>
         </td>
         <td
-          className="px-4 py-2 text-right tabular-nums"
-          style={{ color: isPlaying ? undefined : "#a3a3a3" }}
+          className={`px-4 py-2 text-right tabular-nums ${isPlaying ? "" : "text-muted"}`}
         >
           {formatDuration(track.duration_ms)}
         </td>

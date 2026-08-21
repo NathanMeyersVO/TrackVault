@@ -50,7 +50,7 @@ export function MenuDropdown({ label, items }: MenuDropdownProps) {
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
-        className="rounded px-2 py-1 text-sm text-neutral-300 hover:bg-neutral-800 hover:text-white"
+        className="rounded px-2 py-1 text-sm text-foreground hover:bg-surface-hover hover:text-foreground"
         aria-haspopup="menu"
         aria-expanded={open}
       >
@@ -59,7 +59,7 @@ export function MenuDropdown({ label, items }: MenuDropdownProps) {
       {open && (
         <div
           role="menu"
-          className="absolute left-0 top-full z-30 mt-1 min-w-[12rem] rounded-md border border-neutral-700 bg-neutral-900 py-1 shadow-lg"
+          className="absolute left-0 top-full z-30 mt-1 min-w-[12rem] rounded-md border border-border bg-surface py-1 shadow-lg"
         >
           {items.map((entry, index) => {
             if (isSeparator(entry)) {
@@ -67,7 +67,7 @@ export function MenuDropdown({ label, items }: MenuDropdownProps) {
                 <div
                   key={`sep-${index}`}
                   role="separator"
-                  className="my-1 border-t border-neutral-700"
+                  className="my-1 border-t border-border"
                 />
               );
             }
@@ -79,7 +79,7 @@ export function MenuDropdown({ label, items }: MenuDropdownProps) {
                 role="menuitem"
                 disabled={entry.disabled}
                 onClick={() => closeAndRun(entry)}
-                className="block w-full px-3 py-1.5 text-left text-sm text-neutral-200 hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-40"
+                className="block w-full px-3 py-1.5 text-left text-sm text-foreground hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {entry.label}
               </button>

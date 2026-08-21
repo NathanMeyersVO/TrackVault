@@ -233,7 +233,7 @@ function TaglistGroup({
           className="mb-0.5 flex items-center gap-1 rounded-md py-1 pl-6 pr-2"
           onClick={(event) => event.stopPropagation()}
         >
-          <span className="shrink-0 text-sm text-neutral-400">{entry.value} -</span>
+          <span className="shrink-0 text-sm text-muted">{entry.value} -</span>
           <input
             autoFocus
             value={editTitle}
@@ -256,7 +256,7 @@ function TaglistGroup({
               void saveTitle(entry.value!);
             }}
             placeholder="Display title"
-            className="min-w-0 flex-1 rounded-md border border-neutral-700 bg-neutral-950 px-2 py-1 text-sm text-neutral-100"
+            className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1 text-sm text-foreground"
           />
         </div>
       );
@@ -284,19 +284,19 @@ function TaglistGroup({
 
     const dropBarClass =
       dropIndicator === "before"
-        ? "border-t-2 border-t-sky-400"
+        ? "border-t-2 border-t-drop"
         : dropIndicator === "after"
-          ? "border-b-2 border-b-sky-400"
+          ? "border-b-2 border-b-drop"
           : "";
     const stateClass = dropIndicator
       ? ""
       : isDragOver
-        ? "border-2 border-blue-500 bg-blue-950/40 text-white ring-2 ring-blue-500"
+        ? "border-2 border-accent bg-accent-subtle/40 text-foreground ring-2 ring-accent"
         : isTrackDragging
-          ? "border border-dashed border-neutral-600 bg-neutral-800/50 text-neutral-200"
+          ? "border border-dashed border-border bg-surface-hover/50 text-foreground"
           : active
-            ? "border border-transparent bg-neutral-800 text-white"
-            : "border border-transparent text-neutral-300 hover:bg-neutral-800/60";
+            ? "border border-transparent bg-surface-hover text-foreground"
+            : "border border-transparent text-foreground hover:bg-surface-hover/60";
 
     return (
       <div
@@ -358,7 +358,7 @@ function TaglistGroup({
           );
         }}
         onDrop={handleDrop}
-        className={`group/sublist mb-0.5 flex w-full items-center rounded-md py-1.5 pr-3 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-neutral-500 ${
+        className={`group/sublist mb-0.5 flex w-full items-center rounded-md py-1.5 pr-3 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-muted ${
           reorderable ? "pl-2" : "pl-6"
         } ${dropBarClass} ${isDragging ? "opacity-40" : ""} ${stateClass}`}
       >
@@ -367,7 +367,7 @@ function TaglistGroup({
             type="button"
             draggable
             aria-label={`Reorder ${label}`}
-            className="mr-1 flex shrink-0 cursor-grab items-center justify-center rounded p-0.5 text-neutral-600 hover:bg-neutral-800 hover:text-neutral-300 active:cursor-grabbing"
+            className="mr-1 flex shrink-0 cursor-grab items-center justify-center rounded p-0.5 text-muted hover:bg-surface-hover hover:text-foreground active:cursor-grabbing"
             onClick={(event) => event.stopPropagation()}
             onDragStart={(event) => {
               event.stopPropagation();
@@ -381,13 +381,13 @@ function TaglistGroup({
         ) : null}
         <span className="min-w-0 flex-1 truncate">
           <span className="truncate">{label}</span>
-          <span className="ml-1 text-neutral-500">({entry.track_count})</span>
+          <span className="ml-1 text-muted">({entry.track_count})</span>
         </span>
         {entry.value != null && (
           <button
             type="button"
             onClick={(event) => startEditing(event, entry.value!, entry.display_title)}
-            className="ml-1 hidden shrink-0 rounded px-1 text-xs text-neutral-500 hover:text-white group-hover/sublist:inline"
+            className="ml-1 hidden shrink-0 rounded px-1 text-xs text-muted hover:text-foreground group-hover/sublist:inline"
             title="Edit title"
           >
             ✎
@@ -400,14 +400,14 @@ function TaglistGroup({
   return (
     <div className="mb-2">
       <div className="group flex items-center justify-between px-3 py-1">
-        <span className="truncate text-xs font-medium text-neutral-400">
+        <span className="truncate text-xs font-medium text-muted">
           {taglist.name}
         </span>
         <div className="hidden group-hover:inline">
           <button
             type="button"
             onClick={(event) => void importTitles(event)}
-            className="rounded px-1 text-xs text-neutral-500 hover:text-white"
+            className="rounded px-1 text-xs text-muted hover:text-foreground"
             title="Import titles"
           >
             Titles
@@ -415,7 +415,7 @@ function TaglistGroup({
           <button
             type="button"
             onClick={(event) => void deleteTaglist(event)}
-            className="rounded px-1 text-xs text-neutral-500 hover:text-red-400"
+            className="rounded px-1 text-xs text-muted hover:text-red-400"
             title="Delete taglist"
           >
             ×
@@ -518,12 +518,12 @@ export function Sidebar({ width }: { width: number }) {
 
   return (
     <aside
-      className="flex shrink-0 flex-col bg-neutral-900"
+      className="flex shrink-0 flex-col bg-surface"
       style={{ width }}
     >
-      <div className="border-b border-neutral-800 px-4 py-3">
-        <h2 className="text-sm font-semibold tracking-tight text-white">Browse</h2>
-        <p className="text-xs text-neutral-500">Library, playlists & taglists</p>
+      <div className="border-b border-border px-4 py-3">
+        <h2 className="text-sm font-semibold tracking-tight text-foreground">Browse</h2>
+        <p className="text-xs text-muted">Library, playlists & taglists</p>
       </div>
 
       <nav className="flex-1 overflow-y-auto p-2">
@@ -531,14 +531,14 @@ export function Sidebar({ width }: { width: number }) {
           onClick={() => setView("library")}
           className={`mb-1 w-full rounded-md px-3 py-2 text-left text-sm ${
             isLibraryActive
-              ? "bg-neutral-800 text-white"
-              : "text-neutral-300 hover:bg-neutral-800/60"
+              ? "bg-surface-hover text-foreground"
+              : "text-foreground hover:bg-surface-hover/60"
           }`}
         >
           Library
         </button>
 
-        <div className="mb-2 mt-4 px-3 text-xs font-medium uppercase tracking-wide text-neutral-500">
+        <div className="mb-2 mt-4 px-3 text-xs font-medium uppercase tracking-wide text-muted">
           {isTrackDragging ? "Drop on a playlist or taglist" : "Playlists"}
         </div>
 
@@ -587,24 +587,24 @@ export function Sidebar({ width }: { width: number }) {
               onDrop={(event) => {
                 void handlePlaylistDrop(playlist.id, event);
               }}
-              className={`group/playlist mb-1 flex w-full items-center rounded-md px-3 py-2 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-neutral-500 ${
+              className={`group/playlist mb-1 flex w-full items-center rounded-md px-3 py-2 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-muted ${
                 isDragOver
-                  ? "border-2 border-blue-500 bg-blue-950/40 text-white ring-2 ring-blue-500"
+                  ? "border-2 border-accent bg-accent-subtle/40 text-foreground ring-2 ring-accent"
                   : isTrackDragging
-                    ? "border border-dashed border-neutral-600 bg-neutral-800/50 text-neutral-200"
+                    ? "border border-dashed border-border bg-surface-hover/50 text-foreground"
                     : active
-                      ? "border border-transparent bg-neutral-800 text-white"
-                      : "border border-transparent text-neutral-300 hover:bg-neutral-800/60"
+                      ? "border border-transparent bg-surface-hover text-foreground"
+                      : "border border-transparent text-foreground hover:bg-surface-hover/60"
               }`}
             >
               <span className="min-w-0 flex-1 truncate">
                 {playlist.name}
-                <span className="ml-1 text-neutral-500">({playlist.track_count})</span>
+                <span className="ml-1 text-muted">({playlist.track_count})</span>
               </span>
               <button
                 type="button"
                 onClick={(event) => requestDeletePlaylist(event, playlist)}
-                className="ml-1 hidden shrink-0 rounded px-1 text-xs text-neutral-500 hover:text-red-400 group-hover/playlist:inline"
+                className="ml-1 hidden shrink-0 rounded px-1 text-xs text-muted hover:text-red-400 group-hover/playlist:inline"
                 title="Delete playlist"
               >
                 ×
@@ -624,18 +624,18 @@ export function Sidebar({ width }: { width: number }) {
                 if (e.key === "Escape") setCreating(false);
               }}
               placeholder="Playlist name"
-              className="w-full rounded-md border border-neutral-700 bg-neutral-950 px-2 py-1 text-sm"
+              className="w-full rounded-md border border-border bg-background px-2 py-1 text-sm"
             />
             <div className="flex gap-2">
               <button
                 onClick={createPlaylist}
-                className="rounded-md bg-blue-600 px-2 py-1 text-xs text-white hover:bg-blue-500"
+                className="rounded-md bg-accent px-2 py-1 text-xs text-foreground hover:bg-accent-hover"
               >
                 Create
               </button>
               <button
                 onClick={() => setCreating(false)}
-                className="rounded-md px-2 py-1 text-xs text-neutral-400 hover:text-white"
+                className="rounded-md px-2 py-1 text-xs text-muted hover:text-foreground"
               >
                 Cancel
               </button>
@@ -644,13 +644,13 @@ export function Sidebar({ width }: { width: number }) {
         ) : (
           <button
             onClick={() => setCreating(true)}
-            className="mt-1 w-full rounded-md px-3 py-2 text-left text-sm text-neutral-400 hover:bg-neutral-800/60 hover:text-white"
+            className="mt-1 w-full rounded-md px-3 py-2 text-left text-sm text-muted hover:bg-surface-hover/60 hover:text-foreground"
           >
             + New playlist
           </button>
         )}
 
-        <div className="mb-2 mt-4 px-3 text-xs font-medium uppercase tracking-wide text-neutral-500">
+        <div className="mb-2 mt-4 px-3 text-xs font-medium uppercase tracking-wide text-muted">
           {isTrackDragging ? "Drop on a taglist sublist" : "Taglists"}
         </div>
 
@@ -682,12 +682,12 @@ export function Sidebar({ width }: { width: number }) {
                 if (e.key === "Escape") setCreatingTaglist(false);
               }}
               placeholder="Taglist name"
-              className="w-full rounded-md border border-neutral-700 bg-neutral-950 px-2 py-1 text-sm"
+              className="w-full rounded-md border border-border bg-background px-2 py-1 text-sm"
             />
             <select
               value={newTaglistKey}
               onChange={(e) => setNewTaglistKey(e.target.value)}
-              className="w-full rounded-md border border-neutral-700 bg-neutral-950 px-2 py-1 text-sm"
+              className="w-full rounded-md border border-border bg-background px-2 py-1 text-sm"
             >
               {COMMON_TAG_KEYS.map((key) => (
                 <option key={key} value={key}>
@@ -698,13 +698,13 @@ export function Sidebar({ width }: { width: number }) {
             <div className="flex gap-2">
               <button
                 onClick={() => void createTaglist()}
-                className="rounded-md bg-blue-600 px-2 py-1 text-xs text-white hover:bg-blue-500"
+                className="rounded-md bg-accent px-2 py-1 text-xs text-foreground hover:bg-accent-hover"
               >
                 Create
               </button>
               <button
                 onClick={() => setCreatingTaglist(false)}
-                className="rounded-md px-2 py-1 text-xs text-neutral-400 hover:text-white"
+                className="rounded-md px-2 py-1 text-xs text-muted hover:text-foreground"
               >
                 Cancel
               </button>
@@ -713,7 +713,7 @@ export function Sidebar({ width }: { width: number }) {
         ) : (
           <button
             onClick={() => setCreatingTaglist(true)}
-            className="mt-1 w-full rounded-md px-3 py-2 text-left text-sm text-neutral-400 hover:bg-neutral-800/60 hover:text-white"
+            className="mt-1 w-full rounded-md px-3 py-2 text-left text-sm text-muted hover:bg-surface-hover/60 hover:text-foreground"
           >
             + New taglist
           </button>

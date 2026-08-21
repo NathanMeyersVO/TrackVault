@@ -1,6 +1,8 @@
 import { useEffect, useRef } from "react";
 import WaveSurfer from "wavesurfer.js";
 
+import { useAppearance } from "../hooks/useAppearance";
+
 interface WaveformProps {
   trackId: number | null;
   peaks: number[];
@@ -20,6 +22,7 @@ export function Waveform({
   interactive = true,
   onSeek,
 }: WaveformProps) {
+  const { settings } = useAppearance();
   const containerRef = useRef<HTMLDivElement>(null);
   const wavesurferRef = useRef<WaveSurfer | null>(null);
   const onSeekRef = useRef(onSeek);
@@ -47,9 +50,9 @@ export function Waveform({
       cursorWidth: 2,
       normalize: true,
       interact: interactive && !transportBusy,
-      waveColor: "#525252",
-      progressColor: "#60a5fa",
-      cursorColor: "#ffffff",
+      waveColor: settings.waveformWave,
+      progressColor: settings.waveformProgress,
+      cursorColor: settings.waveformCursor,
     });
 
     const durationSec = durationMs / 1000;
@@ -96,7 +99,14 @@ export function Waveform({
       ws.destroy();
       wavesurferRef.current = null;
     };
-  }, [trackId, peaks, durationMs]);
+  }, [
+    trackId,
+    peaks,
+    durationMs,
+    settings.waveformWave,
+    settings.waveformProgress,
+    settings.waveformCursor,
+  ]);
 
   useEffect(() => {
     const ws = wavesurferRef.current;
@@ -121,11 +131,11 @@ export function Waveform({
 
   if (!trackId) {
     return (
-      <div className="flex h-[72px] items-center justify-center rounded-md bg-neutral-900 text-xs text-neutral-500">
+      <div className="flex h-[72px] items-center justify-center rounded-md bg-surface text-xs text-muted">
         Select a track to view waveform
       </div>
     );
   }
 
-  return <div ref={containerRef} className="w-full rounded-md bg-neutral-900" />;
+  return <div ref={containerRef} className="w-full rounded-md bg-surface" />;
 }

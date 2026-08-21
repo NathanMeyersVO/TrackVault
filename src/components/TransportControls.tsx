@@ -28,7 +28,7 @@ export function TransportControls({
       <button
         onClick={onStop}
         disabled={transportBusy || !hasLoadedTrack}
-        className="flex h-9 w-9 items-center justify-center rounded-md text-neutral-300 hover:bg-neutral-800 hover:text-white disabled:opacity-40"
+        className="flex h-9 w-9 items-center justify-center rounded-md text-foreground hover:bg-surface-hover hover:text-foreground disabled:opacity-40"
         aria-label="Stop"
         title="Stop"
       >
@@ -37,7 +37,7 @@ export function TransportControls({
       <button
         onClick={onSeekToStart}
         disabled={transportBusy || !canTransport}
-        className="flex h-9 w-9 items-center justify-center rounded-md text-neutral-300 hover:bg-neutral-800 hover:text-white disabled:opacity-40"
+        className="flex h-9 w-9 items-center justify-center rounded-md text-foreground hover:bg-surface-hover hover:text-foreground disabled:opacity-40"
         aria-label="Jump to beginning"
         title="Jump to beginning"
       >
@@ -46,7 +46,7 @@ export function TransportControls({
       <button
         onClick={onTogglePlayPause}
         disabled={transportBusy || !canTransport}
-        className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-neutral-950 hover:bg-neutral-200 disabled:opacity-40"
+        className="flex h-10 w-10 items-center justify-center rounded-full bg-foreground text-background hover:bg-muted disabled:opacity-40"
         aria-label={isPlaying ? "Pause" : "Play"}
         title={isPlaying ? "Pause" : "Play"}
       >
@@ -55,7 +55,7 @@ export function TransportControls({
       <button
         onClick={onSeekToEnd}
         disabled={transportBusy || !canTransport}
-        className="flex h-9 w-9 items-center justify-center rounded-md text-neutral-300 hover:bg-neutral-800 hover:text-white disabled:opacity-40"
+        className="flex h-9 w-9 items-center justify-center rounded-md text-foreground hover:bg-surface-hover hover:text-foreground disabled:opacity-40"
         aria-label="Jump to end"
         title="Jump to end"
       >

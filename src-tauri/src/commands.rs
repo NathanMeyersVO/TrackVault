@@ -623,6 +623,21 @@ pub fn update_track_tags(
     Ok(track)
 }
 
+#[tauri::command]
+pub fn get_app_settings(state: State<'_, AppState>) -> Result<crate::app_settings::ThemeSettings, String> {
+    let db = state.db.lock();
+    crate::app_settings::get_theme(&db)
+}
+
+#[tauri::command]
+pub fn set_app_settings(
+    state: State<'_, AppState>,
+    settings: crate::app_settings::ThemeSettings,
+) -> Result<crate::app_settings::ThemeSettings, String> {
+    let db = state.db.lock();
+    crate::app_settings::set_theme(&db, settings)
+}
+
 pub fn init_state(app: &AppHandle) -> Result<AppState, String> {
     let data_dir = app
         .path()

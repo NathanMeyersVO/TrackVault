@@ -39,7 +39,7 @@ function MainContent() {
       </div>
 
       {view === "library" && tracks.length === 0 && (
-        <div className="border-t border-neutral-800 px-4 py-2 text-xs text-neutral-500">
+        <div className="border-t border-border px-4 py-2 text-xs text-muted">
           Tip: use File → Choose library folder to scan MP3, FLAC, WAV, OGG, and M4A files.
         </div>
       )}
