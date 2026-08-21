@@ -318,6 +318,41 @@ pub fn reorder_playlist_tracks(
 }
 
 #[tauri::command]
+pub fn rename_playlist(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: i64,
+    name: String,
+) -> Result<(), String> {
+    let name = name.trim();
+    if name.is_empty() {
+        return Err("Name cannot be empty".to_string());
+    }
+    state
+        .db
+        .lock()
+        .rename_playlist(id, name)
+        .map_err(|e| e.to_string())?;
+    let _ = app.emit("library-updated", ());
+    Ok(())
+}
+
+#[tauri::command]
+pub fn reorder_playlists(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    playlist_ids: Vec<i64>,
+) -> Result<(), String> {
+    state
+        .db
+        .lock()
+        .reorder_playlists(&playlist_ids)
+        .map_err(|e| e.to_string())?;
+    let _ = app.emit("library-updated", ());
+    Ok(())
+}
+
+#[tauri::command]
 pub fn create_taglist(
     state: State<'_, AppState>,
     name: String,
@@ -724,6 +759,35 @@ pub fn reorder_collections(
         .lock()
         .reorder_collections(&collection_ids)
         .map_err(|e| e.to_string())?;
+    let _ = app.emit("library-updated", ());
+    Ok(())
+}
+
+#[tauri::command]
+pub fn rename_collection(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: i64,
+    name: String,
+) -> Result<(), String> {
+    let name = name.trim();
+    if name.is_empty() {
+        return Err("Name cannot be empty".to_string());
+    }
+    {
+        let db = state.db.lock();
+        if db.get_collection(id).map_err(|e| e.to_string())?.is_none() {
+            return Err("Collection not found".to_string());
+        }
+        if db
+            .collection_name_taken_by_other(id, name)
+            .map_err(|e| e.to_string())?
+        {
+            return Err("A collection with that name already exists".to_string());
+        }
+        db.rename_collection(id, name)
+            .map_err(|e| e.to_string())?;
+    }
     let _ = app.emit("library-updated", ());
     Ok(())
 }

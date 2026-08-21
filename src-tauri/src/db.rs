@@ -168,6 +168,19 @@ impl Database {
             [],
         );
         self.bootstrap_collection_order()?;
+        self.conn.execute_batch(
+            "
+            CREATE TABLE IF NOT EXISTS playlist_order (
+                playlist_id INTEGER PRIMARY KEY,
+                position INTEGER NOT NULL,
+                FOREIGN KEY (playlist_id) REFERENCES playlists(id) ON DELETE CASCADE
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_playlist_order_position
+                ON playlist_order(position);
+            ",
+        )?;
+        self.bootstrap_playlist_order()?;
         self.migrate_single_library_folder()?;
         Ok(())
     }
@@ -194,6 +207,33 @@ impl Database {
             self.conn.execute(
                 "INSERT INTO collection_order (collection_id, position) VALUES (?1, ?2)",
                 params![collection_id, position as i64],
+            )?;
+        }
+        Ok(())
+    }
+
+    fn bootstrap_playlist_order(&self) -> Result<(), DbError> {
+        let order_count: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM playlist_order",
+            [],
+            |row| row.get(0),
+        )?;
+        if order_count > 0 {
+            return Ok(());
+        }
+
+        let mut stmt = self
+            .conn
+            .prepare("SELECT id FROM playlists ORDER BY name COLLATE NOCASE")?;
+        let ids: Vec<i64> = stmt
+            .query_map([], |row| row.get(0))?
+            .filter_map(Result::ok)
+            .collect();
+
+        for (position, playlist_id) in ids.iter().enumerate() {
+            self.conn.execute(
+                "INSERT INTO playlist_order (playlist_id, position) VALUES (?1, ?2)",
+                params![playlist_id, position as i64],
             )?;
         }
         Ok(())
@@ -690,6 +730,26 @@ impl Database {
         Ok(count > 0)
     }
 
+    pub fn collection_name_taken_by_other(&self, id: i64, name: &str) -> Result<bool, DbError> {
+        let count: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM collections WHERE name = ?1 COLLATE NOCASE AND id != ?2",
+            params![name, id],
+            |row| row.get(0),
+        )?;
+        Ok(count > 0)
+    }
+
+    pub fn rename_collection(&self, id: i64, name: &str) -> Result<(), DbError> {
+        let changed = self.conn.execute(
+            "UPDATE collections SET name = ?1 WHERE id = ?2",
+            params![name, id],
+        )?;
+        if changed == 0 {
+            return Err(DbError::Sqlite(rusqlite::Error::QueryReturnedNoRows));
+        }
+        Ok(())
+    }
+
     pub fn unique_collection_name(&self, base: &str) -> Result<String, DbError> {
         if !self.collection_name_exists(base)? {
             return Ok(base.to_string());
@@ -780,11 +840,23 @@ impl Database {
 
     pub fn create_playlist(&self, name: &str) -> Result<i64, DbError> {
         let now = chrono_now();
-        self.conn.execute(
+        let tx = self.conn.unchecked_transaction()?;
+        tx.execute(
             "INSERT INTO playlists (name, created_at) VALUES (?1, ?2)",
             params![name, now],
         )?;
-        Ok(self.conn.last_insert_rowid())
+        let playlist_id = tx.last_insert_rowid();
+        let position: i64 = tx.query_row(
+            "SELECT COALESCE(MAX(position), -1) + 1 FROM playlist_order",
+            [],
+            |row| row.get(0),
+        )?;
+        tx.execute(
+            "INSERT INTO playlist_order (playlist_id, position) VALUES (?1, ?2)",
+            params![playlist_id, position],
+        )?;
+        tx.commit()?;
+        Ok(playlist_id)
     }
 
     pub fn delete_playlist(&self, id: i64) -> Result<(), DbError> {
@@ -792,11 +864,65 @@ impl Database {
         Ok(())
     }
 
+    pub fn list_playlist_order_ids(&self) -> Result<Vec<i64>, DbError> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT playlist_id FROM playlist_order ORDER BY position")?;
+        let rows = stmt.query_map([], |row| row.get(0))?;
+        Ok(rows.filter_map(Result::ok).collect())
+    }
+
+    fn default_playlist_order_ids(&self) -> Result<Vec<i64>, DbError> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT id FROM playlists ORDER BY name COLLATE NOCASE")?;
+        let rows = stmt.query_map([], |row| row.get(0))?;
+        Ok(rows.filter_map(Result::ok).collect())
+    }
+
+    pub fn reorder_playlists(&self, playlist_ids: &[i64]) -> Result<(), DbError> {
+        let all = self.default_playlist_order_ids()?;
+        let all_set: std::collections::HashSet<i64> = all.iter().copied().collect();
+
+        let mut ordered: Vec<i64> = playlist_ids
+            .iter()
+            .copied()
+            .filter(|id| all_set.contains(id))
+            .collect();
+        for id in all {
+            if !ordered.contains(&id) {
+                ordered.push(id);
+            }
+        }
+
+        let tx = self.conn.unchecked_transaction()?;
+        tx.execute("DELETE FROM playlist_order", [])?;
+        for (position, playlist_id) in ordered.iter().enumerate() {
+            tx.execute(
+                "INSERT INTO playlist_order (playlist_id, position) VALUES (?1, ?2)",
+                params![playlist_id, position as i64],
+            )?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    pub fn rename_playlist(&self, id: i64, name: &str) -> Result<(), DbError> {
+        let changed = self.conn.execute(
+            "UPDATE playlists SET name = ?1 WHERE id = ?2",
+            params![name, id],
+        )?;
+        if changed == 0 {
+            return Err(DbError::Sqlite(rusqlite::Error::QueryReturnedNoRows));
+        }
+        Ok(())
+    }
+
     pub fn list_playlists(&self) -> Result<Vec<Playlist>, DbError> {
         let mut stmt = self.conn.prepare(
             "SELECT p.id, p.name, p.created_at,
                     (SELECT COUNT(*) FROM playlist_tracks pt WHERE pt.playlist_id = p.id)
-             FROM playlists p ORDER BY p.name COLLATE NOCASE",
+             FROM playlists p",
         )?;
         let rows = stmt.query_map([], |row| {
             Ok(Playlist {
@@ -806,7 +932,19 @@ impl Database {
                 track_count: row.get(3)?,
             })
         })?;
-        Ok(rows.filter_map(Result::ok).collect())
+        let mut by_id: HashMap<i64, Playlist> = HashMap::new();
+        for row in rows.filter_map(Result::ok) {
+            by_id.insert(row.id, row);
+        }
+
+        let stored_order = self.list_playlist_order_ids()?;
+        let default_order = self.default_playlist_order_ids()?;
+        let ordered_ids = merge_collection_order(&stored_order, &default_order);
+
+        Ok(ordered_ids
+            .into_iter()
+            .filter_map(|id| by_id.remove(&id))
+            .collect())
     }
 
     pub fn add_track_to_playlist(&self, playlist_id: i64, track_id: i64) -> Result<(), DbError> {
@@ -1474,6 +1612,51 @@ mod tests {
         assert_eq!(values[1].value.as_deref(), Some("Mozart"));
         assert_eq!(values[2].value, None);
         assert_eq!(values[2].track_count, 1);
+    }
+
+    #[test]
+    fn rename_playlist_updates_name() {
+        let db = test_db();
+        let playlist_id = db.create_playlist("Old Name").unwrap();
+        db.rename_playlist(playlist_id, "New Name").unwrap();
+        let playlists = db.list_playlists().unwrap();
+        assert_eq!(playlists[0].name, "New Name");
+    }
+
+    #[test]
+    fn rename_collection_rejects_duplicate_name() {
+        let db = test_db();
+        let first = db.create_collection("Alpha").unwrap();
+        let _second = db.create_collection("Beta").unwrap();
+        assert!(db.collection_name_taken_by_other(first, "Beta").unwrap());
+    }
+
+    #[test]
+    fn reorder_playlists_updates_sidebar_order() {
+        let db = test_db();
+        let alpha = db.create_playlist("Alpha").unwrap();
+        let beta = db.create_playlist("Beta").unwrap();
+        let gamma = db.create_playlist("Gamma").unwrap();
+
+        assert_eq!(
+            db.list_playlists()
+                .unwrap()
+                .into_iter()
+                .map(|playlist| playlist.id)
+                .collect::<Vec<_>>(),
+            vec![alpha, beta, gamma]
+        );
+
+        db.reorder_playlists(&[gamma, alpha, beta]).unwrap();
+
+        assert_eq!(
+            db.list_playlists()
+                .unwrap()
+                .into_iter()
+                .map(|playlist| playlist.name)
+                .collect::<Vec<_>>(),
+            vec!["Gamma", "Alpha", "Beta"]
+        );
     }
 
     #[test]

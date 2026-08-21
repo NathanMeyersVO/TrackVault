@@ -7,12 +7,15 @@ import { api, COMMON_TAG_KEYS, type Collection, type Playlist, type Taglist, typ
 import { formatTaglistLabel } from "../lib/taglistLabels";
 import {
   getCollectionReorderDragData,
+  getPlaylistReorderDragData,
   getSublistReorderDragData,
   getTrackDragData,
   isCollectionReorderDrag,
+  isPlaylistReorderDrag,
   isSublistReorderDrag,
   reorderItemsByIndex,
   setCollectionReorderDragData,
+  setPlaylistReorderDragData,
   setSublistReorderDragData,
 } from "../lib/dragDrop";
 import { useLibrary } from "../hooks/usePlayer";
@@ -361,7 +364,7 @@ function TaglistGroup({
           );
         }}
         onDrop={handleDrop}
-        className={`group/sublist mb-0.5 flex w-full items-center rounded-md py-1.5 pr-3 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-muted ${
+        className={`group/sublist mb-0.5 flex w-full cursor-pointer items-center rounded-md py-1.5 pr-3 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-muted ${
           reorderable ? "pl-2" : "pl-6"
         } ${dropBarClass} ${isDragging ? "opacity-40" : ""} ${stateClass}`}
       >
@@ -382,7 +385,7 @@ function TaglistGroup({
             <SublistGripIcon />
           </button>
         ) : null}
-        <span className="min-w-0 flex-1 truncate">
+        <span className="min-w-0 flex-1 cursor-pointer select-none truncate">
           <span className="truncate">{label}</span>
           <span className="ml-1 text-muted">({entry.track_count})</span>
         </span>
@@ -439,6 +442,7 @@ export function Sidebar({ width }: { width: number }) {
     view,
     setView,
     setCollections,
+    setPlaylists,
     draggingTrackId,
     setDraggingTrackId,
   } = usePlayerStore();
@@ -463,6 +467,15 @@ export function Sidebar({ width }: { width: number }) {
     index: number;
     position: "before" | "after";
   } | null>(null);
+  const [playlistDragIndex, setPlaylistDragIndex] = useState<number | null>(null);
+  const [playlistDropTarget, setPlaylistDropTarget] = useState<{
+    index: number;
+    position: "before" | "after";
+  } | null>(null);
+  const [editingPlaylistId, setEditingPlaylistId] = useState<number | null>(null);
+  const [editingCollectionId, setEditingCollectionId] = useState<number | null>(null);
+  const [editName, setEditName] = useState("");
+  const renameSkipBlurRef = useRef(false);
   const { requestTagDrop, confirmDialog: tagDropConfirmDialog } = useTagDropConfirm();
 
   const clearCollectionReorderState = useCallback(() => {
@@ -510,6 +523,122 @@ export function Sidebar({ width }: { width: number }) {
     );
     void handleCollectionReorder(reordered);
     clearCollectionReorderState();
+  };
+
+  const cancelRename = () => {
+    renameSkipBlurRef.current = true;
+    setEditingPlaylistId(null);
+    setEditingCollectionId(null);
+    setEditName("");
+  };
+
+  const startRenamePlaylist = (event: MouseEvent, playlist: Playlist) => {
+    event.stopPropagation();
+    setEditingCollectionId(null);
+    setEditingPlaylistId(playlist.id);
+    setEditName(playlist.name);
+  };
+
+  const startRenameCollection = (event: MouseEvent, collection: Collection) => {
+    event.stopPropagation();
+    setEditingPlaylistId(null);
+    setEditingCollectionId(collection.id);
+    setEditName(collection.name);
+  };
+
+  const savePlaylistRename = async (playlistId: number) => {
+    const trimmed = editName.trim();
+    if (!trimmed) {
+      cancelRename();
+      return;
+    }
+    const previous = playlists;
+    setPlaylists(
+      playlists.map((playlist) =>
+        playlist.id === playlistId ? { ...playlist, name: trimmed } : playlist,
+      ),
+    );
+    try {
+      await api.renamePlaylist(playlistId, trimmed);
+    } catch (error) {
+      console.error(error);
+      setPlaylists(previous);
+      await refresh();
+    } finally {
+      cancelRename();
+    }
+  };
+
+  const saveCollectionRename = async (collectionId: number) => {
+    const trimmed = editName.trim();
+    if (!trimmed) {
+      cancelRename();
+      return;
+    }
+    const previous = collections;
+    setCollections(
+      collections.map((collection) =>
+        collection.id === collectionId
+          ? { ...collection, name: trimmed }
+          : collection,
+      ),
+    );
+    try {
+      await api.renameCollection(collectionId, trimmed);
+    } catch (error) {
+      console.error(error);
+      setCollections(previous);
+      await refresh();
+    } finally {
+      cancelRename();
+    }
+  };
+
+  const clearPlaylistReorderState = useCallback(() => {
+    setPlaylistDragIndex(null);
+    setPlaylistDropTarget(null);
+  }, []);
+
+  const handlePlaylistReorder = async (orderedPlaylists: Playlist[]) => {
+    setPlaylists(orderedPlaylists);
+    try {
+      await api.reorderPlaylists(orderedPlaylists.map((playlist) => playlist.id));
+    } catch (error) {
+      console.error(error);
+      await refresh();
+    }
+  };
+
+  const handlePlaylistReorderDrop = (targetIndex: number, event: DragEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (
+      playlistDragIndex == null &&
+      !isPlaylistReorderDrag(event.dataTransfer)
+    ) {
+      clearPlaylistReorderState();
+      return;
+    }
+
+    const fromIndex =
+      playlistDragIndex ?? getPlaylistReorderDragData(event.dataTransfer);
+    if (fromIndex == null || fromIndex === targetIndex) {
+      clearPlaylistReorderState();
+      return;
+    }
+
+    const row = event.currentTarget.getBoundingClientRect();
+    const position: "before" | "after" =
+      event.clientY < row.top + row.height / 2 ? "before" : "after";
+    const reordered = reorderItemsByIndex(
+      playlists,
+      fromIndex,
+      targetIndex,
+      position,
+    );
+    void handlePlaylistReorder(reordered);
+    clearPlaylistReorderState();
   };
 
   const isTrackDragging = draggingTrackId != null;
@@ -651,6 +780,7 @@ export function Sidebar({ width }: { width: number }) {
             typeof view === "object" &&
             "collectionId" in view &&
             view.collectionId === collection.id;
+          const isEditing = editingCollectionId === collection.id;
           const isDragging = collectionDragIndex === index;
           const dropIndicator =
             collectionDropTarget?.index === index
@@ -668,8 +798,12 @@ export function Sidebar({ width }: { width: number }) {
               key={collection.id}
               role="button"
               tabIndex={0}
-              onClick={() => setView({ collectionId: collection.id })}
+              onClick={() => {
+                if (isEditing) return;
+                setView({ collectionId: collection.id });
+              }}
               onKeyDown={(event) => {
+                if (isEditing) return;
                 if (event.key === "Enter" || event.key === " ") {
                   event.preventDefault();
                   setView({ collectionId: collection.id });
@@ -702,7 +836,7 @@ export function Sidebar({ width }: { width: number }) {
                 );
               }}
               onDrop={(event) => handleCollectionDrop(index, event)}
-              className={`group/collection mb-1 flex w-full items-center rounded-md py-2 pr-3 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-muted pl-2 ${dropBarClass} ${
+              className={`group/collection mb-1 flex w-full cursor-pointer items-center rounded-md py-2 pr-3 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-muted pl-2 ${dropBarClass} ${
                 isDragging ? "opacity-40" : ""
               } ${
                 active
@@ -725,18 +859,57 @@ export function Sidebar({ width }: { width: number }) {
               >
                 <SublistGripIcon />
               </button>
-              <span className="min-w-0 flex-1 truncate">
-                {collection.name}
-                <span className="ml-1 text-muted">({collection.track_count})</span>
-              </span>
-              <button
-                type="button"
-                onClick={(event) => requestDeleteCollection(event, collection)}
-                className="ml-1 hidden shrink-0 rounded px-1 text-xs text-muted hover:text-red-400 group-hover/collection:inline"
-                title="Delete collection"
-              >
-                ×
-              </button>
+              {isEditing ? (
+                <input
+                  autoFocus
+                  value={editName}
+                  onChange={(event) => setEditName(event.target.value)}
+                  onClick={(event) => event.stopPropagation()}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      void saveCollectionRename(collection.id);
+                    }
+                    if (event.key === "Escape") {
+                      event.preventDefault();
+                      cancelRename();
+                    }
+                  }}
+                  onBlur={() => {
+                    if (renameSkipBlurRef.current) {
+                      renameSkipBlurRef.current = false;
+                      return;
+                    }
+                    void saveCollectionRename(collection.id);
+                  }}
+                  className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1 text-sm text-foreground"
+                />
+              ) : (
+                <span className="min-w-0 flex-1 cursor-pointer select-none truncate">
+                  {collection.name}
+                  <span className="ml-1 text-muted">({collection.track_count})</span>
+                </span>
+              )}
+              {!isEditing ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={(event) => startRenameCollection(event, collection)}
+                    className="ml-1 hidden shrink-0 cursor-pointer rounded px-1 text-xs text-muted hover:text-foreground group-hover/collection:inline"
+                    title="Rename collection"
+                  >
+                    ✎
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(event) => requestDeleteCollection(event, collection)}
+                    className="ml-1 hidden shrink-0 cursor-pointer rounded px-1 text-xs text-muted hover:text-red-400 group-hover/collection:inline"
+                    title="Delete collection"
+                  >
+                    ×
+                  </button>
+                </>
+              ) : null}
             </div>
           );
         })}
@@ -782,18 +955,30 @@ export function Sidebar({ width }: { width: number }) {
           {isTrackDragging ? "Drop on a playlist or taglist" : "Playlists"}
         </div>
 
-        {playlists.map((playlist) => {
+        {playlists.map((playlist, index) => {
           const active =
             typeof view === "object" &&
             "playlistId" in view &&
             view.playlistId === playlist.id;
+          const isEditing = editingPlaylistId === playlist.id;
           const isDragOver = dragOverPlaylistId === playlist.id;
+          const isDragging = playlistDragIndex === index;
+          const dropIndicator =
+            playlistDropTarget?.index === index ? playlistDropTarget.position : null;
+          const dropBarClass =
+            dropIndicator === "before"
+              ? "border-t-2 border-t-drop"
+              : dropIndicator === "after"
+                ? "border-b-2 border-b-drop"
+                : "";
 
           const handleNavigate = () => {
+            if (isEditing) return;
             setView({ playlistId: playlist.id } as View);
           };
 
           const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+            if (isEditing) return;
             if (event.key === "Enter" || event.key === " ") {
               event.preventDefault();
               handleNavigate();
@@ -808,47 +993,137 @@ export function Sidebar({ width }: { width: number }) {
               onClick={handleNavigate}
               onKeyDown={handleKeyDown}
               onDragOver={(event) => {
+                if (
+                  playlistDragIndex != null ||
+                  isPlaylistReorderDrag(event.dataTransfer)
+                ) {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  event.dataTransfer.dropEffect = "move";
+                  const row = event.currentTarget.getBoundingClientRect();
+                  const position: "before" | "after" =
+                    event.clientY < row.top + row.height / 2 ? "before" : "after";
+                  setPlaylistDropTarget({ index, position });
+                  return;
+                }
                 if (!isTrackDragging) return;
                 event.preventDefault();
                 event.dataTransfer.dropEffect = "copy";
                 setDragOverPlaylistId(playlist.id);
               }}
               onDragEnter={(event) => {
+                if (
+                  playlistDragIndex != null ||
+                  isPlaylistReorderDrag(event.dataTransfer)
+                ) {
+                  return;
+                }
                 if (!isTrackDragging) return;
                 event.preventDefault();
                 setDragOverPlaylistId(playlist.id);
               }}
               onDragLeave={(event) => {
+                if (
+                  playlistDragIndex != null ||
+                  isPlaylistReorderDrag(event.dataTransfer)
+                ) {
+                  setPlaylistDropTarget((current) =>
+                    current?.index === index ? null : current,
+                  );
+                  return;
+                }
                 if (event.currentTarget.contains(event.relatedTarget as Node)) return;
                 setDragOverPlaylistId((current) =>
                   current === playlist.id ? null : current,
                 );
               }}
               onDrop={(event) => {
+                if (isPlaylistReorderDrag(event.dataTransfer)) {
+                  handlePlaylistReorderDrop(index, event);
+                  return;
+                }
                 void handlePlaylistDrop(playlist.id, event);
               }}
-              className={`group/playlist mb-1 flex w-full items-center rounded-md px-3 py-2 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-muted ${
-                isDragOver
-                  ? "border-2 border-accent bg-accent-subtle/40 text-foreground ring-2 ring-accent"
-                  : isTrackDragging
-                    ? "border border-dashed border-border bg-surface-hover/50 text-foreground"
-                    : active
-                      ? "border border-transparent bg-surface-hover text-foreground"
-                      : "border border-transparent text-foreground hover:bg-surface-hover/60"
+              className={`group/playlist mb-1 flex w-full cursor-pointer items-center rounded-md py-2 pr-3 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-muted pl-2 ${dropBarClass} ${
+                isDragging ? "opacity-40" : ""
+              } ${
+                dropIndicator
+                  ? ""
+                  : isDragOver
+                    ? "border-2 border-accent bg-accent-subtle/40 text-foreground ring-2 ring-accent"
+                    : isTrackDragging
+                      ? "border border-dashed border-border bg-surface-hover/50 text-foreground"
+                      : active
+                        ? "border border-transparent bg-surface-hover text-foreground"
+                        : "border border-transparent text-foreground hover:bg-surface-hover/60"
               }`}
             >
-              <span className="min-w-0 flex-1 truncate">
-                {playlist.name}
-                <span className="ml-1 text-muted">({playlist.track_count})</span>
-              </span>
               <button
                 type="button"
-                onClick={(event) => requestDeletePlaylist(event, playlist)}
-                className="ml-1 hidden shrink-0 rounded px-1 text-xs text-muted hover:text-red-400 group-hover/playlist:inline"
-                title="Delete playlist"
+                draggable
+                aria-label={`Reorder ${playlist.name}`}
+                className="mr-1 flex shrink-0 cursor-grab items-center justify-center rounded p-0.5 text-muted hover:bg-surface-hover hover:text-foreground active:cursor-grabbing"
+                onClick={(event) => event.stopPropagation()}
+                onDragStart={(event) => {
+                  event.stopPropagation();
+                  setPlaylistReorderDragData(event.dataTransfer, index);
+                  setPlaylistDragIndex(index);
+                }}
+                onDragEnd={() => clearPlaylistReorderState()}
               >
-                ×
+                <SublistGripIcon />
               </button>
+              {isEditing ? (
+                <input
+                  autoFocus
+                  value={editName}
+                  onChange={(event) => setEditName(event.target.value)}
+                  onClick={(event) => event.stopPropagation()}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      void savePlaylistRename(playlist.id);
+                    }
+                    if (event.key === "Escape") {
+                      event.preventDefault();
+                      cancelRename();
+                    }
+                  }}
+                  onBlur={() => {
+                    if (renameSkipBlurRef.current) {
+                      renameSkipBlurRef.current = false;
+                      return;
+                    }
+                    void savePlaylistRename(playlist.id);
+                  }}
+                  className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1 text-sm text-foreground"
+                />
+              ) : (
+                <span className="min-w-0 flex-1 cursor-pointer select-none truncate">
+                  {playlist.name}
+                  <span className="ml-1 text-muted">({playlist.track_count})</span>
+                </span>
+              )}
+              {!isEditing ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={(event) => startRenamePlaylist(event, playlist)}
+                    className="ml-1 hidden shrink-0 cursor-pointer rounded px-1 text-xs text-muted hover:text-foreground group-hover/playlist:inline"
+                    title="Rename playlist"
+                  >
+                    ✎
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(event) => requestDeletePlaylist(event, playlist)}
+                    className="ml-1 hidden shrink-0 cursor-pointer rounded px-1 text-xs text-muted hover:text-red-400 group-hover/playlist:inline"
+                    title="Delete playlist"
+                  >
+                    ×
+                  </button>
+                </>
+              ) : null}
             </div>
           );
         })}

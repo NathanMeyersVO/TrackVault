@@ -120,6 +120,8 @@ export const api = {
   createCollection: (name: string) =>
     invoke<number>("create_collection", { name }),
   deleteCollection: (id: number) => invoke<void>("delete_collection", { id }),
+  renameCollection: (id: number, name: string) =>
+    invoke<void>("rename_collection", { id, name }),
   listCollections: () => invoke<Collection[]>("list_collections"),
   getCollectionTracks: (collectionId: number) =>
     invoke<Track[]>("get_collection_tracks", { collectionId }),
@@ -154,6 +156,8 @@ export const api = {
   createPlaylist: (name: string) =>
     invoke<number>("create_playlist", { name }),
   deletePlaylist: (id: number) => invoke<void>("delete_playlist", { id }),
+  renamePlaylist: (id: number, name: string) =>
+    invoke<void>("rename_playlist", { id, name }),
   listPlaylists: () => invoke<Playlist[]>("list_playlists"),
   getPlaylistTracks: (playlistId: number) =>
     invoke<Track[]>("get_playlist_tracks", { playlistId }),
@@ -163,6 +167,8 @@ export const api = {
     invoke<void>("remove_track_from_playlist", { playlistId, trackId }),
   reorderPlaylistTracks: (playlistId: number, trackIds: number[]) =>
     invoke<void>("reorder_playlist_tracks", { playlistId, trackIds }),
+  reorderPlaylists: (playlistIds: number[]) =>
+    invoke<void>("reorder_playlists", { playlistIds }),
   createTaglist: (name: string, tagKey: string) =>
     invoke<number>("create_taglist", { name, tagKey }),
   deleteTaglist: (id: number) => invoke<void>("delete_taglist", { id }),
