@@ -137,5 +137,5 @@ export function Waveform({
     );
   }
 
-  return <div ref={containerRef} className="w-full rounded-md bg-surface" />;
+  return <div ref={containerRef} className="tv-waveform w-full rounded-md bg-surface" />;
 }

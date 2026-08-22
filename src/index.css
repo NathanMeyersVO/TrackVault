@@ -69,3 +69,18 @@ body {
 .tv-indeterminate-bar {
   animation: tv-indeterminate 1.2s ease-in-out infinite;
 }
+
+/* WaveSurfer v7 Shadow DOM layout fallback (CSP-safe via ::part) */
+.tv-waveform ::part(wrapper) {
+  position: relative;
+}
+
+.tv-waveform ::part(progress) {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 2;
+}
