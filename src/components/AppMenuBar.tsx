@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 
 import { AppearanceSettingsModal } from "./AppearanceSettingsModal";
 import { AboutDialog } from "./AboutDialog";
@@ -93,6 +94,11 @@ export function AppMenuBar() {
       label: closingLibrary ? "Closing library…" : "Close library",
       onClick: () => void requestCloseLibrary(),
       disabled: actionsDisabled,
+    },
+    { separator: true },
+    {
+      label: "Exit",
+      onClick: () => void getCurrentWindow().close(),
     },
   ];
 
