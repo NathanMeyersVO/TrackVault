@@ -34,7 +34,7 @@ function formatConflictMessage(conflicts: string[]): string {
   const preview = conflicts.slice(0, 5).join("\n");
   const remaining = conflicts.length - 5;
   const suffix = remaining > 0 ? `\n…and ${remaining} more.` : "";
-  return `These files already exist in this collection:\n${preview}${suffix}\n\nOverwrite the existing files, or keep both copies?`;
+  return `These files already exist in this stored collection:\n${preview}${suffix}\n\nOverwrite the existing files, or keep both copies?`;
 }
 
 export function useCollectionUpload(collectionId: number | null) {
@@ -80,7 +80,7 @@ export function useCollectionUpload(collectionId: number | null) {
 
   const uploadTracks = useCallback(async () => {
     if (collectionId == null) {
-      setUploadError("Open a collection before uploading tracks.");
+      setUploadError("Open a stored collection before uploading tracks.");
       setUploadMessage(null);
       return;
     }

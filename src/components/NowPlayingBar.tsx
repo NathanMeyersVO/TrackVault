@@ -4,6 +4,7 @@ import { listen } from "@tauri-apps/api/event";
 
 import { api, formatDuration, type AudioCacheTrackReady } from "../lib/tauri";
 import { usePlayer } from "../hooks/usePlayer";
+import { useWaveformNormalize } from "../hooks/useWaveformNormalize";
 import { usePlayerStore, getDisplayPositionMs } from "../store/playerStore";
 import { TransportControls } from "./TransportControls";
 import { VolumeControl } from "./VolumeControl";
@@ -21,6 +22,7 @@ export function NowPlayingBar() {
     seekToStart,
     seekToEnd,
   } = usePlayer();
+  const { normalize, setNormalize } = useWaveformNormalize();
   const [peaks, setPeaks] = useState<number[]>([]);
   const [peakDurationMs, setPeakDurationMs] = useState(0);
   const [peaksEpoch, setPeaksEpoch] = useState(0);
@@ -195,6 +197,18 @@ export function NowPlayingBar() {
         </div>
       </div>
 
+      <div className="mb-1 flex justify-end">
+        <label className="flex cursor-pointer select-none items-center gap-1.5 text-xs text-muted">
+          <input
+            type="checkbox"
+            checked={normalize}
+            onChange={(event) => setNormalize(event.target.checked)}
+            className="accent-accent"
+          />
+          Normalize
+        </label>
+      </div>
+
       <div className="relative">
         <div className={transportBusy ? "opacity-60" : ""}>
           <Waveform
@@ -202,6 +216,7 @@ export function NowPlayingBar() {
             peaks={peaks}
             durationMs={durationMs}
             positionMs={displayPositionMs}
+            normalize={normalize}
             transportBusy={transportBusy}
             interactive={canSeek}
             onSeek={handleSeek}

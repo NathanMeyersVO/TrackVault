@@ -74,7 +74,7 @@ export function PlaylistView({ playlistId }: PlaylistViewProps) {
     <div className="flex h-full flex-col">
       <div className="border-b border-border px-4 py-3">
         <h2 className="text-base font-semibold text-white">
-          {playlist?.name ?? "Playlist"}
+          {playlist?.name ?? "Library playlist"}
         </h2>
         <p className="text-xs text-muted">
           {isSearching
@@ -99,7 +99,7 @@ export function PlaylistView({ playlistId }: PlaylistViewProps) {
           emptyMessage={
             isSearching
               ? "No tracks match your search."
-              : "No tracks in this playlist yet. Add tracks from the library."
+              : "No tracks in this library playlist yet. Add tracks from the library."
           }
         />
       </div>

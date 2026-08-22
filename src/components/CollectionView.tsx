@@ -72,9 +72,9 @@ export function CollectionView({ collectionId }: CollectionViewProps) {
     setExportError(null);
     const defaultName = `${collection?.name ?? "collection"}.tgz`;
     const destination = await save({
-      title: "Export collection",
+      title: "Export stored collection",
       defaultPath: defaultName,
-      filters: [{ name: "TrackVault collection", extensions: ["tgz"] }],
+      filters: [{ name: "TrackVault stored collection", extensions: ["tgz"] }],
     });
     if (destination == null) return;
 
@@ -91,7 +91,7 @@ export function CollectionView({ collectionId }: CollectionViewProps) {
         <div className="flex items-start justify-between gap-3">
           <div>
             <h2 className="text-base font-semibold text-white">
-              {collection?.name ?? "Collection"}
+              {collection?.name ?? "Stored collection"}
             </h2>
             <p className="text-xs text-muted">
               {isSearching
@@ -128,7 +128,7 @@ export function CollectionView({ collectionId }: CollectionViewProps) {
           emptyMessage={
             isSearching
               ? "No tracks match your search."
-              : "No tracks in this collection yet. Use File → Upload to collection… to add audio files."
+              : "No tracks in this stored collection yet. Use File → Upload to stored collection… to add audio files."
           }
         />
       </div>
@@ -146,8 +146,8 @@ export function CollectionView({ collectionId }: CollectionViewProps) {
 export async function importCollectionFromDialog(): Promise<number | null> {
   const source = await open({
     multiple: false,
-    title: "Import collection",
-    filters: [{ name: "TrackVault collection", extensions: ["tgz"] }],
+    title: "Import stored collection",
+    filters: [{ name: "TrackVault stored collection", extensions: ["tgz"] }],
   });
   if (source == null || Array.isArray(source)) return null;
   return api.importCollection(source);

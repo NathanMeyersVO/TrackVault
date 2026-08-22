@@ -46,8 +46,8 @@ export function AppMenuBar() {
 
   const collectionUploadLabel =
     collectionName != null
-      ? `Upload to collection (${collectionName})…`
-      : "Upload to collection…";
+      ? `Upload to stored collection (${collectionName})…`
+      : "Upload to stored collection…";
 
   const fileItems: MenuEntry[] = [
     {
@@ -62,13 +62,13 @@ export function AppMenuBar() {
     },
     {
       label: collectionUploading
-        ? "Uploading to collection…"
+        ? "Uploading to stored collection…"
         : collectionUploadLabel,
       onClick: () => void uploadToCollection(),
       disabled: collectionUploadDisabled,
     },
     {
-      label: importingCollection ? "Importing…" : "Import collection…",
+      label: importingCollection ? "Importing…" : "Import stored collection…",
       onClick: () => void importCollection(),
       disabled: actionsDisabled,
     },
@@ -125,7 +125,7 @@ export function AppMenuBar() {
 
   const statusLabel =
     collectionId != null && collectionName != null
-      ? `Collection: ${collectionName}`
+      ? `Stored collection: ${collectionName}`
       : libraryFolder ?? "No library folder chosen";
 
   return (

@@ -422,7 +422,7 @@ function TaglistGroup({
             type="button"
             onClick={(event) => void deleteTaglist(event)}
             className="rounded px-1 text-xs text-muted hover:text-red-400"
-            title="Delete taglist"
+            title="Delete library taglist"
           >
             ×
           </button>
@@ -756,7 +756,7 @@ export function Sidebar({ width }: { width: number }) {
     >
       <div className="border-b border-border px-4 py-3">
         <h2 className="text-sm font-semibold tracking-tight text-foreground">Browse</h2>
-        <p className="text-xs text-muted">Library, collections, playlists & taglists</p>
+        <p className="text-xs text-muted">Library, stored collections, library playlists & library taglists</p>
       </div>
 
       <nav className="flex-1 overflow-y-auto p-2">
@@ -772,7 +772,7 @@ export function Sidebar({ width }: { width: number }) {
         </button>
 
         <div className="mb-2 mt-4 px-3 text-xs font-medium uppercase tracking-wide text-muted">
-          Collections
+          Stored Collections
         </div>
 
         {collections.map((collection, index) => {
@@ -896,7 +896,7 @@ export function Sidebar({ width }: { width: number }) {
                     type="button"
                     onClick={(event) => startRenameCollection(event, collection)}
                     className="ml-1 hidden shrink-0 cursor-pointer rounded px-1 text-xs text-muted hover:text-foreground group-hover/collection:inline"
-                    title="Rename collection"
+                    title="Rename stored collection"
                   >
                     ✎
                   </button>
@@ -904,7 +904,7 @@ export function Sidebar({ width }: { width: number }) {
                     type="button"
                     onClick={(event) => requestDeleteCollection(event, collection)}
                     className="ml-1 hidden shrink-0 cursor-pointer rounded px-1 text-xs text-muted hover:text-red-400 group-hover/collection:inline"
-                    title="Delete collection"
+                    title="Delete stored collection"
                   >
                     ×
                   </button>
@@ -924,7 +924,7 @@ export function Sidebar({ width }: { width: number }) {
                 if (e.key === "Enter") void createCollection();
                 if (e.key === "Escape") setCreatingCollection(false);
               }}
-              placeholder="Collection name"
+              placeholder="Stored collection name"
               className="w-full rounded-md border border-border bg-background px-2 py-1 text-sm"
             />
             <div className="flex gap-2">
@@ -947,12 +947,12 @@ export function Sidebar({ width }: { width: number }) {
             onClick={() => setCreatingCollection(true)}
             className="mt-1 w-full rounded-md px-3 py-2 text-left text-sm text-muted hover:bg-surface-hover/60 hover:text-foreground"
           >
-            + New collection
+            + New stored collection
           </button>
         )}
 
         <div className="mb-2 mt-4 px-3 text-xs font-medium uppercase tracking-wide text-muted">
-          {isTrackDragging ? "Drop on a playlist or taglist" : "Playlists"}
+          {isTrackDragging ? "Drop on a library playlist or library taglist" : "Library Playlists"}
         </div>
 
         {playlists.map((playlist, index) => {
@@ -1110,7 +1110,7 @@ export function Sidebar({ width }: { width: number }) {
                     type="button"
                     onClick={(event) => startRenamePlaylist(event, playlist)}
                     className="ml-1 hidden shrink-0 cursor-pointer rounded px-1 text-xs text-muted hover:text-foreground group-hover/playlist:inline"
-                    title="Rename playlist"
+                    title="Rename library playlist"
                   >
                     ✎
                   </button>
@@ -1118,7 +1118,7 @@ export function Sidebar({ width }: { width: number }) {
                     type="button"
                     onClick={(event) => requestDeletePlaylist(event, playlist)}
                     className="ml-1 hidden shrink-0 cursor-pointer rounded px-1 text-xs text-muted hover:text-red-400 group-hover/playlist:inline"
-                    title="Delete playlist"
+                    title="Delete library playlist"
                   >
                     ×
                   </button>
@@ -1138,7 +1138,7 @@ export function Sidebar({ width }: { width: number }) {
                 if (e.key === "Enter") createPlaylist();
                 if (e.key === "Escape") setCreating(false);
               }}
-              placeholder="Playlist name"
+              placeholder="Library playlist name"
               className="w-full rounded-md border border-border bg-background px-2 py-1 text-sm"
             />
             <div className="flex gap-2">
@@ -1161,12 +1161,12 @@ export function Sidebar({ width }: { width: number }) {
             onClick={() => setCreating(true)}
             className="mt-1 w-full rounded-md px-3 py-2 text-left text-sm text-muted hover:bg-surface-hover/60 hover:text-foreground"
           >
-            + New playlist
+            + New library playlist
           </button>
         )}
 
         <div className="mb-2 mt-4 px-3 text-xs font-medium uppercase tracking-wide text-muted">
-          {isTrackDragging ? "Drop on a taglist sublist" : "Taglists"}
+          {isTrackDragging ? "Drop on a library taglist sublist" : "Library Taglists"}
         </div>
 
         {taglists.map((taglist) => (
@@ -1196,7 +1196,7 @@ export function Sidebar({ width }: { width: number }) {
                 if (e.key === "Enter") void createTaglist();
                 if (e.key === "Escape") setCreatingTaglist(false);
               }}
-              placeholder="Taglist name"
+              placeholder="Library taglist name"
               className="w-full rounded-md border border-border bg-background px-2 py-1 text-sm"
             />
             <select
@@ -1230,15 +1230,15 @@ export function Sidebar({ width }: { width: number }) {
             onClick={() => setCreatingTaglist(true)}
             className="mt-1 w-full rounded-md px-3 py-2 text-left text-sm text-muted hover:bg-surface-hover/60 hover:text-foreground"
           >
-            + New taglist
+            + New library taglist
           </button>
         )}
       </nav>
 
       {pendingDeletePlaylist ? (
         <ConfirmDialog
-          title="Delete playlist"
-          message={`Delete "${pendingDeletePlaylist.name}"? This will remove the playlist but not the tracks.`}
+          title="Delete library playlist"
+          message={`Delete "${pendingDeletePlaylist.name}"? This will remove the library playlist but not the tracks.`}
           confirmLabel="Delete"
           cancelLabel="Cancel"
           destructive
@@ -1249,7 +1249,7 @@ export function Sidebar({ width }: { width: number }) {
       ) : null}
       {pendingDeleteCollection ? (
         <ConfirmDialog
-          title="Delete collection"
+          title="Delete stored collection"
           message={`Delete "${pendingDeleteCollection.name}" and all tracks stored in app data? This cannot be undone.`}
           confirmLabel="Delete"
           cancelLabel="Cancel"

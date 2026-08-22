@@ -50,7 +50,7 @@ export function useDeleteCollectionTrack() {
   const confirmDialog = pendingTrack ? (
     <ConfirmDialog
       title="Delete track"
-      message={`Delete "${pendingTrack.title}" from this collection? The file will be removed from app storage. This cannot be undone.`}
+      message={`Delete "${pendingTrack.title}" from this stored collection? The file will be removed from app storage. This cannot be undone.`}
       confirmLabel="Delete"
       cancelLabel="Cancel"
       destructive

@@ -229,7 +229,7 @@ export function useLibraryMenuActions() {
       if (collectionId == null) return;
       await refresh();
       setView({ collectionId });
-      setConfigMessage("Collection imported");
+      setConfigMessage("Stored collection imported");
     } catch (err) {
       setConfigError(String(err));
     } finally {
@@ -240,7 +240,7 @@ export function useLibraryMenuActions() {
   const loadConfigConfirmDialog = loadConfigConfirmOpen ? (
     <ConfirmDialog
       title="Load configuration"
-      message="Replace all current playlists and taglists with the contents of trackvault.json? Indexed tracks are not affected."
+      message="Replace all current library playlists and library taglists with the contents of trackvault.json? Indexed tracks are not affected."
       confirmLabel="Load"
       cancelLabel="Cancel"
       destructive
@@ -254,7 +254,7 @@ export function useLibraryMenuActions() {
     <ConfirmDialog
       title="Close library?"
       message={
-        "Remove the current library folder and clear all indexed tracks, playlists, and taglists from the app? Audio files on disk are not deleted. Collections are kept.\n\nSave configuration first if you want playlists and taglists written to trackvault.json."
+        "Remove the current library folder and clear all indexed tracks, library playlists, and library taglists from the app? Audio files on disk are not deleted. Stored collections are kept.\n\nSave configuration first if you want library playlists and library taglists written to trackvault.json."
       }
       confirmLabel="Close library"
       secondaryLabel="Save & close library"

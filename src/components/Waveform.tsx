@@ -8,6 +8,7 @@ interface WaveformProps {
   peaks: number[];
   durationMs: number;
   positionMs: number;
+  normalize?: boolean;
   transportBusy?: boolean;
   interactive?: boolean;
   onSeek: (positionMs: number) => Promise<void>;
@@ -18,6 +19,7 @@ export function Waveform({
   peaks,
   durationMs,
   positionMs,
+  normalize = false,
   transportBusy = false,
   interactive = true,
   onSeek,
@@ -48,7 +50,7 @@ export function Waveform({
       barGap: 1,
       barRadius: 2,
       cursorWidth: 2,
-      normalize: true,
+      normalize,
       interact: interactive && !transportBusy,
       waveColor: settings.waveformWave,
       progressColor: settings.waveformProgress,
@@ -103,6 +105,7 @@ export function Waveform({
     trackId,
     peaks,
     durationMs,
+    normalize,
     settings.waveformWave,
     settings.waveformProgress,
     settings.waveformCursor,
