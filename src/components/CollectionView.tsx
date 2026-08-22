@@ -2,9 +2,10 @@ import { useCallback, useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { open, save } from "@tauri-apps/plugin-dialog";
 
-import { api, type Track } from "../lib/tauri";
+import { api, type CollectionPlaybackMode, type Track } from "../lib/tauri";
 import { useDeleteCollectionTrack } from "../hooks/useDeleteCollectionTrack";
-import { usePlayer } from "../hooks/usePlayer";
+import { useLibrary, usePlayer } from "../hooks/usePlayer";
+import { playerController } from "../playerController";
 import { useTrackSearch } from "../hooks/useTrackSearch";
 import { usePlayerStore } from "../store/playerStore";
 import { TagEditorModal } from "./TagEditorModal";
@@ -23,6 +24,7 @@ export function CollectionView({ collectionId }: CollectionViewProps) {
     setActiveTrackIds,
   } = usePlayerStore();
   const { playTrack, selectTrack } = usePlayer();
+  const { refresh } = useLibrary();
   const [tracks, setTracks] = useState<Track[]>([]);
   const { requestDeleteTrack, confirmDialog: deleteConfirmDialog } =
     useDeleteCollectionTrack();
@@ -31,6 +33,61 @@ export function CollectionView({ collectionId }: CollectionViewProps) {
   const { query, setQuery, filteredTracks, isSearching } = useTrackSearch(tracks);
 
   const collection = collections.find((entry) => entry.id === collectionId);
+  const playbackMode = collection?.playback_mode ?? "discrete";
+  const continuousVolume = collection?.continuous_volume ?? 0.5;
+  const continuousVolumePercent = Math.round(continuousVolume * 100);
+
+  const handlePlaybackModeChange = useCallback(
+    async (nextMode: CollectionPlaybackMode) => {
+      if (nextMode === playbackMode) return;
+      try {
+        await api.setCollectionPlaybackMode(collectionId, nextMode);
+        await refresh();
+      } catch (error) {
+        console.error(error);
+      }
+    },
+    [collectionId, playbackMode, refresh],
+  );
+
+  const handleContinuousVolumeChange = useCallback(
+    async (nextVolume: number) => {
+      const clamped = Math.min(1, Math.max(0, nextVolume));
+      if (Math.abs(clamped - continuousVolume) < 0.001) return;
+      try {
+        await api.setCollectionContinuousVolume(collectionId, clamped);
+        await refresh();
+        const { continuousPlaybackCollectionId } = usePlayerStore.getState();
+        if (continuousPlaybackCollectionId === collectionId) {
+          playerController.reapplyVolume();
+        }
+      } catch (error) {
+        console.error(error);
+      }
+    },
+    [collectionId, continuousVolume, refresh],
+  );
+
+  useEffect(() => {
+    if (playbackMode !== "continuous" || tracks.length === 0) return;
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        if (cancelled || usePlayerStore.getState().transportBusy) return;
+        await playerController.preloadContinuousCollectionPosition(
+          collectionId,
+          tracks.map((track) => track.id),
+        );
+      } catch (error) {
+        console.error(error);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [collectionId, playbackMode, tracks]);
 
   const refreshTracks = useCallback(() => {
     api.getCollectionTracks(collectionId).then(setTracks).catch(console.error);
@@ -89,7 +146,7 @@ export function CollectionView({ collectionId }: CollectionViewProps) {
     <div className="flex h-full flex-col">
       <div className="border-b border-border px-4 py-3">
         <div className="flex items-start justify-between gap-3">
-          <div>
+          <div className="min-w-0 flex-1">
             <h2 className="text-base font-semibold text-white">
               {collection?.name ?? "Stored collection"}
             </h2>
@@ -99,13 +156,49 @@ export function CollectionView({ collectionId }: CollectionViewProps) {
                 : `${tracks.length} track${tracks.length === 1 ? "" : "s"}`}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => void exportCollection()}
-            className="shrink-0 rounded-md border border-border px-2 py-1 text-xs text-foreground hover:bg-surface-hover"
-          >
-            Export…
-          </button>
+          <div className="flex shrink-0 items-center gap-2">
+            <label className="flex items-center gap-1.5 text-xs text-muted">
+              <span>Playback</span>
+              <select
+                value={playbackMode}
+                onChange={(event) =>
+                  void handlePlaybackModeChange(
+                    event.target.value as CollectionPlaybackMode,
+                  )
+                }
+                className="rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground"
+              >
+                <option value="discrete">Discrete</option>
+                <option value="continuous">Continuous background</option>
+              </select>
+            </label>
+            {playbackMode === "continuous" ? (
+              <label className="flex min-w-40 items-center gap-1.5 text-xs text-muted">
+                <span className="shrink-0">Background volume</span>
+                <input
+                  type="range"
+                  min={10}
+                  max={100}
+                  value={continuousVolumePercent}
+                  onChange={(event) =>
+                    void handleContinuousVolumeChange(
+                      Number(event.target.value) / 100,
+                    )
+                  }
+                  className="h-1 w-20 cursor-pointer accent-accent"
+                  title={`Background volume ${continuousVolumePercent}% of master`}
+                />
+                <span className="w-8 shrink-0 tabular-nums">{continuousVolumePercent}%</span>
+              </label>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => void exportCollection()}
+              className="rounded-md border border-border px-2 py-1 text-xs text-foreground hover:bg-surface-hover"
+            >
+              Export…
+            </button>
+          </div>
         </div>
         {exportError ? (
           <p className="mt-2 text-xs text-red-400">{exportError}</p>

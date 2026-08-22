@@ -77,6 +77,8 @@ interface PlayerStore {
   taglistNav: TaglistNav | null;
   cursorTaglistFooter: boolean;
   pendingTaglistSelectFirst: boolean;
+  continuousPlaybackCollectionId: number | null;
+  continuousPlaybackTrackIds: number[];
   setTracks: (tracks: Track[]) => void;
   setPlaylists: (playlists: Playlist[]) => void;
   setTaglists: (taglists: Taglist[]) => void;
@@ -106,6 +108,10 @@ interface PlayerStore {
   setTaglistNav: (nav: TaglistNav | null) => void;
   setCursorTaglistFooter: (active: boolean) => void;
   setPendingTaglistSelectFirst: (pending: boolean) => void;
+  setContinuousPlaybackContext: (
+    collectionId: number | null,
+    trackIds: number[],
+  ) => void;
 }
 
 export function getDisplayPositionMs(
@@ -154,6 +160,8 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   taglistNav: null,
   cursorTaglistFooter: false,
   pendingTaglistSelectFirst: false,
+  continuousPlaybackCollectionId: null,
+  continuousPlaybackTrackIds: [],
   setTracks: (tracks) => set({ tracks }),
   setPlaylists: (playlists) => set({ playlists }),
   setTaglists: (taglists) => set({ taglists }),
@@ -275,6 +283,8 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     })),
   setPendingTaglistSelectFirst: (pendingTaglistSelectFirst) =>
     set({ pendingTaglistSelectFirst }),
+  setContinuousPlaybackContext: (continuousPlaybackCollectionId, continuousPlaybackTrackIds) =>
+    set({ continuousPlaybackCollectionId, continuousPlaybackTrackIds }),
 }));
 
 let transportFallbackId = 0;

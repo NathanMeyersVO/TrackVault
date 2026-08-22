@@ -27,6 +27,14 @@ pub struct Collection {
     pub name: String,
     pub created_at: i64,
     pub track_count: i64,
+    pub playback_mode: String,
+    pub continuous_volume: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CollectionPlaybackState {
+    pub track_id: Option<i64>,
+    pub position_ms: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -4,7 +4,7 @@ use std::path::Path;
 use rusqlite::{params, Connection};
 use thiserror::Error;
 
-use crate::models::{Collection, Playlist, Taglist, TaglistValue, Track};
+use crate::models::{Collection, CollectionPlaybackState, Playlist, Taglist, TaglistValue, Track};
 
 #[derive(Debug, Error)]
 pub enum DbError {
@@ -182,7 +182,37 @@ impl Database {
         )?;
         self.bootstrap_playlist_order()?;
         self.migrate_single_library_folder()?;
+        let _ = self.conn.execute(
+            "ALTER TABLE collections ADD COLUMN playback_mode TEXT NOT NULL DEFAULT 'discrete'",
+            [],
+        );
+        self.conn.execute_batch(
+            "
+            CREATE TABLE IF NOT EXISTS collection_playback_state (
+                collection_id INTEGER PRIMARY KEY,
+                track_id INTEGER,
+                position_ms INTEGER NOT NULL DEFAULT 0,
+                FOREIGN KEY (collection_id) REFERENCES collections(id) ON DELETE CASCADE,
+                FOREIGN KEY (track_id) REFERENCES tracks(id) ON DELETE SET NULL
+            );
+            ",
+        )?;
+        let _ = self.conn.execute(
+            "ALTER TABLE collections ADD COLUMN continuous_volume REAL NOT NULL DEFAULT 0.5",
+            [],
+        );
         Ok(())
+    }
+
+    fn map_collection_row(row: &rusqlite::Row<'_>) -> Result<Collection, rusqlite::Error> {
+        Ok(Collection {
+            id: row.get(0)?,
+            name: row.get(1)?,
+            created_at: row.get(2)?,
+            track_count: row.get(3)?,
+            playback_mode: row.get(4)?,
+            continuous_volume: row.get(5)?,
+        })
     }
 
     fn bootstrap_collection_order(&self) -> Result<(), DbError> {
@@ -692,17 +722,12 @@ impl Database {
     pub fn list_collections(&self) -> Result<Vec<Collection>, DbError> {
         let mut stmt = self.conn.prepare(
             "SELECT c.id, c.name, c.created_at,
-                    (SELECT COUNT(*) FROM collection_tracks ct WHERE ct.collection_id = c.id)
+                    (SELECT COUNT(*) FROM collection_tracks ct WHERE ct.collection_id = c.id),
+                    c.playback_mode,
+                    c.continuous_volume
              FROM collections c",
         )?;
-        let rows = stmt.query_map([], |row| {
-            Ok(Collection {
-                id: row.get(0)?,
-                name: row.get(1)?,
-                created_at: row.get(2)?,
-                track_count: row.get(3)?,
-            })
-        })?;
+        let rows = stmt.query_map([], Self::map_collection_row)?;
         let mut by_id: HashMap<i64, Collection> = HashMap::new();
         for row in rows.filter_map(Result::ok) {
             by_id.insert(row.id, row);
@@ -721,17 +746,14 @@ impl Database {
     pub fn get_collection(&self, id: i64) -> Result<Option<Collection>, DbError> {
         let mut stmt = self.conn.prepare(
             "SELECT c.id, c.name, c.created_at,
-                    (SELECT COUNT(*) FROM collection_tracks ct WHERE ct.collection_id = c.id)
+                    (SELECT COUNT(*) FROM collection_tracks ct WHERE ct.collection_id = c.id),
+                    c.playback_mode,
+                    c.continuous_volume
              FROM collections c WHERE c.id = ?1",
         )?;
         let mut rows = stmt.query(params![id])?;
         if let Some(row) = rows.next()? {
-            Ok(Some(Collection {
-                id: row.get(0)?,
-                name: row.get(1)?,
-                created_at: row.get(2)?,
-                track_count: row.get(3)?,
-            }))
+            Ok(Some(Self::map_collection_row(&row)?))
         } else {
             Ok(None)
         }
@@ -763,6 +785,87 @@ impl Database {
         if changed == 0 {
             return Err(DbError::Sqlite(rusqlite::Error::QueryReturnedNoRows));
         }
+        Ok(())
+    }
+
+    pub fn set_collection_playback_mode(&self, id: i64, mode: &str) -> Result<(), DbError> {
+        let normalized = normalize_collection_playback_mode(mode);
+        let changed = self.conn.execute(
+            "UPDATE collections SET playback_mode = ?1 WHERE id = ?2",
+            params![normalized, id],
+        )?;
+        if changed == 0 {
+            return Err(DbError::Sqlite(rusqlite::Error::QueryReturnedNoRows));
+        }
+        Ok(())
+    }
+
+    pub fn set_collection_continuous_volume(&self, id: i64, volume: f64) -> Result<(), DbError> {
+        let clamped = clamp_continuous_volume(volume);
+        let changed = self.conn.execute(
+            "UPDATE collections SET continuous_volume = ?1 WHERE id = ?2",
+            params![clamped, id],
+        )?;
+        if changed == 0 {
+            return Err(DbError::Sqlite(rusqlite::Error::QueryReturnedNoRows));
+        }
+        Ok(())
+    }
+
+    pub fn get_collection_playback_state(
+        &self,
+        collection_id: i64,
+    ) -> Result<CollectionPlaybackState, DbError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT track_id, position_ms FROM collection_playback_state WHERE collection_id = ?1",
+        )?;
+        let mut rows = stmt.query(params![collection_id])?;
+        if let Some(row) = rows.next()? {
+            return Ok(CollectionPlaybackState {
+                track_id: row.get(0)?,
+                position_ms: row.get(1)?,
+            });
+        }
+
+        Ok(CollectionPlaybackState {
+            track_id: None,
+            position_ms: 0,
+        })
+    }
+
+    pub fn save_collection_playback_state(
+        &self,
+        collection_id: i64,
+        track_id: Option<i64>,
+        position_ms: i64,
+    ) -> Result<(), DbError> {
+        if let Some(track_id) = track_id {
+            let belongs: i64 = self.conn.query_row(
+                "SELECT COUNT(*) FROM collection_tracks WHERE collection_id = ?1 AND track_id = ?2",
+                params![collection_id, track_id],
+                |row| row.get(0),
+            )?;
+            if belongs == 0 {
+                return self.clear_collection_playback_state(collection_id);
+            }
+        }
+
+        self.conn.execute(
+            "INSERT INTO collection_playback_state (collection_id, track_id, position_ms)
+             VALUES (?1, ?2, ?3)
+             ON CONFLICT(collection_id) DO UPDATE SET
+               track_id = excluded.track_id,
+               position_ms = excluded.position_ms",
+            params![collection_id, track_id, position_ms.max(0)],
+        )?;
+        Ok(())
+    }
+
+    pub fn clear_collection_playback_state(&self, collection_id: i64) -> Result<(), DbError> {
+        self.conn.execute(
+            "DELETE FROM collection_playback_state WHERE collection_id = ?1",
+            params![collection_id],
+        )?;
         Ok(())
     }
 
@@ -1517,6 +1620,21 @@ impl Database {
         }
         Ok(())
     }
+}
+
+pub fn normalize_collection_playback_mode(mode: &str) -> &'static str {
+    match mode.trim() {
+        "continuous" => "continuous",
+        _ => "discrete",
+    }
+}
+
+pub fn clamp_continuous_volume(volume: f64) -> f64 {
+    volume.clamp(0.0, 1.0)
+}
+
+pub fn default_continuous_volume() -> f64 {
+    0.5
 }
 
 fn merge_collection_order(stored: &[i64], all_ids: &[i64]) -> Vec<i64> {

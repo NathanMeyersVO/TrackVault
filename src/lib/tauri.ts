@@ -19,11 +19,20 @@ export interface Playlist {
   track_count: number;
 }
 
+export type CollectionPlaybackMode = "discrete" | "continuous";
+
 export interface Collection {
   id: number;
   name: string;
   created_at: number;
   track_count: number;
+  playback_mode: CollectionPlaybackMode;
+  continuous_volume: number;
+}
+
+export interface CollectionPlaybackState {
+  track_id: number | null;
+  position_ms: number;
 }
 
 export interface Taglist {
@@ -163,6 +172,28 @@ export const api = {
     invoke<void>("export_collection", { collectionId, destination }),
   importCollection: (source: string) =>
     invoke<number>("import_collection", { source }),
+  setCollectionPlaybackMode: (collectionId: number, playbackMode: CollectionPlaybackMode) =>
+    invoke<Collection>("set_collection_playback_mode", {
+      collectionId,
+      playbackMode,
+    }),
+  setCollectionContinuousVolume: (collectionId: number, continuousVolume: number) =>
+    invoke<Collection>("set_collection_continuous_volume", {
+      collectionId,
+      continuousVolume,
+    }),
+  getCollectionPlaybackState: (collectionId: number) =>
+    invoke<CollectionPlaybackState>("get_collection_playback_state", { collectionId }),
+  saveCollectionPlaybackState: (
+    collectionId: number,
+    trackId: number | null,
+    positionMs: number,
+  ) =>
+    invoke<void>("save_collection_playback_state", {
+      collectionId,
+      trackId,
+      positionMs,
+    }),
   createPlaylist: (name: string) =>
     invoke<number>("create_playlist", { name }),
   deletePlaylist: (id: number) => invoke<void>("delete_playlist", { id }),

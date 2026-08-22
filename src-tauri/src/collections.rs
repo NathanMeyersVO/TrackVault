@@ -22,7 +22,19 @@ pub const FILES_DIR: &str = "files";
 pub struct CollectionManifest {
     pub version: u32,
     pub name: String,
+    #[serde(default = "default_playback_mode")]
+    pub playback_mode: String,
+    #[serde(default = "default_continuous_volume")]
+    pub continuous_volume: f64,
     pub tracks: Vec<CollectionManifestTrack>,
+}
+
+fn default_playback_mode() -> String {
+    "discrete".to_string()
+}
+
+fn default_continuous_volume() -> f64 {
+    crate::db::default_continuous_volume()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -210,6 +222,8 @@ pub fn export_collection(
     let manifest = CollectionManifest {
         version: ARCHIVE_VERSION,
         name: collection.name,
+        playback_mode: collection.playback_mode,
+        continuous_volume: collection.continuous_volume,
         tracks: tracks
             .iter()
             .filter_map(|track| {
@@ -356,6 +370,16 @@ pub fn import_collection(
         .unique_collection_name(&manifest.name)
         .map_err(|e| e.to_string())?;
     let collection_id = db.create_collection(&name).map_err(|e| e.to_string())?;
+    db.set_collection_playback_mode(
+        collection_id,
+        crate::db::normalize_collection_playback_mode(&manifest.playback_mode),
+    )
+    .map_err(|e| e.to_string())?;
+    db.set_collection_continuous_volume(
+        collection_id,
+        crate::db::clamp_continuous_volume(manifest.continuous_volume),
+    )
+    .map_err(|e| e.to_string())?;
     let collection_folder = ensure_collection_dir(app_data_dir, collection_id)?;
 
     let mut track_ids = Vec::new();
@@ -500,6 +524,40 @@ mod tests {
         let tracks = db.list_collection_tracks(imported_id).unwrap();
         assert_eq!(tracks.len(), 1);
         assert_eq!(tracks[0].title, "track-one");
+
+        std::fs::remove_dir_all(&app_data).ok();
+    }
+
+    #[test]
+    fn export_import_preserves_playback_mode() {
+        let (db, app_data) = test_app_data();
+        let collection_id = db.create_collection("Ambient").unwrap();
+        db.set_collection_playback_mode(collection_id, "continuous")
+            .unwrap();
+        db.set_collection_continuous_volume(collection_id, 0.35)
+            .unwrap();
+        let dir = ensure_collection_dir(&app_data, collection_id).unwrap();
+        let track_file = dir.join("track-one.mp3");
+        std::fs::write(&track_file, b"fake-audio").unwrap();
+        let path = track_file.canonicalize().unwrap_or(track_file);
+        db.upsert_collection_track(
+            collection_id,
+            path.to_str().unwrap(),
+            "Track One",
+            "Artist",
+            "Album",
+            1000,
+            None,
+        )
+        .unwrap();
+
+        let archive = app_data.join("ambient.tgz");
+        export_collection(&db, &app_data, collection_id, &archive).unwrap();
+
+        let imported_id = import_collection(&db, &app_data, &archive).unwrap();
+        let imported = db.get_collection(imported_id).unwrap().expect("collection");
+        assert_eq!(imported.playback_mode, "continuous");
+        assert!((imported.continuous_volume - 0.35).abs() < f64::EPSILON);
 
         std::fs::remove_dir_all(&app_data).ok();
     }

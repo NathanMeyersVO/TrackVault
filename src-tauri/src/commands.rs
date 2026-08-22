@@ -861,6 +861,76 @@ pub fn import_collection(
     Ok(collection_id)
 }
 
+#[tauri::command]
+pub fn set_collection_playback_mode(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    collection_id: i64,
+    playback_mode: String,
+) -> Result<Collection, String> {
+    let collection = {
+        let db = state.db.lock();
+        db.set_collection_playback_mode(
+            collection_id,
+            crate::db::normalize_collection_playback_mode(&playback_mode),
+        )
+        .map_err(|e| e.to_string())?;
+        db.get_collection(collection_id)
+            .map_err(|e| e.to_string())?
+            .ok_or_else(|| "Collection not found".to_string())?
+    };
+    let _ = app.emit("library-updated", ());
+    Ok(collection)
+}
+
+#[tauri::command]
+pub fn set_collection_continuous_volume(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    collection_id: i64,
+    continuous_volume: f64,
+) -> Result<Collection, String> {
+    let collection = {
+        let db = state.db.lock();
+        db.set_collection_continuous_volume(
+            collection_id,
+            crate::db::clamp_continuous_volume(continuous_volume),
+        )
+        .map_err(|e| e.to_string())?;
+        db.get_collection(collection_id)
+            .map_err(|e| e.to_string())?
+            .ok_or_else(|| "Collection not found".to_string())?
+    };
+    let _ = app.emit("library-updated", ());
+    Ok(collection)
+}
+
+#[tauri::command]
+pub fn get_collection_playback_state(
+    state: State<'_, AppState>,
+    collection_id: i64,
+) -> Result<crate::models::CollectionPlaybackState, String> {
+    state
+        .db
+        .lock()
+        .get_collection_playback_state(collection_id)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn save_collection_playback_state(
+    state: State<'_, AppState>,
+    collection_id: i64,
+    track_id: Option<i64>,
+    position_ms: i64,
+) -> Result<(), String> {
+    state
+        .db
+        .lock()
+        .save_collection_playback_state(collection_id, track_id, position_ms)
+        .map_err(|e| e.to_string())
+}
+
 pub fn init_state(app: &AppHandle) -> Result<AppState, String> {
     let data_dir = app
         .path()
