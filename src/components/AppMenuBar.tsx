@@ -25,6 +25,7 @@ export function AppMenuBar() {
     uploadError,
     configMessage,
     configError,
+    dismissStatusFeedback,
     libraryUploadConfirmDialog,
     collectionUploadConfirmDialog,
     loadConfigConfirmDialog,
@@ -138,12 +139,21 @@ export function AppMenuBar() {
           <MenuDropdown label="View" items={viewItems} />
           <MenuDropdown label="Help" items={helpItems} />
         </nav>
-        <div className="ml-auto min-w-0 max-w-[50%] text-right">
+        <div className="ml-auto flex min-w-0 max-w-[50%] flex-col items-end gap-0.5 text-right">
+          <MenuBarStatus className="text-muted">{statusLabel}</MenuBarStatus>
           {statusMessage ? (
-            <MenuBarStatus className={statusClassName}>{statusMessage}</MenuBarStatus>
-          ) : (
-            <MenuBarStatus className="text-muted">{statusLabel}</MenuBarStatus>
-          )}
+            <div className="flex min-w-0 items-center gap-1">
+              <MenuBarStatus className={statusClassName}>{statusMessage}</MenuBarStatus>
+              <button
+                type="button"
+                className="shrink-0 rounded px-1 text-xs leading-none text-muted hover:bg-surface-hover hover:text-foreground"
+                aria-label="Dismiss status"
+                onClick={dismissStatusFeedback}
+              >
+                ×
+              </button>
+            </div>
+          ) : null}
         </div>
       </header>
       {libraryUploadConfirmDialog}

@@ -1,4 +1,10 @@
 import { useCallback, useState } from "react";
+
+import {
+  ERROR_DISMISS_MS,
+  SUCCESS_DISMISS_MS,
+  useAutoDismissFeedback,
+} from "./useAutoDismissFeedback";
 import { open } from "@tauri-apps/plugin-dialog";
 
 import { ConfirmDialog } from "../components/ConfirmDialog";
@@ -65,6 +71,22 @@ export function useLibraryMenuActions() {
   }, [clearCollectionUploadFeedback, clearLibraryUploadFeedback]);
   const [configMessage, setConfigMessage] = useState<string | null>(null);
   const [configError, setConfigError] = useState<string | null>(null);
+  const clearConfigFeedback = useCallback(() => {
+    setConfigMessage(null);
+    setConfigError(null);
+  }, []);
+  const dismissStatusFeedback = useCallback(() => {
+    clearUploadFeedback();
+    clearConfigFeedback();
+  }, [clearConfigFeedback, clearUploadFeedback]);
+  const statusError = uploadError ?? configError;
+  const statusSuccess = uploadMessage ?? configMessage;
+  useAutoDismissFeedback(statusError, dismissStatusFeedback, ERROR_DISMISS_MS);
+  useAutoDismissFeedback(
+    statusError == null ? statusSuccess : null,
+    dismissStatusFeedback,
+    SUCCESS_DISMISS_MS,
+  );
   const [savingConfig, setSavingConfig] = useState(false);
   const [loadingConfig, setLoadingConfig] = useState(false);
   const [loadConfigConfirmOpen, setLoadConfigConfirmOpen] = useState(false);
@@ -272,6 +294,7 @@ export function useLibraryMenuActions() {
     uploadError,
     configMessage,
     configError,
+    dismissStatusFeedback,
     libraryUploadConfirmDialog,
     collectionUploadConfirmDialog,
     loadConfigConfirmDialog,
