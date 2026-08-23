@@ -5,6 +5,7 @@ export interface MenuItem {
   onClick: () => void;
   disabled?: boolean;
   checked?: boolean;
+  title?: string;
   separator?: false;
 }
 
@@ -79,6 +80,7 @@ export function MenuDropdown({ label, items }: MenuDropdownProps) {
                 type="button"
                 role="menuitem"
                 disabled={entry.disabled}
+                title={entry.title}
                 onClick={() => closeAndRun(entry)}
                 className="block w-full px-3 py-1.5 text-left text-sm text-foreground hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-40"
               >

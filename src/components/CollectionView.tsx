@@ -221,7 +221,7 @@ export function CollectionView({ collectionId }: CollectionViewProps) {
           emptyMessage={
             isSearching
               ? "No tracks match your search."
-              : "No tracks in this stored collection yet. Use File → Upload to stored collection… to add audio files."
+              : "No tracks in this stored collection yet. Use Stored Collections → Upload to stored collection… to add audio files."
           }
         />
       </div>

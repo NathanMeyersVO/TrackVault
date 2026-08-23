@@ -54,16 +54,44 @@ export function AppMenuBar() {
       ? `Upload to stored collection (${collectionName})…`
       : "Upload to stored collection…";
 
-  const fileItems: MenuEntry[] = [
+  const libraryItems: MenuEntry[] = [
     {
-      label: "Choose library folder",
+      label: "Choose Library Folder",
       onClick: () => void chooseLibraryFolder(),
       disabled: actionsDisabled,
     },
     {
-      label: libraryUploading ? "Uploading to library…" : "Upload to library…",
+      label: libraryUploading ? "Uploading to library…" : "Upload to Library",
       onClick: () => void uploadToLibrary(),
       disabled: libraryUploadDisabled,
+    },
+    {
+      label: scanning ? "Scanning…" : "Rescan Library",
+      onClick: () => void scanLibrary(),
+      disabled: libraryActionsDisabled,
+    },
+    {
+      label: savingConfig ? "Saving…" : "Save Library Configuration",
+      onClick: () => void saveConfiguration(),
+      disabled: libraryActionsDisabled || savingConfig,
+    },
+    {
+      label: loadingConfig ? "Loading…" : "Load Library Configuration",
+      onClick: () => void requestLoadConfiguration(),
+      disabled: libraryActionsDisabled || loadingConfig,
+    },
+    {
+      label: closingLibrary ? "Closing library…" : "Close Library",
+      onClick: () => void requestCloseLibrary(),
+      disabled: actionsDisabled,
+    },
+  ];
+
+  const storedCollectionItems: MenuEntry[] = [
+    {
+      label: importingCollection ? "Importing…" : "Import stored collection",
+      onClick: () => void importCollection(),
+      disabled: actionsDisabled,
     },
     {
       label: collectionUploading
@@ -72,34 +100,9 @@ export function AppMenuBar() {
       onClick: () => void uploadToCollection(),
       disabled: collectionUploadDisabled,
     },
-    {
-      label: importingCollection ? "Importing…" : "Import stored collection…",
-      onClick: () => void importCollection(),
-      disabled: actionsDisabled,
-    },
-    { separator: true },
-    {
-      label: scanning ? "Scanning…" : "Rescan library",
-      onClick: () => void scanLibrary(),
-      disabled: libraryActionsDisabled,
-    },
-    {
-      label: savingConfig ? "Saving…" : "Save configuration",
-      onClick: () => void saveConfiguration(),
-      disabled: libraryActionsDisabled || savingConfig,
-    },
-    {
-      label: loadingConfig ? "Loading…" : "Load configuration",
-      onClick: () => void requestLoadConfiguration(),
-      disabled: libraryActionsDisabled || loadingConfig,
-    },
-    { separator: true },
-    {
-      label: closingLibrary ? "Closing library…" : "Close library",
-      onClick: () => void requestCloseLibrary(),
-      disabled: actionsDisabled,
-    },
-    { separator: true },
+  ];
+
+  const fileItems: MenuEntry[] = [
     {
       label: "Exit",
       onClick: () => void getCurrentWindow().close(),
@@ -108,6 +111,7 @@ export function AppMenuBar() {
 
   const applicationItems: MenuEntry[] = APPLICATION_OPTIONS.map((option) => ({
     label: option.label,
+    title: option.title,
     checked: applicationId === option.id,
     onClick: () => {
       if (applicationId !== option.id) {
@@ -156,6 +160,8 @@ export function AppMenuBar() {
         </h1>
         <nav className="flex shrink-0 items-center gap-1">
           <MenuDropdown label="File" items={fileItems} />
+          <MenuDropdown label="Library" items={libraryItems} />
+          <MenuDropdown label="Stored Collections" items={storedCollectionItems} />
           <MenuDropdown label="Application" items={applicationItems} />
           <MenuDropdown label="View" items={viewItems} />
           <MenuDropdown label="Help" items={helpItems} />
