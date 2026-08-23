@@ -10,7 +10,9 @@ export type View =
 export type TransportMode = "idle" | "seek" | "load";
 
 export interface TaglistNav {
+  hasPreviousSublist: boolean;
   hasNextSublist: boolean;
+  activatePreviousSublist: () => void;
   activateNextSublist: () => void;
 }
 
@@ -79,6 +81,7 @@ interface PlayerStore {
   pendingTaglistSelectFirst: boolean;
   continuousPlaybackCollectionId: number | null;
   continuousPlaybackTrackIds: number[];
+  previewPositionMs: number;
   setTracks: (tracks: Track[]) => void;
   setPlaylists: (playlists: Playlist[]) => void;
   setTaglists: (taglists: Taglist[]) => void;
@@ -112,6 +115,7 @@ interface PlayerStore {
     collectionId: number | null,
     trackIds: number[],
   ) => void;
+  setPreviewPositionMs: (positionMs: number) => void;
 }
 
 export function getDisplayPositionMs(
@@ -162,6 +166,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   pendingTaglistSelectFirst: false,
   continuousPlaybackCollectionId: null,
   continuousPlaybackTrackIds: [],
+  previewPositionMs: 0,
   setTracks: (tracks) => set({ tracks }),
   setPlaylists: (playlists) => set({ playlists }),
   setTaglists: (taglists) => set({ taglists }),
@@ -285,6 +290,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     set({ pendingTaglistSelectFirst }),
   setContinuousPlaybackContext: (continuousPlaybackCollectionId, continuousPlaybackTrackIds) =>
     set({ continuousPlaybackCollectionId, continuousPlaybackTrackIds }),
+  setPreviewPositionMs: (previewPositionMs) => set({ previewPositionMs }),
 }));
 
 let transportFallbackId = 0;

@@ -61,7 +61,7 @@ export default function App() {
     initPlayerController();
   }, []);
 
-  const { selectTrack, playTrack, togglePlayPause, adjustVolume } = usePlayer();
+  const { selectTrack, playTrack, togglePlayPause, adjustVolume, seekToStart, seekToEnd } = usePlayer();
   const { width: sidebarWidth, onResizeStart } = useSidebarWidth();
   const setDraggingTrackId = usePlayerStore((state) => state.setDraggingTrackId);
   useTrackCursor({
@@ -69,6 +69,8 @@ export default function App() {
     onPlayTrack: playTrack,
     onTogglePlayPause: togglePlayPause,
     onAdjustVolume: adjustVolume,
+    seekToStart,
+    seekToEnd,
   });
 
   useEffect(() => {

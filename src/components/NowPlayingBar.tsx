@@ -13,7 +13,16 @@ import { Waveform } from "./Waveform";
 
 export function NowPlayingBar() {
   const store = usePlayerStore();
-  const { tracks, playback, cursorTrackId, transportBusy, transportMode, volume } = store;
+  const {
+    tracks,
+    playback,
+    cursorTrackId,
+    transportBusy,
+    transportMode,
+    volume,
+    previewPositionMs,
+    setPreviewPositionMs,
+  } = store;
   const {
     togglePlayPause,
     setVolume,
@@ -26,7 +35,6 @@ export function NowPlayingBar() {
   const [peaks, setPeaks] = useState<number[]>([]);
   const [peakDurationMs, setPeakDurationMs] = useState(0);
   const [peaksEpoch, setPeaksEpoch] = useState(0);
-  const [previewPositionMs, setPreviewPositionMs] = useState(0);
   const [fetchedTrack, setFetchedTrack] = useState<Awaited<
     ReturnType<typeof api.getTrack>
   > | null>(null);
@@ -198,7 +206,10 @@ export function NowPlayingBar() {
       </div>
 
       <div className="mb-1 flex justify-end">
-        <label className="flex cursor-pointer select-none items-center gap-1.5 text-xs text-muted">
+        <label
+          className="flex cursor-pointer select-none items-center gap-1.5 text-xs text-muted"
+          title="When on, scales the waveform to fill the display so quiet and loud tracks are easier to compare. When off, shows raw peak levels — quiet tracks look smaller and loud tracks use more height. Display only; does not change playback volume."
+        >
           <input
             type="checkbox"
             checked={normalize}

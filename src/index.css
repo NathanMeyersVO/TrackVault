@@ -11,6 +11,8 @@
   --color-accent-hover: var(--tv-accent-hover);
   --color-accent-subtle: var(--tv-accent-subtle);
   --color-drop: var(--tv-drop-indicator);
+  --color-cursor-background: var(--tv-cursor-background);
+  --color-cursor-background-playing: var(--tv-cursor-background-playing);
 }
 
 :root {

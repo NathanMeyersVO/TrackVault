@@ -7,6 +7,7 @@ import { usePlayer } from "../hooks/usePlayer";
 import { useDeleteTrack } from "../hooks/useDeleteTrack";
 import { useTrackSearch } from "../hooks/useTrackSearch";
 import { usePlayerStore } from "../store/playerStore";
+import { scrollSidebarItem, sidebarSublistId } from "../lib/sidebarNavigation";
 import { ChangeTaglistValueModal } from "./ChangeTaglistValueModal";
 import { TagEditorModal } from "./TagEditorModal";
 import { TrackSearchInput } from "./TrackSearchInput";
@@ -55,13 +56,15 @@ export function TaglistView({ taglistId, value }: TaglistViewProps) {
     currentIndex >= 0 && currentIndex < values.length - 1
       ? values[currentIndex + 1]
       : null;
+  const previousSublist =
+    currentIndex > 0 ? values[currentIndex - 1] : null;
   const hasNextSublist = nextSublist != null && !isSearching;
-  const nextSublistName = nextSublist
-    ? (nextSublist.display_title ??
-      formatTaglistLabel(nextSublist.value, null))
+  const hasPreviousSublist = previousSublist != null && !isSearching;
+  const nextSublistLabel = nextSublist
+    ? formatTaglistLabel(nextSublist.value, nextSublist.display_title)
     : null;
   const footerLabel =
-    nextSublistName != null ? `Next library taglist (${nextSublistName})` : null;
+    nextSublistLabel != null ? `Next library taglist (${nextSublistLabel})` : null;
 
   const refreshTracks = useCallback(() => {
     api
@@ -87,8 +90,23 @@ export function TaglistView({ taglistId, value }: TaglistViewProps) {
     setCursorTaglistFooter(false);
     setPendingTaglistSelectFirst(true);
     setView({ taglistId, value: nextSublist.value });
+    scrollSidebarItem(sidebarSublistId(taglistId, nextSublist.value));
   }, [
     nextSublist,
+    setCursorTaglistFooter,
+    setPendingTaglistSelectFirst,
+    setView,
+    taglistId,
+  ]);
+
+  const activatePreviousSublist = useCallback(() => {
+    if (!previousSublist) return;
+    setCursorTaglistFooter(false);
+    setPendingTaglistSelectFirst(true);
+    setView({ taglistId, value: previousSublist.value });
+    scrollSidebarItem(sidebarSublistId(taglistId, previousSublist.value));
+  }, [
+    previousSublist,
     setCursorTaglistFooter,
     setPendingTaglistSelectFirst,
     setView,
@@ -133,15 +151,22 @@ export function TaglistView({ taglistId, value }: TaglistViewProps) {
   ]);
 
   useEffect(() => {
-    if (hasNextSublist) {
-      setTaglistNav({ hasNextSublist: true, activateNextSublist });
+    if (hasNextSublist || hasPreviousSublist) {
+      setTaglistNav({
+        hasNextSublist,
+        hasPreviousSublist,
+        activateNextSublist,
+        activatePreviousSublist,
+      });
     } else {
       setTaglistNav(null);
       setCursorTaglistFooter(false);
     }
   }, [
     activateNextSublist,
+    activatePreviousSublist,
     hasNextSublist,
+    hasPreviousSublist,
     setCursorTaglistFooter,
     setTaglistNav,
   ]);

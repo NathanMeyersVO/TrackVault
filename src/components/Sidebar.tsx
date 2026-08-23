@@ -19,6 +19,11 @@ import {
   setPlaylistReorderDragData,
   setSublistReorderDragData,
 } from "../lib/dragDrop";
+import {
+  sidebarCollectionId,
+  sidebarPlaylistId,
+  sidebarSublistId,
+} from "../lib/sidebarNavigation";
 import { useLibrary } from "../hooks/usePlayer";
 import { useApplication } from "../hooks/useApplication";
 import { useTagDropConfirm } from "../hooks/useTagDropConfirm";
@@ -312,12 +317,13 @@ function TaglistGroup({
         : isTrackDragging
           ? "border border-dashed border-border bg-surface-hover/50 text-foreground"
           : active
-            ? "border border-transparent bg-surface-hover text-foreground"
+            ? "border border-transparent bg-cursor-background text-foreground"
             : "border border-transparent text-foreground hover:bg-surface-hover/60";
 
     return (
       <div
         key={rowKey}
+        id={sidebarSublistId(taglist.id, entry.value)}
         role="button"
         tabIndex={0}
         onClick={handleNavigate}
@@ -777,12 +783,12 @@ export function Sidebar({ width }: { width: number }) {
         <p className="text-xs text-muted">Library, stored collections, library playlists & library taglists</p>
       </div>
 
-      <nav className="flex-1 overflow-y-auto p-2">
+      <nav className="flex-1 overflow-y-auto bg-background p-2">
         <button
           onClick={() => setView("library")}
           className={`mb-1 w-full rounded-md px-3 py-2 text-left text-sm ${
             isLibraryActive
-              ? "bg-surface-hover text-foreground"
+              ? "bg-cursor-background text-foreground"
               : "text-foreground hover:bg-surface-hover/60"
           }`}
         >
@@ -814,6 +820,7 @@ export function Sidebar({ width }: { width: number }) {
           return (
             <div
               key={collection.id}
+              id={sidebarCollectionId(collection.id)}
               role="button"
               tabIndex={0}
               onClick={() => {
@@ -858,7 +865,7 @@ export function Sidebar({ width }: { width: number }) {
                 isDragging ? "opacity-40" : ""
               } ${
                 active
-                  ? "border border-transparent bg-surface-hover text-foreground"
+                  ? "border border-transparent bg-cursor-background text-foreground"
                   : "border border-transparent text-foreground hover:bg-surface-hover/60"
               }`}
             >
@@ -1006,6 +1013,7 @@ export function Sidebar({ width }: { width: number }) {
           return (
             <div
               key={playlist.id}
+              id={sidebarPlaylistId(playlist.id)}
               role="button"
               tabIndex={0}
               onClick={handleNavigate}
@@ -1072,7 +1080,7 @@ export function Sidebar({ width }: { width: number }) {
                     : isTrackDragging
                       ? "border border-dashed border-border bg-surface-hover/50 text-foreground"
                       : active
-                        ? "border border-transparent bg-surface-hover text-foreground"
+                        ? "border border-transparent bg-cursor-background text-foreground"
                         : "border border-transparent text-foreground hover:bg-surface-hover/60"
               }`}
             >

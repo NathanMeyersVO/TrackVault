@@ -1,6 +1,11 @@
 import { useEffect } from "react";
 
 import { VOLUME_STEP } from "./usePlayer";
+import {
+  scrollSidebarItem,
+  sidebarCollectionId,
+  sidebarPlaylistId,
+} from "../lib/sidebarNavigation";
 import { usePlayerStore } from "../store/playerStore";
 
 export const TRACK_LIST_ID = "track-list";
@@ -24,11 +29,55 @@ function scrollToTaglistFooter(): void {
   });
 }
 
+function navigateSidebarGroup(direction: "up" | "down"): void {
+  const state = usePlayerStore.getState();
+  const { view, collections, playlists, setView, taglistNav } = state;
+  const delta = direction === "down" ? 1 : -1;
+
+  if (typeof view === "object" && "collectionId" in view) {
+    const currentIndex = collections.findIndex(
+      (collection) => collection.id === view.collectionId,
+    );
+    const nextIndex = currentIndex + delta;
+    if (currentIndex < 0 || nextIndex < 0 || nextIndex >= collections.length) {
+      return;
+    }
+    const target = collections[nextIndex];
+    setView({ collectionId: target.id });
+    scrollSidebarItem(sidebarCollectionId(target.id));
+    return;
+  }
+
+  if (typeof view === "object" && "playlistId" in view) {
+    const currentIndex = playlists.findIndex(
+      (playlist) => playlist.id === view.playlistId,
+    );
+    const nextIndex = currentIndex + delta;
+    if (currentIndex < 0 || nextIndex < 0 || nextIndex >= playlists.length) {
+      return;
+    }
+    const target = playlists[nextIndex];
+    setView({ playlistId: target.id });
+    scrollSidebarItem(sidebarPlaylistId(target.id));
+    return;
+  }
+
+  if (typeof view === "object" && "taglistId" in view) {
+    if (direction === "down" && taglistNav?.hasNextSublist) {
+      taglistNav.activateNextSublist();
+    } else if (direction === "up" && taglistNav?.hasPreviousSublist) {
+      taglistNav.activatePreviousSublist();
+    }
+  }
+}
+
 interface UseTrackCursorOptions {
   onSelectTrack: (trackId: number) => void;
   onPlayTrack: (trackId: number) => void;
   onTogglePlayPause: () => void;
   onAdjustVolume: (delta: number) => void;
+  seekToStart: () => void | Promise<void>;
+  seekToEnd: () => void | Promise<void>;
 }
 
 export function useTrackCursor({
@@ -36,6 +85,8 @@ export function useTrackCursor({
   onPlayTrack,
   onTogglePlayPause,
   onAdjustVolume,
+  seekToStart,
+  seekToEnd,
 }: UseTrackCursorOptions) {
   const {
     cursorTrackId,
@@ -63,6 +114,49 @@ export function useTrackCursor({
       if (event.key === "ArrowRight") {
         event.preventDefault();
         onAdjustVolume(VOLUME_STEP);
+        return;
+      }
+
+      if (event.key === "Home") {
+        event.preventDefault();
+        const state = usePlayerStore.getState();
+        if (state.transportBusy) return;
+        if (state.playback.track_id) {
+          void seekToStart();
+        } else if (state.cursorTrackId) {
+          state.setPreviewPositionMs(0);
+        }
+        return;
+      }
+
+      if (event.key === "End") {
+        event.preventDefault();
+        const state = usePlayerStore.getState();
+        if (state.transportBusy) return;
+        if (state.playback.track_id) {
+          void seekToEnd();
+        } else if (state.cursorTrackId) {
+          const track = state.tracks.find(
+            (entry) => entry.id === state.cursorTrackId,
+          );
+          const durationMs =
+            track?.duration_ms ?? state.playback.duration_ms ?? 0;
+          if (durationMs > 0) {
+            state.setPreviewPositionMs(Math.max(0, durationMs - 1000));
+          }
+        }
+        return;
+      }
+
+      if (event.key === "PageUp") {
+        event.preventDefault();
+        navigateSidebarGroup("up");
+        return;
+      }
+
+      if (event.key === "PageDown") {
+        event.preventDefault();
+        navigateSidebarGroup("down");
         return;
       }
 
@@ -147,6 +241,8 @@ export function useTrackCursor({
     cursorTrackId,
     onAdjustVolume,
     onPlayTrack,
+    seekToEnd,
+    seekToStart,
     onSelectTrack,
     onTogglePlayPause,
     setCursorTaglistFooter,
