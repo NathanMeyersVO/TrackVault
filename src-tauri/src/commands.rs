@@ -405,14 +405,16 @@ pub fn import_taglist_titles(
     taglist_id: i64,
     path: String,
 ) -> Result<u32, String> {
-    {
+    let application = {
         let db = state.db.lock();
         if db.get_taglist(taglist_id).map_err(|e| e.to_string())?.is_none() {
             return Err("Taglist not found".to_string());
         }
-    }
+        crate::application::get_application(&db)?
+    };
 
-    let mappings = crate::title_map::parse_title_map(Path::new(&path))?;
+    let mappings =
+        crate::application::parse_title_map_for_application(application, Path::new(&path))?;
     state
         .db
         .lock()

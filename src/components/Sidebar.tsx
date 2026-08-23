@@ -4,6 +4,7 @@ import { listen } from "@tauri-apps/api/event";
 
 import { ConfirmDialog } from "./ConfirmDialog";
 import { api, COMMON_TAG_KEYS, type Collection, type Playlist, type Taglist, type TaglistValue } from "../lib/tauri";
+import { getApplicationConfig } from "../lib/applicationConfig";
 import { formatTaglistLabel } from "../lib/taglistLabels";
 import {
   getCollectionReorderDragData,
@@ -19,6 +20,7 @@ import {
   setSublistReorderDragData,
 } from "../lib/dragDrop";
 import { useLibrary } from "../hooks/usePlayer";
+import { useApplication } from "../hooks/useApplication";
 import { useTagDropConfirm } from "../hooks/useTagDropConfirm";
 import { usePlayerStore, type View } from "../store/playerStore";
 
@@ -54,6 +56,8 @@ function TaglistGroup({
   setDragOverTarget,
   setDraggingTrackId,
   onTagDrop,
+  supportsTitleImport,
+  titleImportDialog,
 }: {
   taglist: Taglist;
   view: View;
@@ -64,6 +68,11 @@ function TaglistGroup({
   setDragOverTarget: Dispatch<SetStateAction<TaglistDropTarget | null>>;
   setDraggingTrackId: (trackId: number | null) => void;
   onTagDrop: (trackId: number, taglist: Taglist, entry: TaglistValue) => void;
+  supportsTitleImport: boolean;
+  titleImportDialog?: {
+    title: string;
+    filters: { name: string; extensions: string[] }[];
+  };
 }) {
   const { refresh } = useLibrary();
   const [values, setValues] = useState<TaglistValue[]>([]);
@@ -140,10 +149,12 @@ function TaglistGroup({
 
   const importTitles = async (event: MouseEvent) => {
     event.stopPropagation();
+    if (!titleImportDialog) return;
+
     const selected = await open({
       multiple: false,
-      title: "Choose event schedule",
-      filters: [{ name: "Schedule", extensions: ["xls", "xlsx", "csv"] }],
+      title: titleImportDialog.title,
+      filters: titleImportDialog.filters,
     });
     if (typeof selected !== "string") return;
 
@@ -410,14 +421,16 @@ function TaglistGroup({
           {taglist.name}
         </span>
         <div className="hidden group-hover:inline">
-          <button
-            type="button"
-            onClick={(event) => void importTitles(event)}
-            className="rounded px-1 text-xs text-muted hover:text-foreground"
-            title="Import titles"
-          >
-            Titles
-          </button>
+          {supportsTitleImport ? (
+            <button
+              type="button"
+              onClick={(event) => void importTitles(event)}
+              className="rounded px-1 text-xs text-muted hover:text-foreground"
+              title="Import titles"
+            >
+              Titles
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={(event) => void deleteTaglist(event)}
@@ -447,6 +460,8 @@ export function Sidebar({ width }: { width: number }) {
     setDraggingTrackId,
   } = usePlayerStore();
   const { refresh } = useLibrary();
+  const { applicationId } = useApplication();
+  const applicationConfig = getApplicationConfig(applicationId);
   const [newPlaylistName, setNewPlaylistName] = useState("");
   const [newCollectionName, setNewCollectionName] = useState("");
   const [creating, setCreating] = useState(false);
@@ -1186,6 +1201,8 @@ export function Sidebar({ width }: { width: number }) {
             onTagDrop={(trackId, droppedTaglist, entry) => {
               void requestTagDrop(trackId, droppedTaglist, entry);
             }}
+            supportsTitleImport={applicationConfig.supportsTitleImport}
+            titleImportDialog={applicationConfig.titleImportDialog}
           />
         ))}
 

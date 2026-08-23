@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+  type ReactNode,
+} from "react";
 
 import { api, type ApplicationId, type ApplicationSettings } from "../lib/tauri";
 
@@ -6,7 +13,15 @@ function isApplicationId(value: string): value is ApplicationId {
   return value === "none" || value === "usfs_ems";
 }
 
-export function useApplication() {
+interface ApplicationContextValue {
+  applicationId: ApplicationId;
+  loaded: boolean;
+  selectApplication: (applicationId: ApplicationId) => Promise<void>;
+}
+
+const ApplicationContext = createContext<ApplicationContextValue | null>(null);
+
+export function ApplicationProvider({ children }: { children: ReactNode }) {
   const [applicationId, setApplicationId] = useState<ApplicationId>("none");
   const [loaded, setLoaded] = useState(false);
 
@@ -49,5 +64,19 @@ export function useApplication() {
     }
   }, []);
 
-  return { applicationId, loaded, selectApplication };
+  return (
+    <ApplicationContext.Provider
+      value={{ applicationId, loaded, selectApplication }}
+    >
+      {children}
+    </ApplicationContext.Provider>
+  );
+}
+
+export function useApplication(): ApplicationContextValue {
+  const context = useContext(ApplicationContext);
+  if (!context) {
+    throw new Error("useApplication must be used within ApplicationProvider");
+  }
+  return context;
 }

@@ -32,13 +32,13 @@ pub fn find_top_level_event_schedule(
     }
 
     let path = candidates.into_iter().next().expect("exactly one candidate");
-    match parse_title_map(&path) {
+    match parse_usfs_ems_schedule(&path) {
         Ok(mappings) => Ok(Some((path, mappings))),
         Err(_) => Ok(None),
     }
 }
 
-pub fn parse_title_map(path: &Path) -> Result<HashMap<String, String>, String> {
+pub fn parse_usfs_ems_schedule(path: &Path) -> Result<HashMap<String, String>, String> {
     let ext = path
         .extension()
         .and_then(|e| e.to_str())

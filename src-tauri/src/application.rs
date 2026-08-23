@@ -1,7 +1,9 @@
+use std::collections::HashMap;
+use std::path::Path;
+
 use serde::{Deserialize, Serialize};
 
 use crate::db::Database;
-
 pub const SETTINGS_KEY: &str = "application";
 pub const DEFAULT_APPLICATION_ID: &str = "none";
 
@@ -70,6 +72,18 @@ pub fn get_application_settings(db: &Database) -> Result<ApplicationSettings, St
     })
 }
 
+pub fn parse_title_map_for_application(
+    application: ApplicationId,
+    path: &Path,
+) -> Result<HashMap<String, String>, String> {
+    match application {
+        ApplicationId::None => Err(
+            "Title import is not available when Application is None".to_string(),
+        ),
+        ApplicationId::UsFigureSkatingEms => crate::title_map::parse_usfs_ems_schedule(path),
+    }
+}
+
 pub fn set_application(
     db: &Database,
     settings: ApplicationSettings,
@@ -115,5 +129,15 @@ mod tests {
             normalize_application_id("unknown"),
             ApplicationId::None
         );
+    }
+
+    #[test]
+    fn parse_title_map_for_none_application_errors() {
+        let err = parse_title_map_for_application(
+            ApplicationId::None,
+            std::path::Path::new("schedule.xlsx"),
+        )
+        .unwrap_err();
+        assert!(err.contains("not available"));
     }
 }
