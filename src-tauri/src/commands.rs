@@ -20,6 +20,21 @@ pub struct AppState {
     pub audio_cache: AudioCacheWorker,
 }
 
+fn teardown_library(state: &AppState) -> Result<PlaybackState, String> {
+    state.player.stop();
+    {
+        let db = state.db.lock();
+        db.close_library_state().map_err(|e| e.to_string())?;
+    }
+    state.audio_cache.reset();
+    let mut playback = state.player.state();
+    playback.track_id = None;
+    playback.position_ms = 0;
+    playback.duration_ms = 0;
+    playback.is_playing = false;
+    Ok(playback)
+}
+
 #[tauri::command]
 pub fn get_track(state: State<'_, AppState>, track_id: i64) -> Result<Track, String> {
     state
@@ -50,11 +65,11 @@ pub fn set_library_folder(
     state: State<'_, AppState>,
     path: String,
 ) -> Result<ScanProgress, String> {
+    teardown_library(&state)?;
     let library_root = PathBuf::from(&path);
     {
         let db = state.db.lock();
         db.set_library_folder(&path).map_err(|e| e.to_string())?;
-        db.clear_user_config().map_err(|e| e.to_string())?;
     }
 
     let pending_config = match crate::config::load_config_file(&library_root) {
@@ -135,17 +150,7 @@ pub fn load_library_config(app: AppHandle, state: State<'_, AppState>) -> Result
 
 #[tauri::command]
 pub fn close_library(app: AppHandle, state: State<'_, AppState>) -> Result<PlaybackState, String> {
-    state.player.stop();
-    {
-        let db = state.db.lock();
-        db.close_library_state().map_err(|e| e.to_string())?;
-    }
-    state.audio_cache.reset();
-    let mut playback = state.player.state();
-    playback.track_id = None;
-    playback.position_ms = 0;
-    playback.duration_ms = 0;
-    playback.is_playing = false;
+    let playback = teardown_library(&state)?;
     let _ = app.emit("library-updated", ());
     Ok(playback)
 }

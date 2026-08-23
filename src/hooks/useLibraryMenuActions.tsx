@@ -9,7 +9,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { importCollectionFromDialog } from "../components/CollectionView";
-import { api } from "../lib/tauri";
+import { api, type PlaybackState } from "../lib/tauri";
 import { clearTrackTagsCache } from "../lib/trackTagsCache";
 import { useLibrary } from "./usePlayer";
 import { useUploadTracks } from "./useUploadTracks";
@@ -24,6 +24,9 @@ function activeCollectionId(
   }
   return null;
 }
+
+const CLOSE_LIBRARY_MESSAGE =
+  "Remove the current library folder and clear all indexed tracks, library playlists, and library taglists from the app? Audio files on disk are not deleted. Stored collections are kept.\n\nSave configuration first if you want library playlists and library taglists written to trackvault.json.";
 
 export function useLibraryMenuActions() {
   const {
@@ -92,7 +95,55 @@ export function useLibraryMenuActions() {
   const [loadConfigConfirmOpen, setLoadConfigConfirmOpen] = useState(false);
   const [closingLibrary, setClosingLibrary] = useState(false);
   const [closeLibraryConfirmOpen, setCloseLibraryConfirmOpen] = useState(false);
+  const [changeLibraryConfirmOpen, setChangeLibraryConfirmOpen] = useState(false);
+  const [pendingLibraryFolder, setPendingLibraryFolder] = useState<string | null>(null);
   const [importingCollection, setImportingCollection] = useState(false);
+
+  const resetLibraryFrontend = useCallback(
+    (playback: PlaybackState) => {
+      setPlayback(playback);
+      if (view === "library") {
+        setCursorTrackId(null);
+        setActiveTrackIds([]);
+      }
+      clearPendingPausedLoad();
+      clearTrackTagsCache();
+    },
+    [
+      clearPendingPausedLoad,
+      setActiveTrackIds,
+      setCursorTrackId,
+      setPlayback,
+      view,
+    ],
+  );
+
+  const applyLibraryFolder = useCallback(
+    async (path: string) => {
+      setScanning(true);
+      setConfigError(null);
+      setConfigMessage(null);
+      clearUploadFeedback();
+      try {
+        if (libraryFolder) {
+          const playback = await api.closeLibrary();
+          resetLibraryFrontend(playback);
+        }
+        await api.setLibraryFolder(path);
+        await refresh();
+        setChangeLibraryConfirmOpen(false);
+        setPendingLibraryFolder(null);
+        return true;
+      } catch (err) {
+        setConfigError(String(err));
+        await refresh().catch(console.error);
+        return false;
+      } finally {
+        setScanning(false);
+      }
+    },
+    [clearUploadFeedback, libraryFolder, refresh, resetLibraryFrontend, setScanning],
+  );
 
   const chooseLibraryFolder = useCallback(async () => {
     const selected = await open({
@@ -101,21 +152,16 @@ export function useLibraryMenuActions() {
       title: "Choose library folder",
     });
     if (typeof selected !== "string") return;
+    if (selected === libraryFolder) return;
 
-    setScanning(true);
-    setConfigError(null);
-    setConfigMessage(null);
-    clearUploadFeedback();
-    try {
-      await api.setLibraryFolder(selected);
-      await refresh();
-    } catch (err) {
-      setConfigError(String(err));
-      await refresh().catch(console.error);
-    } finally {
-      setScanning(false);
+    if (!libraryFolder) {
+      await applyLibraryFolder(selected);
+      return;
     }
-  }, [clearUploadFeedback, refresh, setScanning]);
+
+    setPendingLibraryFolder(selected);
+    setChangeLibraryConfirmOpen(true);
+  }, [applyLibraryFolder, libraryFolder]);
 
   const saveConfiguration = useCallback(async () => {
     setSavingConfig(true);
@@ -168,13 +214,7 @@ export function useLibraryMenuActions() {
     clearUploadFeedback();
     try {
       const playback = await api.closeLibrary();
-      setPlayback(playback);
-      if (view === "library") {
-        setCursorTrackId(null);
-        setActiveTrackIds([]);
-      }
-      clearPendingPausedLoad();
-      clearTrackTagsCache();
+      resetLibraryFrontend(playback);
       await refresh();
       setCloseLibraryConfirmOpen(false);
       return true;
@@ -184,15 +224,7 @@ export function useLibraryMenuActions() {
     } finally {
       setClosingLibrary(false);
     }
-  }, [
-    clearPendingPausedLoad,
-    clearUploadFeedback,
-    refresh,
-    setActiveTrackIds,
-    setCursorTrackId,
-    setPlayback,
-    view,
-  ]);
+  }, [clearUploadFeedback, refresh, resetLibraryFrontend]);
 
   const requestCloseLibrary = useCallback(() => {
     setCloseLibraryConfirmOpen(true);
@@ -218,6 +250,30 @@ export function useLibraryMenuActions() {
       setConfigMessage("Saved and library closed");
     }
   }, [closeLibrary, saveConfiguration]);
+
+  const cancelChangeLibrary = useCallback(() => {
+    if (scanning || closingLibrary || savingConfig) return;
+    setChangeLibraryConfirmOpen(false);
+    setPendingLibraryFolder(null);
+  }, [closingLibrary, savingConfig, scanning]);
+
+  const confirmChangeLibrary = useCallback(async () => {
+    if (pendingLibraryFolder == null) return;
+    const changed = await applyLibraryFolder(pendingLibraryFolder);
+    if (changed) {
+      setConfigMessage("Library folder changed");
+    }
+  }, [applyLibraryFolder, pendingLibraryFolder]);
+
+  const confirmSaveAndChangeLibrary = useCallback(async () => {
+    if (pendingLibraryFolder == null) return;
+    const saved = await saveConfiguration();
+    if (!saved) return;
+    const changed = await applyLibraryFolder(pendingLibraryFolder);
+    if (changed) {
+      setConfigMessage("Saved and library folder changed");
+    }
+  }, [applyLibraryFolder, pendingLibraryFolder, saveConfiguration]);
 
   const importCollection = useCallback(async () => {
     setImportingCollection(true);
@@ -253,9 +309,7 @@ export function useLibraryMenuActions() {
   const closeLibraryConfirmDialog = closeLibraryConfirmOpen ? (
     <ConfirmDialog
       title="Close library?"
-      message={
-        "Remove the current library folder and clear all indexed tracks, library playlists, and library taglists from the app? Audio files on disk are not deleted. Stored collections are kept.\n\nSave configuration first if you want library playlists and library taglists written to trackvault.json."
-      }
+      message={CLOSE_LIBRARY_MESSAGE}
       confirmLabel="Close library"
       secondaryLabel="Save & close library"
       cancelLabel="Cancel"
@@ -264,6 +318,21 @@ export function useLibraryMenuActions() {
       onConfirm={() => void confirmCloseLibrary()}
       onSecondary={() => void confirmSaveAndCloseLibrary()}
       onCancel={cancelCloseLibrary}
+    />
+  ) : null;
+
+  const changeLibraryConfirmDialog = changeLibraryConfirmOpen ? (
+    <ConfirmDialog
+      title="Change library folder?"
+      message={CLOSE_LIBRARY_MESSAGE}
+      confirmLabel="Close library"
+      secondaryLabel="Save & close library"
+      cancelLabel="Cancel"
+      destructive
+      busy={scanning || closingLibrary || savingConfig}
+      onConfirm={() => void confirmChangeLibrary()}
+      onSecondary={() => void confirmSaveAndChangeLibrary()}
+      onCancel={cancelChangeLibrary}
     />
   ) : null;
 
@@ -299,6 +368,7 @@ export function useLibraryMenuActions() {
     collectionUploadConfirmDialog,
     loadConfigConfirmDialog,
     closeLibraryConfirmDialog,
+    changeLibraryConfirmDialog,
     chooseLibraryFolder,
     uploadToLibrary,
     uploadToCollection,

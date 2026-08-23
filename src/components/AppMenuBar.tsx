@@ -31,6 +31,7 @@ export function AppMenuBar() {
     collectionUploadConfirmDialog,
     loadConfigConfirmDialog,
     closeLibraryConfirmDialog,
+    changeLibraryConfirmDialog,
     chooseLibraryFolder,
     uploadToLibrary,
     uploadToCollection,
@@ -166,6 +167,7 @@ export function AppMenuBar() {
       {collectionUploadConfirmDialog}
       {loadConfigConfirmDialog}
       {closeLibraryConfirmDialog}
+      {changeLibraryConfirmDialog}
       {shortcutsOpen ? (
         <KeyboardShortcutsModal onClose={() => setShortcutsOpen(false)} />
       ) : null}
