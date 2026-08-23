@@ -2,11 +2,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 
 import { api, type TaglistValue, type Track } from "../lib/tauri";
-import { formatTaglistLabel } from "../lib/taglistLabels";
+import { formatTaglistLabel, getTaglistValueSingularLabel } from "../lib/taglistLabels";
 import { usePlayer } from "../hooks/usePlayer";
 import { useDeleteTrack } from "../hooks/useDeleteTrack";
 import { useTrackSearch } from "../hooks/useTrackSearch";
 import { usePlayerStore } from "../store/playerStore";
+import { ChangeTaglistValueModal } from "./ChangeTaglistValueModal";
 import { TagEditorModal } from "./TagEditorModal";
 import { TrackSearchInput } from "./TrackSearchInput";
 import { TrackTable } from "./TrackTable";
@@ -36,9 +37,13 @@ export function TaglistView({ taglistId, value }: TaglistViewProps) {
   const [values, setValues] = useState<TaglistValue[]>([]);
   const [tracksLoaded, setTracksLoaded] = useState(false);
   const [editingTrackId, setEditingTrackId] = useState<number | null>(null);
+  const [changingTrackId, setChangingTrackId] = useState<number | null>(null);
   const { query, setQuery, filteredTracks, isSearching } = useTrackSearch(tracks);
 
   const taglist = taglists.find((entry) => entry.id === taglistId);
+  const changeTaglistValueLabel = taglist
+    ? getTaglistValueSingularLabel(taglist)
+    : undefined;
   const currentValue = values.find((entry) => entry.value === value);
   const displayName = formatTaglistLabel(value, currentValue?.display_title);
 
@@ -190,6 +195,8 @@ export function TaglistView({ taglistId, value }: TaglistViewProps) {
           onCursorChange={selectTrack}
           onPlay={playTrack}
           onEditTags={setEditingTrackId}
+          changeTaglistValueLabel={changeTaglistValueLabel}
+          onChangeTaglistValue={setChangingTrackId}
           onDeleteTrack={requestDeleteTrack}
           onReorderTracks={isSearching ? undefined : reorderTracks}
           emptyMessage={
@@ -216,6 +223,13 @@ export function TaglistView({ taglistId, value }: TaglistViewProps) {
         <TagEditorModal
           trackId={editingTrackId}
           onClose={() => setEditingTrackId(null)}
+        />
+      )}
+      {changingTrackId != null && taglist && (
+        <ChangeTaglistValueModal
+          trackId={changingTrackId}
+          taglist={taglist}
+          onClose={() => setChangingTrackId(null)}
         />
       )}
     </div>

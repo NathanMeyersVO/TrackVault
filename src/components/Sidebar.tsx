@@ -453,6 +453,7 @@ export function Sidebar({ width }: { width: number }) {
   const [creatingCollection, setCreatingCollection] = useState(false);
   const [creatingTaglist, setCreatingTaglist] = useState(false);
   const [newTaglistName, setNewTaglistName] = useState("");
+  const [newTaglistValueSingular, setNewTaglistValueSingular] = useState("");
   const [newTaglistKey, setNewTaglistKey] = useState<string>(COMMON_TAG_KEYS[0]);
   const [dragOverPlaylistId, setDragOverPlaylistId] = useState<number | null>(null);
   const [dragOverTaglistTarget, setDragOverTaglistTarget] =
@@ -740,9 +741,11 @@ export function Sidebar({ width }: { width: number }) {
 
   const createTaglist = async () => {
     const name = newTaglistName.trim();
-    if (!name) return;
-    await api.createTaglist(name, newTaglistKey);
+    const valueSingular = newTaglistValueSingular.trim();
+    if (!name || !valueSingular) return;
+    await api.createTaglist(name, newTaglistKey, valueSingular);
     setNewTaglistName("");
+    setNewTaglistValueSingular("");
     setCreatingTaglist(false);
     await refresh();
   };
@@ -1197,6 +1200,16 @@ export function Sidebar({ width }: { width: number }) {
                 if (e.key === "Escape") setCreatingTaglist(false);
               }}
               placeholder="Library taglist name"
+              className="w-full rounded-md border border-border bg-background px-2 py-1 text-sm"
+            />
+            <input
+              value={newTaglistValueSingular}
+              onChange={(e) => setNewTaglistValueSingular(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void createTaglist();
+                if (e.key === "Escape") setCreatingTaglist(false);
+              }}
+              placeholder="Sublist label (e.g. Event)"
               className="w-full rounded-md border border-border bg-background px-2 py-1 text-sm"
             />
             <select

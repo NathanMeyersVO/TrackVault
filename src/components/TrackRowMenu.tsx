@@ -4,6 +4,8 @@ import type { Playlist } from "../lib/tauri";
 
 interface TrackRowMenuProps {
   onEditTags: () => void;
+  changeTaglistValueLabel?: string;
+  onChangeTaglistValue?: () => void;
   onDeleteTrack?: () => void;
   playlists?: Playlist[];
   onAddToPlaylist?: (playlistId: number) => void;
@@ -12,6 +14,8 @@ interface TrackRowMenuProps {
 
 export function TrackRowMenu({
   onEditTags,
+  changeTaglistValueLabel,
+  onChangeTaglistValue,
   onDeleteTrack,
   playlists,
   onAddToPlaylist,
@@ -71,6 +75,20 @@ export function TrackRowMenu({
           >
             Edit tags…
           </button>
+
+          {changeTaglistValueLabel && onChangeTaglistValue && (
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                closeMenu();
+                onChangeTaglistValue();
+              }}
+              className="block w-full px-3 py-1.5 text-left text-xs text-foreground hover:bg-surface-hover"
+            >
+              Change {changeTaglistValueLabel}…
+            </button>
+          )}
 
           {showAddToPlaylist && (
             <div className="relative">

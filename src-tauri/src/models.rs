@@ -42,6 +42,7 @@ pub struct Taglist {
     pub id: i64,
     pub name: String,
     pub tag_key: String,
+    pub value_singular_name: String,
     pub created_at: i64,
 }
 

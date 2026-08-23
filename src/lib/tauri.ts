@@ -39,6 +39,7 @@ export interface Taglist {
   id: number;
   name: string;
   tag_key: string;
+  value_singular_name: string;
   created_at: number;
 }
 
@@ -210,8 +211,8 @@ export const api = {
     invoke<void>("reorder_playlist_tracks", { playlistId, trackIds }),
   reorderPlaylists: (playlistIds: number[]) =>
     invoke<void>("reorder_playlists", { playlistIds }),
-  createTaglist: (name: string, tagKey: string) =>
-    invoke<number>("create_taglist", { name, tagKey }),
+  createTaglist: (name: string, tagKey: string, valueSingularName: string) =>
+    invoke<number>("create_taglist", { name, tagKey, valueSingularName }),
   deleteTaglist: (id: number) => invoke<void>("delete_taglist", { id }),
   listTaglists: () => invoke<Taglist[]>("list_taglists"),
   listTaglistValues: (taglistId: number) =>

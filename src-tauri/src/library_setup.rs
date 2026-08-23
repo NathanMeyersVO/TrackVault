@@ -5,6 +5,7 @@ use crate::title_map;
 
 const EVENTS_TAGLIST_NAME: &str = "Events";
 const EVENTS_TAG_KEY: &str = "Composer";
+const EVENTS_VALUE_SINGULAR_NAME: &str = "Event";
 
 pub fn maybe_auto_import_event_schedule(
     db: &Database,
@@ -22,7 +23,11 @@ pub fn maybe_auto_import_event_schedule(
     };
 
     let taglist_id = db
-        .create_taglist(EVENTS_TAGLIST_NAME, EVENTS_TAG_KEY)
+        .create_taglist(
+            EVENTS_TAGLIST_NAME,
+            EVENTS_TAG_KEY,
+            EVENTS_VALUE_SINGULAR_NAME,
+        )
         .map_err(|e| e.to_string())?;
     db.import_taglist_titles(taglist_id, &mappings)
         .map_err(|e| e.to_string())?;
@@ -95,6 +100,7 @@ mod tests {
         assert_eq!(taglists.len(), 1);
         assert_eq!(taglists[0].name, "Events");
         assert_eq!(taglists[0].tag_key, "Composer");
+        assert_eq!(taglists[0].value_singular_name, "Event");
 
         let (track_id, _) = db
             .upsert_track(
@@ -124,7 +130,7 @@ mod tests {
     #[test]
     fn auto_import_skips_when_events_taglist_already_exists() {
         let (db, library) = test_library();
-        db.create_taglist("Events", "Comment").unwrap();
+        db.create_taglist("Events", "Comment", "").unwrap();
         write_event_schedule_xlsx(
             &library.join("schedule.xlsx"),
             &[("01", "Showcase: Pre-Preliminary")],

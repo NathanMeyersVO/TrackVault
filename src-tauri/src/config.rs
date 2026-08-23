@@ -26,6 +26,8 @@ pub struct ConfigTaglist {
     pub name: String,
     pub tag_key: String,
     #[serde(default)]
+    pub value_singular_name: String,
+    #[serde(default)]
     pub value_titles: HashMap<String, String>,
     #[serde(default)]
     pub track_order: HashMap<String, Vec<String>>,
@@ -188,6 +190,7 @@ pub fn export_config(db: &Database, library_root: &Path) -> Result<LibraryConfig
         taglists.push(ConfigTaglist {
             name: taglist.name,
             tag_key: taglist.tag_key,
+            value_singular_name: taglist.value_singular_name,
             value_titles,
             track_order,
             value_order,
@@ -256,7 +259,11 @@ pub fn apply_config(
 
     for taglist in &config.taglists {
         let taglist_id = db
-            .create_taglist(&taglist.name, &taglist.tag_key)
+            .create_taglist(
+                &taglist.name,
+                &taglist.tag_key,
+                &taglist.value_singular_name,
+            )
             .map_err(|e| e.to_string())?;
         if !taglist.value_titles.is_empty() {
             db.import_taglist_titles(taglist_id, &taglist.value_titles)
@@ -345,7 +352,7 @@ mod tests {
         db.reorder_playlist_tracks(playlist_id, &[tracks[1].id, tracks[0].id])
             .unwrap();
 
-        let taglist_id = db.create_taglist("By Comment", "Comment").unwrap();
+        let taglist_id = db.create_taglist("By Comment", "Comment", "").unwrap();
         db.replace_track_tags(
             tracks[0].id,
             &[("Comment".to_string(), "01".to_string())],

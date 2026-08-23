@@ -15,6 +15,8 @@ interface TrackTableRowProps {
   onCursorChange: (trackId: number) => void;
   onPlay: (trackId: number) => void;
   onEditTags: (trackId: number) => void;
+  changeTaglistValueLabel?: string;
+  onChangeTaglistValue?: (trackId: number) => void;
   onFocusList: () => void;
   playlists?: Playlist[];
   onAddTrackToPlaylist?: (trackId: number, playlistId: number) => void;
@@ -73,6 +75,8 @@ export function TrackTableRow({
   onCursorChange,
   onPlay,
   onEditTags,
+  changeTaglistValueLabel,
+  onChangeTaglistValue,
   onFocusList,
   playlists,
   onAddTrackToPlaylist,
@@ -175,6 +179,12 @@ export function TrackTableRow({
         <td className="w-12 px-2 py-2 text-right">
           <TrackRowMenu
             onEditTags={() => onEditTags(track.id)}
+            changeTaglistValueLabel={changeTaglistValueLabel}
+            onChangeTaglistValue={
+              onChangeTaglistValue
+                ? () => onChangeTaglistValue(track.id)
+                : undefined
+            }
             playlists={playlists}
             onAddToPlaylist={
               onAddTrackToPlaylist

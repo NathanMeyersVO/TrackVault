@@ -24,6 +24,8 @@ interface TrackTableProps {
   onCursorChange: (trackId: number) => void;
   onPlay: (trackId: number) => void;
   onEditTags: (trackId: number) => void;
+  changeTaglistValueLabel?: string;
+  onChangeTaglistValue?: (trackId: number) => void;
   playlists?: Playlist[];
   onAddTrackToPlaylist?: (trackId: number, playlistId: number) => void;
   onRemoveTrackFromPlaylist?: (trackId: number) => void;
@@ -64,6 +66,8 @@ export function TrackTable({
   onCursorChange,
   onPlay,
   onEditTags,
+  changeTaglistValueLabel,
+  onChangeTaglistValue,
   playlists,
   onAddTrackToPlaylist,
   onRemoveTrackFromPlaylist,
@@ -171,6 +175,8 @@ export function TrackTable({
               onCursorChange={onCursorChange}
               onPlay={onPlay}
               onEditTags={onEditTags}
+              changeTaglistValueLabel={changeTaglistValueLabel}
+              onChangeTaglistValue={onChangeTaglistValue}
               onFocusList={focusTrackList}
               playlists={playlists}
               onAddTrackToPlaylist={onAddTrackToPlaylist}

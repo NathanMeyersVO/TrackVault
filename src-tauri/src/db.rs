@@ -201,6 +201,10 @@ impl Database {
             "ALTER TABLE collections ADD COLUMN continuous_volume REAL NOT NULL DEFAULT 0.5",
             [],
         );
+        let _ = self.conn.execute(
+            "ALTER TABLE taglists ADD COLUMN value_singular_name TEXT NOT NULL DEFAULT ''",
+            [],
+        );
         Ok(())
     }
 
@@ -1143,11 +1147,16 @@ impl Database {
         Ok(rows.filter_map(Result::ok).collect())
     }
 
-    pub fn create_taglist(&self, name: &str, tag_key: &str) -> Result<i64, DbError> {
+    pub fn create_taglist(
+        &self,
+        name: &str,
+        tag_key: &str,
+        value_singular_name: &str,
+    ) -> Result<i64, DbError> {
         let now = chrono_now();
         self.conn.execute(
-            "INSERT INTO taglists (name, tag_key, created_at) VALUES (?1, ?2, ?3)",
-            params![name, tag_key, now],
+            "INSERT INTO taglists (name, tag_key, value_singular_name, created_at) VALUES (?1, ?2, ?3, ?4)",
+            params![name, tag_key, value_singular_name, now],
         )?;
         Ok(self.conn.last_insert_rowid())
     }
@@ -1169,14 +1178,15 @@ impl Database {
 
     pub fn list_taglists(&self) -> Result<Vec<Taglist>, DbError> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, name, tag_key, created_at FROM taglists ORDER BY name COLLATE NOCASE",
+            "SELECT id, name, tag_key, value_singular_name, created_at FROM taglists ORDER BY name COLLATE NOCASE",
         )?;
         let rows = stmt.query_map([], |row| {
             Ok(Taglist {
                 id: row.get(0)?,
                 name: row.get(1)?,
                 tag_key: row.get(2)?,
-                created_at: row.get(3)?,
+                value_singular_name: row.get(3)?,
+                created_at: row.get(4)?,
             })
         })?;
         Ok(rows.filter_map(Result::ok).collect())
@@ -1184,7 +1194,7 @@ impl Database {
 
     pub fn get_taglist(&self, id: i64) -> Result<Option<Taglist>, DbError> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, name, tag_key, created_at FROM taglists WHERE id = ?1",
+            "SELECT id, name, tag_key, value_singular_name, created_at FROM taglists WHERE id = ?1",
         )?;
         let mut rows = stmt.query(params![id])?;
         if let Some(row) = rows.next()? {
@@ -1192,7 +1202,8 @@ impl Database {
                 id: row.get(0)?,
                 name: row.get(1)?,
                 tag_key: row.get(2)?,
-                created_at: row.get(3)?,
+                value_singular_name: row.get(3)?,
+                created_at: row.get(4)?,
             }))
         } else {
             Ok(None)
@@ -1842,7 +1853,7 @@ mod tests {
     #[test]
     fn taglist_values_custom_order_persisted_with_no_tag_last() {
         let db = test_db();
-        let taglist_id = db.create_taglist("Composers", "Composer").unwrap();
+        let taglist_id = db.create_taglist("Composers", "Composer", "").unwrap();
         let track_a = insert_track(&db, "A");
         let track_b = insert_track(&db, "B");
         let track_c = insert_track(&db, "C");
@@ -1872,7 +1883,7 @@ mod tests {
     #[test]
     fn new_taglist_value_inserts_at_default_position() {
         let db = test_db();
-        let taglist_id = db.create_taglist("Composers", "Composer").unwrap();
+        let taglist_id = db.create_taglist("Composers", "Composer", "").unwrap();
         let track_a = insert_track(&db, "A");
         let track_b = insert_track(&db, "B");
 
@@ -2014,7 +2025,7 @@ mod tests {
     #[test]
     fn taglist_values_include_imported_display_titles() {
         let db = test_db();
-        let taglist_id = db.create_taglist("Events", "Comment").unwrap();
+        let taglist_id = db.create_taglist("Events", "Comment", "").unwrap();
         let track_id = insert_track(&db, "Event Track");
         db.replace_track_tags(
             track_id,
@@ -2040,7 +2051,7 @@ mod tests {
     #[test]
     fn set_taglist_value_title_upserts_updates_and_clears() {
         let db = test_db();
-        let taglist_id = db.create_taglist("Events", "Comment").unwrap();
+        let taglist_id = db.create_taglist("Events", "Comment", "").unwrap();
         let track_id = insert_track(&db, "Event Track");
         db.replace_track_tags(
             track_id,
@@ -2097,7 +2108,7 @@ mod tests {
     #[test]
     fn taglist_custom_order_overrides_metadata_sort() {
         let db = test_db();
-        let taglist_id = db.create_taglist("Events", "Comment").unwrap();
+        let taglist_id = db.create_taglist("Events", "Comment", "").unwrap();
         let track_a = insert_track(&db, "A");
         let track_b = insert_track(&db, "B");
         db.replace_track_tags(
@@ -2124,7 +2135,7 @@ mod tests {
     #[test]
     fn tag_change_moves_track_out_of_reordered_old_sublist_only() {
         let db = test_db();
-        let taglist_id = db.create_taglist("Events", "Comment").unwrap();
+        let taglist_id = db.create_taglist("Events", "Comment", "").unwrap();
         let track_a = insert_track(&db, "A");
         let track_b = insert_track(&db, "B");
         db.replace_track_tags(
@@ -2174,7 +2185,7 @@ mod tests {
     #[test]
     fn tag_change_moves_track_between_two_reordered_sublists() {
         let db = test_db();
-        let taglist_id = db.create_taglist("Events", "Comment").unwrap();
+        let taglist_id = db.create_taglist("Events", "Comment", "").unwrap();
         let track_a = insert_track(&db, "A");
         let track_b = insert_track(&db, "B");
         db.replace_track_tags(
@@ -2228,7 +2239,7 @@ mod tests {
     fn delete_track_cascades_playlist_and_taglist_order() {
         let db = test_db();
         let playlist_id = db.create_playlist("Set").unwrap();
-        let taglist_id = db.create_taglist("Events", "Comment").unwrap();
+        let taglist_id = db.create_taglist("Events", "Comment", "").unwrap();
         let track_id = insert_track(&db, "Delete Me");
         db.replace_track_tags(
             track_id,

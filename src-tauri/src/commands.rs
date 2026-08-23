@@ -350,11 +350,12 @@ pub fn create_taglist(
     state: State<'_, AppState>,
     name: String,
     tag_key: String,
+    value_singular_name: String,
 ) -> Result<i64, String> {
     state
         .db
         .lock()
-        .create_taglist(&name, &tag_key)
+        .create_taglist(&name, &tag_key, &value_singular_name)
         .map_err(|e| e.to_string())
 }
 
