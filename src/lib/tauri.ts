@@ -120,6 +120,12 @@ export interface ThemeSettings {
   theme_id: string;
 }
 
+export type ApplicationId = "none" | "usfs_ems";
+
+export interface ApplicationSettings {
+  application_id: ApplicationId;
+}
+
 export const api = {
   listTracks: () => invoke<Track[]>("list_tracks"),
   getTrack: (trackId: number) => invoke<Track>("get_track", { trackId }),
@@ -259,6 +265,10 @@ export const api = {
   getAppSettings: () => invoke<ThemeSettings>("get_app_settings"),
   setAppSettings: (settings: ThemeSettings) =>
     invoke<ThemeSettings>("set_app_settings", { settings }),
+  getApplicationSettings: () =>
+    invoke<ApplicationSettings>("get_application_settings"),
+  setApplicationSettings: (settings: ApplicationSettings) =>
+    invoke<ApplicationSettings>("set_application_settings", { settings }),
 };
 
 export function formatDuration(ms: number): string {

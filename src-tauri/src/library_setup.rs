@@ -1,5 +1,6 @@
 use std::path::Path;
 
+use crate::application::ApplicationId;
 use crate::db::Database;
 use crate::title_map;
 
@@ -7,37 +8,52 @@ const EVENTS_TAGLIST_NAME: &str = "Events";
 const EVENTS_TAG_KEY: &str = "Composer";
 const EVENTS_VALUE_SINGULAR_NAME: &str = "Event";
 
-pub fn maybe_auto_import_event_schedule(
+pub fn apply_application_library_setup(
     db: &Database,
     library_root: &Path,
+    application: ApplicationId,
 ) -> Result<(), String> {
-    if db
-        .has_taglist_named(EVENTS_TAGLIST_NAME)
-        .map_err(|e| e.to_string())?
-    {
-        return Ok(());
+    match application {
+        ApplicationId::None => Ok(()),
+        ApplicationId::UsFigureSkatingEms => setup_usfs_ems(db, library_root),
+    }
+}
+
+fn setup_usfs_ems(db: &Database, library_root: &Path) -> Result<(), String> {
+    let taglist_id = ensure_events_taglist(db)?;
+
+    if let Some((_path, mappings)) = title_map::find_top_level_event_schedule(library_root)? {
+        db.import_taglist_titles(taglist_id, &mappings)
+            .map_err(|e| e.to_string())?;
     }
 
-    let Some((_path, mappings)) = title_map::find_top_level_event_schedule(library_root)? else {
-        return Ok(());
-    };
-
-    let taglist_id = db
-        .create_taglist(
-            EVENTS_TAGLIST_NAME,
-            EVENTS_TAG_KEY,
-            EVENTS_VALUE_SINGULAR_NAME,
-        )
-        .map_err(|e| e.to_string())?;
-    db.import_taglist_titles(taglist_id, &mappings)
-        .map_err(|e| e.to_string())?;
-
     Ok(())
+}
+
+fn ensure_events_taglist(db: &Database) -> Result<i64, String> {
+    if let Some(taglist) = db
+        .get_taglist_by_name(EVENTS_TAGLIST_NAME)
+        .map_err(|e| e.to_string())?
+    {
+        if taglist.value_singular_name.trim().is_empty() {
+            db.set_taglist_value_singular_name(taglist.id, EVENTS_VALUE_SINGULAR_NAME)
+                .map_err(|e| e.to_string())?;
+        }
+        return Ok(taglist.id);
+    }
+
+    db.create_taglist(
+        EVENTS_TAGLIST_NAME,
+        EVENTS_TAG_KEY,
+        EVENTS_VALUE_SINGULAR_NAME,
+    )
+    .map_err(|e| e.to_string())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::application::ApplicationId;
     use crate::db::Database;
 
     fn write_event_schedule_xlsx(path: &Path, rows: &[(&str, &str)]) {
@@ -87,14 +103,40 @@ mod tests {
     }
 
     #[test]
-    fn auto_import_creates_events_taglist_with_composer_key() {
+    fn none_application_does_not_create_taglist_even_with_xls() {
         let (db, library) = test_library();
         write_event_schedule_xlsx(
             &library.join("schedule.xlsx"),
             &[("01", "Showcase: Pre-Preliminary")],
         );
 
-        maybe_auto_import_event_schedule(&db, &library).unwrap();
+        apply_application_library_setup(&db, &library, ApplicationId::None).unwrap();
+
+        assert!(db.list_taglists().unwrap().is_empty());
+    }
+
+    #[test]
+    fn ems_creates_events_taglist_without_xls() {
+        let (db, library) = test_library();
+
+        apply_application_library_setup(&db, &library, ApplicationId::UsFigureSkatingEms).unwrap();
+
+        let taglists = db.list_taglists().unwrap();
+        assert_eq!(taglists.len(), 1);
+        assert_eq!(taglists[0].name, "Events");
+        assert_eq!(taglists[0].tag_key, "Composer");
+        assert_eq!(taglists[0].value_singular_name, "Event");
+    }
+
+    #[test]
+    fn ems_imports_xls_when_present() {
+        let (db, library) = test_library();
+        write_event_schedule_xlsx(
+            &library.join("schedule.xlsx"),
+            &[("01", "Showcase: Pre-Preliminary")],
+        );
+
+        apply_application_library_setup(&db, &library, ApplicationId::UsFigureSkatingEms).unwrap();
 
         let taglists = db.list_taglists().unwrap();
         assert_eq!(taglists.len(), 1);
@@ -128,7 +170,7 @@ mod tests {
     }
 
     #[test]
-    fn auto_import_skips_when_events_taglist_already_exists() {
+    fn ems_reuses_existing_events_taglist_and_imports_xls() {
         let (db, library) = test_library();
         db.create_taglist("Events", "Comment", "").unwrap();
         write_event_schedule_xlsx(
@@ -136,31 +178,36 @@ mod tests {
             &[("01", "Showcase: Pre-Preliminary")],
         );
 
-        maybe_auto_import_event_schedule(&db, &library).unwrap();
+        apply_application_library_setup(&db, &library, ApplicationId::UsFigureSkatingEms).unwrap();
 
         let taglists = db.list_taglists().unwrap();
         assert_eq!(taglists.len(), 1);
         assert_eq!(taglists[0].tag_key, "Comment");
+        assert_eq!(taglists[0].value_singular_name, "Event");
     }
 
     #[test]
-    fn auto_import_skips_when_multiple_excel_files_present() {
+    fn ems_creates_taglist_when_multiple_excel_files_present() {
         let (db, library) = test_library();
         write_event_schedule_xlsx(&library.join("a.xlsx"), &[("01", "First")]);
         write_event_schedule_xlsx(&library.join("b.xlsx"), &[("02", "Second")]);
 
-        maybe_auto_import_event_schedule(&db, &library).unwrap();
+        apply_application_library_setup(&db, &library, ApplicationId::UsFigureSkatingEms).unwrap();
 
-        assert!(db.list_taglists().unwrap().is_empty());
+        let taglists = db.list_taglists().unwrap();
+        assert_eq!(taglists.len(), 1);
+        assert_eq!(taglists[0].name, "Events");
     }
 
     #[test]
-    fn auto_import_skips_when_schedule_is_invalid() {
+    fn ems_creates_taglist_when_schedule_is_invalid() {
         let (db, library) = test_library();
         write_invalid_sheet_xlsx(&library.join("schedule.xlsx"));
 
-        maybe_auto_import_event_schedule(&db, &library).unwrap();
+        apply_application_library_setup(&db, &library, ApplicationId::UsFigureSkatingEms).unwrap();
 
-        assert!(db.list_taglists().unwrap().is_empty());
+        let taglists = db.list_taglists().unwrap();
+        assert_eq!(taglists.len(), 1);
+        assert_eq!(taglists[0].name, "Events");
     }
 }

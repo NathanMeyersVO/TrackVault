@@ -4,6 +4,7 @@ export interface MenuItem {
   label: string;
   onClick: () => void;
   disabled?: boolean;
+  checked?: boolean;
   separator?: false;
 }
 
@@ -81,6 +82,7 @@ export function MenuDropdown({ label, items }: MenuDropdownProps) {
                 onClick={() => closeAndRun(entry)}
                 className="block w-full px-3 py-1.5 text-left text-sm text-foreground hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-40"
               >
+                {entry.checked ? "✓ " : ""}
                 {entry.label}
               </button>
             );

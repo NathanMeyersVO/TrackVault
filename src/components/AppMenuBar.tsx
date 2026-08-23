@@ -6,6 +6,8 @@ import { AboutDialog } from "./AboutDialog";
 import { KeyboardShortcutsModal } from "./KeyboardShortcutsModal";
 import { MenuBarStatus, MenuDropdown, type MenuEntry } from "./MenuDropdown";
 import { useLibraryMenuActions } from "../hooks/useLibraryMenuActions";
+import { useApplication } from "../hooks/useApplication";
+import { APPLICATION_OPTIONS } from "../lib/applicationLabels";
 
 export function AppMenuBar() {
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
@@ -45,6 +47,7 @@ export function AppMenuBar() {
     libraryUploadDisabled,
     collectionUploadDisabled,
   } = useLibraryMenuActions();
+  const { applicationId, selectApplication } = useApplication();
 
   const collectionUploadLabel =
     collectionName != null
@@ -103,6 +106,16 @@ export function AppMenuBar() {
     },
   ];
 
+  const applicationItems: MenuEntry[] = APPLICATION_OPTIONS.map((option) => ({
+    label: option.label,
+    checked: applicationId === option.id,
+    onClick: () => {
+      if (applicationId !== option.id) {
+        void selectApplication(option.id);
+      }
+    },
+  }));
+
   const viewItems: MenuEntry[] = [
     {
       label: "Appearance…",
@@ -143,6 +156,7 @@ export function AppMenuBar() {
         </h1>
         <nav className="flex shrink-0 items-center gap-1">
           <MenuDropdown label="File" items={fileItems} />
+          <MenuDropdown label="Application" items={applicationItems} />
           <MenuDropdown label="View" items={viewItems} />
           <MenuDropdown label="Help" items={helpItems} />
         </nav>

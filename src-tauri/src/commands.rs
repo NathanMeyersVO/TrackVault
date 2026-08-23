@@ -99,7 +99,12 @@ pub fn set_library_folder(
 
     {
         let db = state.db.lock();
-        crate::library_setup::maybe_auto_import_event_schedule(&db, &library_root)?;
+        let application = crate::application::get_application(&db)?;
+        crate::library_setup::apply_application_library_setup(
+            &db,
+            &library_root,
+            application,
+        )?;
     }
 
     let _ = app.emit("library-updated", ());
@@ -663,6 +668,42 @@ pub fn set_app_settings(
 ) -> Result<crate::app_settings::ThemeSettings, String> {
     let db = state.db.lock();
     crate::app_settings::set_theme(&db, settings)
+}
+
+#[tauri::command]
+pub fn get_application_settings(
+    state: State<'_, AppState>,
+) -> Result<crate::application::ApplicationSettings, String> {
+    let db = state.db.lock();
+    crate::application::get_application_settings(&db)
+}
+
+#[tauri::command]
+pub fn set_application_settings(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    settings: crate::application::ApplicationSettings,
+) -> Result<crate::application::ApplicationSettings, String> {
+    let normalized = {
+        let db = state.db.lock();
+        crate::application::set_application(&db, settings)?
+    };
+
+    if let Some(library_root) = {
+        let db = state.db.lock();
+        db.get_library_folder().map_err(|e| e.to_string())?
+    } {
+        let application = crate::application::normalize_application_id(&normalized.application_id);
+        let db = state.db.lock();
+        crate::library_setup::apply_application_library_setup(
+            &db,
+            Path::new(&library_root),
+            application,
+        )?;
+    }
+
+    let _ = app.emit("library-updated", ());
+    Ok(normalized)
 }
 
 #[tauri::command]

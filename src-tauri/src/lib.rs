@@ -1,4 +1,5 @@
 mod app_settings;
+mod application;
 mod audio_cache;
 mod audio_scan;
 mod collections;
@@ -22,7 +23,7 @@ use commands::{
     add_track_to_playlist, check_collection_upload_conflicts, check_upload_conflicts,
     close_library, create_collection, create_playlist, create_taglist, delete_collection,
     delete_collection_track, delete_playlist, delete_taglist, delete_track, export_collection,
-    get_app_settings, get_collection_playback_state, get_collection_tracks, get_library_folder,
+    get_app_settings, get_application_settings, get_collection_playback_state, get_collection_tracks, get_library_folder,
     get_playback_state, get_playlist_tracks, get_taglist_tracks, get_track, get_track_peaks,
     get_track_tags, get_volume, import_collection, import_taglist_titles, init_state,
     list_collections, list_playlists, list_taglist_values, list_taglists, list_tracks,
@@ -30,7 +31,7 @@ use commands::{
     reorder_collection_tracks, reorder_collections, reorder_playlist_tracks, reorder_playlists,
     reorder_taglist_tracks, reorder_taglist_values, resume_playback, load_library_config,
     save_collection_playback_state, save_library_config, scan_library, seek_playback,
-    set_app_settings, set_collection_continuous_volume, set_collection_playback_mode,
+    set_app_settings, set_application_settings, set_collection_continuous_volume, set_collection_playback_mode,
     set_library_folder, set_taglist_value_title, set_volume, stop_playback, update_track_tags, upload_collection_tracks, upload_tracks,
 };
 use tauri::Manager;
@@ -104,6 +105,8 @@ pub fn run() {
             update_track_tags,
             get_app_settings,
             set_app_settings,
+            get_application_settings,
+            set_application_settings,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

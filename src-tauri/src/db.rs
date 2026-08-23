@@ -1176,6 +1176,36 @@ impl Database {
         Ok(count > 0)
     }
 
+    pub fn get_taglist_by_name(&self, name: &str) -> Result<Option<Taglist>, DbError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, name, tag_key, value_singular_name, created_at FROM taglists WHERE name = ?1 COLLATE NOCASE LIMIT 1",
+        )?;
+        let mut rows = stmt.query(params![name])?;
+        if let Some(row) = rows.next()? {
+            Ok(Some(Taglist {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                tag_key: row.get(2)?,
+                value_singular_name: row.get(3)?,
+                created_at: row.get(4)?,
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub fn set_taglist_value_singular_name(
+        &self,
+        id: i64,
+        value_singular_name: &str,
+    ) -> Result<(), DbError> {
+        self.conn.execute(
+            "UPDATE taglists SET value_singular_name = ?1 WHERE id = ?2",
+            params![value_singular_name, id],
+        )?;
+        Ok(())
+    }
+
     pub fn list_taglists(&self) -> Result<Vec<Taglist>, DbError> {
         let mut stmt = self.conn.prepare(
             "SELECT id, name, tag_key, value_singular_name, created_at FROM taglists ORDER BY name COLLATE NOCASE",
