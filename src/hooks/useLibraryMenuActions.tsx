@@ -14,7 +14,7 @@ import { clearTrackTagsCache } from "../lib/trackTagsCache";
 import { useLibrary } from "./usePlayer";
 import { useUploadTracks } from "./useUploadTracks";
 import { useCollectionUpload } from "./useCollectionUpload";
-import { usePlayerStore } from "../store/playerStore";
+import { isLibrarySourcedView, usePlayerStore } from "../store/playerStore";
 
 function activeCollectionId(
   view: ReturnType<typeof usePlayerStore.getState>["view"],
@@ -39,7 +39,10 @@ export function useLibraryMenuActions() {
     setCursorTrackId,
     setActiveTrackIds,
     setPlayback,
+    setTaglistNav,
+    setCursorTaglistFooter,
     clearPendingPausedLoad,
+    clearPendingPlayIntent,
   } = usePlayerStore();
   const collectionId = activeCollectionId(view);
   const collectionName =
@@ -101,20 +104,28 @@ export function useLibraryMenuActions() {
 
   const resetLibraryFrontend = useCallback(
     (playback: PlaybackState) => {
+      const currentView = usePlayerStore.getState().view;
       setPlayback(playback);
-      if (view === "library") {
+      if (isLibrarySourcedView(currentView)) {
+        setView("library");
         setCursorTrackId(null);
         setActiveTrackIds([]);
+        setTaglistNav(null);
+        setCursorTaglistFooter(false);
+        clearPendingPlayIntent();
       }
       clearPendingPausedLoad();
       clearTrackTagsCache();
     },
     [
       clearPendingPausedLoad,
+      clearPendingPlayIntent,
       setActiveTrackIds,
+      setCursorTaglistFooter,
       setCursorTrackId,
       setPlayback,
-      view,
+      setTaglistNav,
+      setView,
     ],
   );
 

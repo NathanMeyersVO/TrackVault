@@ -5,7 +5,8 @@ import { api, type Track } from "../lib/tauri";
 import { usePlayer } from "../hooks/usePlayer";
 import { useDeleteTrack } from "../hooks/useDeleteTrack";
 import { useTrackSearch } from "../hooks/useTrackSearch";
-import { usePlayerStore } from "../store/playerStore";
+import { usePlayerStore, serializeView } from "../store/playerStore";
+import { playerController } from "../playerController";
 import { TagEditorModal } from "./TagEditorModal";
 import { TrackSearchInput } from "./TrackSearchInput";
 import { TrackTable } from "./TrackTable";
@@ -47,8 +48,13 @@ export function PlaylistView({ playlistId }: PlaylistViewProps) {
   }, [refreshTracks]);
 
   useEffect(() => {
-    setActiveTrackIds(filteredTracks.map((track) => track.id));
-  }, [filteredTracks, setActiveTrackIds]);
+    const trackIds = filteredTracks.map((track) => track.id);
+    setActiveTrackIds(trackIds);
+    playerController.syncTracklistContext(
+      serializeView({ playlistId }),
+      trackIds,
+    );
+  }, [filteredTracks, playlistId, setActiveTrackIds]);
 
   const removeTrack = async (trackId: number) => {
     await api.removeTrackFromPlaylist(playlistId, trackId);

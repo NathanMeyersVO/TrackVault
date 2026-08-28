@@ -2,8 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import type { PlaybackState } from "../lib/tauri";
 import {
+  getContextTrackId,
+  isLibrarySourcedView,
   mergeBackendPlaybackState,
+  serializeView,
   shouldClearPositionGuard,
+  viewsEqual,
 } from "./playerStore";
 
 function playback(
@@ -81,5 +85,65 @@ describe("mergeBackendPlaybackState", () => {
     const incoming = playback(0, false);
 
     expect(mergeBackendPlaybackState(existing, incoming).is_playing).toBe(false);
+  });
+});
+
+describe("view helpers", () => {
+  it("identifies library-sourced views", () => {
+    expect(isLibrarySourcedView("library")).toBe(true);
+    expect(isLibrarySourcedView({ playlistId: 1 })).toBe(true);
+    expect(isLibrarySourcedView({ taglistId: 2, value: "rock" })).toBe(true);
+    expect(isLibrarySourcedView({ collectionId: 3 })).toBe(false);
+  });
+
+  it("serializes and compares views", () => {
+    expect(serializeView("library")).toBe("library");
+    expect(serializeView({ playlistId: 4 })).toBe("playlist:4");
+    expect(serializeView({ taglistId: 5, value: null })).toBe("taglist:5:");
+    expect(serializeView({ taglistId: 5, value: "jazz" })).toBe("taglist:5:jazz");
+    expect(serializeView({ collectionId: 6 })).toBe("collection:6");
+
+    expect(viewsEqual("library", "library")).toBe(true);
+    expect(viewsEqual({ playlistId: 1 }, { playlistId: 1 })).toBe(true);
+    expect(
+      viewsEqual({ taglistId: 1, value: "a" }, { taglistId: 1, value: "b" }),
+    ).toBe(false);
+  });
+});
+
+describe("getContextTrackId", () => {
+  const basePlayback: PlaybackState = {
+    track_id: 10,
+    position_ms: 0,
+    duration_ms: 1000,
+    is_playing: false,
+  };
+
+  it("prefers cursor while a track load is in progress", () => {
+    expect(
+      getContextTrackId({
+        playback: basePlayback,
+        cursorTrackId: 20,
+        transportMode: "load",
+      }),
+    ).toBe(20);
+  });
+
+  it("falls back to playback then cursor when idle", () => {
+    expect(
+      getContextTrackId({
+        playback: basePlayback,
+        cursorTrackId: 20,
+        transportMode: "idle",
+      }),
+    ).toBe(10);
+
+    expect(
+      getContextTrackId({
+        playback: { ...basePlayback, track_id: null },
+        cursorTrackId: 20,
+        transportMode: "idle",
+      }),
+    ).toBe(20);
   });
 });

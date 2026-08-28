@@ -2,9 +2,12 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 import { api, type Collection, type PlaybackState } from "./lib/tauri";
 import {
+  getContextTrackId,
   scheduleSeekFallback,
   scheduleTrackLoadFallback,
+  serializeView,
   usePlayerStore,
+  type PendingPausedLoad,
   type View,
 } from "./store/playerStore";
 
@@ -283,24 +286,99 @@ async function restoreContinuousPlayback(
   return true;
 }
 
-async function preloadContinuousCollectionPosition(
+function activateTracklistContext(target: PendingPausedLoad) {
+  const store = usePlayerStore.getState();
+  store.setCursorTrackId(target.trackId);
+  cancelDeferredSelectPreload();
+
+  const { playback, transportBusy } = store;
+  if (transportBusy) return;
+
+  if (playback.is_playing) {
+    if (
+      playback.track_id !== target.trackId ||
+      playback.position_ms !== target.startMs
+    ) {
+      store.setPendingPausedLoad(target);
+    }
+    return;
+  }
+
+  if (
+    playback.track_id === target.trackId &&
+    playback.position_ms === target.startMs
+  ) {
+    return;
+  }
+
+  void loadTrack(target.trackId, target.startMs, false);
+}
+
+function syncTracklistContext(
+  viewKey: string,
+  trackIds: number[],
+  target?: PendingPausedLoad,
+) {
+  const store = usePlayerStore.getState();
+  if (serializeView(store.view) !== viewKey) return;
+
+  const contextTrackId = getContextTrackId(store);
+  if (contextTrackId != null && trackIds.includes(contextTrackId)) {
+    return;
+  }
+
+  if (trackIds.length === 0) {
+    store.setCursorTrackId(null);
+    store.clearPendingPausedLoad();
+    cancelDeferredSelectPreload();
+    return;
+  }
+
+  const resolvedTarget: PendingPausedLoad = target ?? {
+    trackId: trackIds[0]!,
+    startMs: 0,
+  };
+  if (!trackIds.includes(resolvedTarget.trackId)) {
+    resolvedTarget.trackId = trackIds[0]!;
+    resolvedTarget.startMs = 0;
+  }
+
+  activateTracklistContext(resolvedTarget);
+}
+
+async function syncContinuousCollectionContext(
   collectionId: number,
   trackIds: number[],
+  viewKey: string,
 ): Promise<void> {
   if (usePlayerStore.getState().transportBusy) return;
 
   setContinuousContext(collectionId, trackIds);
 
-  const target = await resolveContinuousRestoreTarget(
+  if (serializeView(usePlayerStore.getState().view) !== viewKey) return;
+
+  const restoreTarget = await resolveContinuousRestoreTarget(
     collectionId,
     trackIds,
     trackIds[0] ?? null,
   );
-  if (target == null) return;
+  if (restoreTarget == null) {
+    syncTracklistContext(viewKey, trackIds);
+    return;
+  }
 
-  cancelDeferredSelectPreload();
-  usePlayerStore.getState().setCursorTrackId(target.trackId);
-  await loadTrack(target.trackId, target.positionMs, false);
+  syncTracklistContext(viewKey, trackIds, {
+    trackId: restoreTarget.trackId,
+    startMs: restoreTarget.positionMs,
+  });
+}
+
+async function preloadContinuousCollectionPosition(
+  collectionId: number,
+  trackIds: number[],
+): Promise<void> {
+  const viewKey = serializeView({ collectionId });
+  await syncContinuousCollectionContext(collectionId, trackIds, viewKey);
 }
 
 async function handleContinuousTrackEnd() {
@@ -310,8 +388,8 @@ async function handleContinuousTrackEnd() {
   if (!context) return;
 
   const store = usePlayerStore.getState();
-  const { playback, transportBusy, pendingPausedLoadTrackId } = store;
-  if (transportBusy || pendingPausedLoadTrackId != null) return;
+  const { playback, transportBusy, pendingPausedLoad } = store;
+  if (transportBusy || pendingPausedLoad != null) return;
   if (playback.is_playing || playback.track_id == null) return;
   if (!isNearTrackEnd(playback)) return;
 
@@ -367,11 +445,11 @@ function flushPendingPausedLoad() {
   const store = usePlayerStore.getState();
   if (store.playback.is_playing) return;
   if (store.transportBusy) return;
-  if (store.pendingPausedLoadTrackId == null) return;
+  if (store.pendingPausedLoad == null) return;
 
-  const trackId = store.pendingPausedLoadTrackId;
+  const pending = store.pendingPausedLoad;
   store.clearPendingPausedLoad();
-  void loadTrack(trackId, 0, false);
+  void loadTrack(pending.trackId, pending.startMs, false);
 }
 
 function selectTrack(trackId: number) {
@@ -384,7 +462,7 @@ function selectTrack(trackId: number) {
 
   if (currentPlayback.is_playing) {
     if (currentPlayback.track_id !== trackId) {
-      store.setPendingPausedLoad(trackId);
+      store.setPendingPausedLoad({ trackId, startMs: 0 });
     }
     return;
   }
@@ -526,6 +604,8 @@ export const playerController = {
   seekToStart,
   seekToEnd,
   reapplyVolume,
+  syncTracklistContext,
+  syncContinuousCollectionContext,
   preloadContinuousCollectionPosition,
 };
 
@@ -554,7 +634,7 @@ export function initPlayerController() {
     prevTransportBusy = state.transportBusy;
 
     if (prevIsPlaying && !state.playback.is_playing) {
-      if (state.pendingPausedLoadTrackId == null && !state.transportBusy) {
+      if (state.pendingPausedLoad == null && !state.transportBusy) {
         void handleContinuousTrackEnd();
       } else if (!state.playback.is_playing) {
         void saveContinuousPlaybackState();

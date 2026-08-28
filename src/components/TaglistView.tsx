@@ -6,7 +6,8 @@ import { formatTaglistLabel, getTaglistValueSingularLabel } from "../lib/taglist
 import { usePlayer } from "../hooks/usePlayer";
 import { useDeleteTrack } from "../hooks/useDeleteTrack";
 import { useTrackSearch } from "../hooks/useTrackSearch";
-import { usePlayerStore } from "../store/playerStore";
+import { usePlayerStore, serializeView } from "../store/playerStore";
+import { playerController } from "../playerController";
 import { scrollSidebarItem, sidebarSublistId } from "../lib/sidebarNavigation";
 import { ChangeTaglistValueModal } from "./ChangeTaglistValueModal";
 import { TagEditorModal } from "./TagEditorModal";
@@ -24,13 +25,10 @@ export function TaglistView({ taglistId, value }: TaglistViewProps) {
     playback,
     cursorTrackId,
     cursorTaglistFooter,
-    pendingTaglistSelectFirst,
     setActiveTrackIds,
     setView,
     setTaglistNav,
     setCursorTaglistFooter,
-    setPendingTaglistSelectFirst,
-    setCursorTrackId,
   } = usePlayerStore();
   const { playTrack, selectTrack } = usePlayer();
   const { requestDeleteTrack, confirmDialog: deleteConfirmDialog } = useDeleteTrack();
@@ -88,30 +86,16 @@ export function TaglistView({ taglistId, value }: TaglistViewProps) {
   const activateNextSublist = useCallback(() => {
     if (!nextSublist) return;
     setCursorTaglistFooter(false);
-    setPendingTaglistSelectFirst(true);
     setView({ taglistId, value: nextSublist.value });
     scrollSidebarItem(sidebarSublistId(taglistId, nextSublist.value));
-  }, [
-    nextSublist,
-    setCursorTaglistFooter,
-    setPendingTaglistSelectFirst,
-    setView,
-    taglistId,
-  ]);
+  }, [nextSublist, setCursorTaglistFooter, setView, taglistId]);
 
   const activatePreviousSublist = useCallback(() => {
     if (!previousSublist) return;
     setCursorTaglistFooter(false);
-    setPendingTaglistSelectFirst(true);
     setView({ taglistId, value: previousSublist.value });
     scrollSidebarItem(sidebarSublistId(taglistId, previousSublist.value));
-  }, [
-    previousSublist,
-    setCursorTaglistFooter,
-    setPendingTaglistSelectFirst,
-    setView,
-    taglistId,
-  ]);
+  }, [previousSublist, setCursorTaglistFooter, setView, taglistId]);
 
   useEffect(() => {
     refreshTracks();
@@ -129,25 +113,19 @@ export function TaglistView({ taglistId, value }: TaglistViewProps) {
   }, [refreshTracks, refreshValues]);
 
   useEffect(() => {
-    setActiveTrackIds(filteredTracks.map((track) => track.id));
-  }, [filteredTracks, setActiveTrackIds]);
-
-  useEffect(() => {
-    if (!pendingTaglistSelectFirst || !tracksLoaded) return;
-
-    if (filteredTracks[0]) {
-      selectTrack(filteredTracks[0].id);
-    } else {
-      setCursorTrackId(null);
-    }
-    setPendingTaglistSelectFirst(false);
+    if (!tracksLoaded) return;
+    const trackIds = filteredTracks.map((track) => track.id);
+    setActiveTrackIds(trackIds);
+    playerController.syncTracklistContext(
+      serializeView({ taglistId, value }),
+      trackIds,
+    );
   }, [
     filteredTracks,
-    pendingTaglistSelectFirst,
-    selectTrack,
-    setCursorTrackId,
-    setPendingTaglistSelectFirst,
+    setActiveTrackIds,
+    taglistId,
     tracksLoaded,
+    value,
   ]);
 
   useEffect(() => {
@@ -175,9 +153,8 @@ export function TaglistView({ taglistId, value }: TaglistViewProps) {
     return () => {
       setTaglistNav(null);
       setCursorTaglistFooter(false);
-      setPendingTaglistSelectFirst(false);
     };
-  }, [setCursorTaglistFooter, setPendingTaglistSelectFirst, setTaglistNav]);
+  }, [setCursorTaglistFooter, setTaglistNav]);
 
   const reorderTracks = async (orderedIds: number[]) => {
     const byId = new Map(tracks.map((track) => [track.id, track]));

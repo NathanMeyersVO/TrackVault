@@ -7,7 +7,7 @@ import { useDeleteCollectionTrack } from "../hooks/useDeleteCollectionTrack";
 import { useLibrary, usePlayer } from "../hooks/usePlayer";
 import { playerController } from "../playerController";
 import { useTrackSearch } from "../hooks/useTrackSearch";
-import { usePlayerStore } from "../store/playerStore";
+import { usePlayerStore, serializeView } from "../store/playerStore";
 import { TagEditorModal } from "./TagEditorModal";
 import { TrackSearchInput } from "./TrackSearchInput";
 import { TrackTable } from "./TrackTable";
@@ -69,25 +69,19 @@ export function CollectionView({ collectionId }: CollectionViewProps) {
   );
 
   useEffect(() => {
-    if (playbackMode !== "continuous" || tracks.length === 0) return;
-
-    let cancelled = false;
-    void (async () => {
-      try {
-        if (cancelled || usePlayerStore.getState().transportBusy) return;
-        await playerController.preloadContinuousCollectionPosition(
-          collectionId,
-          tracks.map((track) => track.id),
-        );
-      } catch (error) {
-        console.error(error);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [collectionId, playbackMode, tracks]);
+    const trackIds = filteredTracks.map((track) => track.id);
+    setActiveTrackIds(trackIds);
+    const viewKey = serializeView({ collectionId });
+    if (playbackMode === "continuous" && trackIds.length > 0) {
+      void playerController.syncContinuousCollectionContext(
+        collectionId,
+        trackIds,
+        viewKey,
+      );
+    } else {
+      playerController.syncTracklistContext(viewKey, trackIds);
+    }
+  }, [collectionId, filteredTracks, playbackMode, setActiveTrackIds]);
 
   const refreshTracks = useCallback(() => {
     api.getCollectionTracks(collectionId).then(setTracks).catch(console.error);
@@ -105,10 +99,6 @@ export function CollectionView({ collectionId }: CollectionViewProps) {
       unlisten.then((fn) => fn());
     };
   }, [refreshTracks]);
-
-  useEffect(() => {
-    setActiveTrackIds(filteredTracks.map((track) => track.id));
-  }, [filteredTracks, setActiveTrackIds]);
 
   const reorderTracks = async (orderedIds: number[]) => {
     const byId = new Map(tracks.map((track) => [track.id, track]));

@@ -5,6 +5,7 @@ import { useLibrary, usePlayer } from "../hooks/usePlayer";
 import { useDeleteTrack } from "../hooks/useDeleteTrack";
 import { useTrackSearch } from "../hooks/useTrackSearch";
 import { usePlayerStore } from "../store/playerStore";
+import { playerController } from "../playerController";
 import { TagEditorModal } from "./TagEditorModal";
 import { TrackSearchInput } from "./TrackSearchInput";
 import { TrackTable } from "./TrackTable";
@@ -19,7 +20,9 @@ export function LibraryView() {
   const { query, setQuery, filteredTracks, isSearching } = useTrackSearch(tracks);
 
   useEffect(() => {
-    setActiveTrackIds(filteredTracks.map((track) => track.id));
+    const trackIds = filteredTracks.map((track) => track.id);
+    setActiveTrackIds(trackIds);
+    playerController.syncTracklistContext("library", trackIds);
   }, [filteredTracks, setActiveTrackIds]);
 
   const handleAddToPlaylist = useCallback(

@@ -9,6 +9,44 @@ export type View =
   | { collectionId: number };
 export type TransportMode = "idle" | "seek" | "load";
 
+export interface PendingPausedLoad {
+  trackId: number;
+  startMs: number;
+}
+
+export function serializeView(view: View): string {
+  if (view === "library") return "library";
+  if ("playlistId" in view) return `playlist:${view.playlistId}`;
+  if ("taglistId" in view) {
+    return `taglist:${view.taglistId}:${view.value ?? ""}`;
+  }
+  if ("collectionId" in view) return `collection:${view.collectionId}`;
+  return "unknown";
+}
+
+export function viewsEqual(a: View, b: View): boolean {
+  return serializeView(a) === serializeView(b);
+}
+
+export function isLibrarySourcedView(view: View): boolean {
+  return (
+    view === "library" ||
+    (typeof view === "object" &&
+      ("playlistId" in view || "taglistId" in view))
+  );
+}
+
+export function getContextTrackId(state: {
+  playback: PlaybackState;
+  cursorTrackId: number | null;
+  transportMode: TransportMode;
+}): number | null {
+  if (state.transportMode === "load" && state.cursorTrackId != null) {
+    return state.cursorTrackId;
+  }
+  return state.playback.track_id ?? state.cursorTrackId;
+}
+
 export interface TaglistNav {
   hasPreviousSublist: boolean;
   hasNextSublist: boolean;
@@ -71,14 +109,13 @@ interface PlayerStore {
   lockedPositionMs: number | null;
   seekGeneration: number;
   positionGuardTargetMs: number | null;
-  pendingPausedLoadTrackId: number | null;
+  pendingPausedLoad: PendingPausedLoad | null;
   pendingPlayIntent: PlayIntent | null;
   loadAutoplayRequested: boolean;
   draggingTrackId: number | null;
   volume: number;
   taglistNav: TaglistNav | null;
   cursorTaglistFooter: boolean;
-  pendingTaglistSelectFirst: boolean;
   continuousPlaybackCollectionId: number | null;
   continuousPlaybackTrackIds: number[];
   previewPositionMs: number;
@@ -100,7 +137,7 @@ interface PlayerStore {
   releaseTransport: () => void;
   completeTransport: (result: PlaybackState, targetMs: number) => void;
   forceCompleteTransport: (targetMs: number) => void;
-  setPendingPausedLoad: (trackId: number | null) => void;
+  setPendingPausedLoad: (load: PendingPausedLoad | null) => void;
   clearPendingPausedLoad: () => void;
   setPendingPlayIntent: (intent: PlayIntent | null) => void;
   clearPendingPlayIntent: () => void;
@@ -110,7 +147,6 @@ interface PlayerStore {
   patchTrack: (track: Track) => void;
   setTaglistNav: (nav: TaglistNav | null) => void;
   setCursorTaglistFooter: (active: boolean) => void;
-  setPendingTaglistSelectFirst: (pending: boolean) => void;
   setContinuousPlaybackContext: (
     collectionId: number | null,
     trackIds: number[],
@@ -156,14 +192,13 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   lockedPositionMs: null,
   seekGeneration: 0,
   positionGuardTargetMs: null,
-  pendingPausedLoadTrackId: null,
+  pendingPausedLoad: null,
   pendingPlayIntent: null,
   loadAutoplayRequested: false,
   draggingTrackId: null,
   volume: 1,
   taglistNav: null,
   cursorTaglistFooter: false,
-  pendingTaglistSelectFirst: false,
   continuousPlaybackCollectionId: null,
   continuousPlaybackTrackIds: [],
   previewPositionMs: 0,
@@ -234,8 +269,8 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     const { playback } = get();
     get().completeTransport(playback, targetMs);
   },
-  setPendingPausedLoad: (trackId) => set({ pendingPausedLoadTrackId: trackId }),
-  clearPendingPausedLoad: () => set({ pendingPausedLoadTrackId: null }),
+  setPendingPausedLoad: (pendingPausedLoad) => set({ pendingPausedLoad }),
+  clearPendingPausedLoad: () => set({ pendingPausedLoad: null }),
   setPendingPlayIntent: (intent) => set({ pendingPlayIntent: intent }),
   clearPendingPlayIntent: () => set({ pendingPlayIntent: null }),
   setDraggingTrackId: (draggingTrackId) => set({ draggingTrackId }),
@@ -286,8 +321,6 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       cursorTaglistFooter: active,
       cursorTrackId: active ? null : state.cursorTrackId,
     })),
-  setPendingTaglistSelectFirst: (pendingTaglistSelectFirst) =>
-    set({ pendingTaglistSelectFirst }),
   setContinuousPlaybackContext: (continuousPlaybackCollectionId, continuousPlaybackTrackIds) =>
     set({ continuousPlaybackCollectionId, continuousPlaybackTrackIds }),
   setPreviewPositionMs: (previewPositionMs) => set({ previewPositionMs }),
