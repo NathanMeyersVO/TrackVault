@@ -4,6 +4,10 @@ import { ConfirmDialog } from "../components/ConfirmDialog";
 import { DemoBlurText } from "../components/DemoBlurText";
 import { useDemoPrivacy } from "./useDemoPrivacy";
 import { api, type Taglist, type TaglistValue } from "../lib/tauri";
+import {
+  formatTaglistLabel,
+  getTaglistValueSingularLabel,
+} from "../lib/taglistLabels";
 import { invalidateTrackTags } from "../lib/trackTagsCache";
 import { useLibrary } from "./usePlayer";
 import { usePlayerStore } from "../store/playerStore";
@@ -13,6 +17,8 @@ interface PendingTagDrop {
   trackTitle: string;
   taglist: Taglist;
   targetValue: string | null;
+  targetDisplayTitle?: string | null;
+  entryTagValue: string | null;
 }
 
 function normalizeTagValue(value: string | null | undefined): string | null {
@@ -42,10 +48,15 @@ export function useTagDropConfirm() {
         tracks.find((track) => track.id === trackId)?.title ?? "Track";
 
       let currentValue: string | null = null;
+      let entryTagValue: string | null = null;
       try {
         const tagInfo = await api.getTrackTags(trackId);
         const field = tagInfo.fields.find((item) => item.key === taglist.tag_key);
         currentValue = normalizeTagValue(field?.value);
+        const entryField = tagInfo.fields.find(
+          (item) => item.key === taglist.entry_tag_key,
+        );
+        entryTagValue = normalizeTagValue(entryField?.value);
       } catch (err) {
         console.error(err);
         return;
@@ -61,6 +72,8 @@ export function useTagDropConfirm() {
         trackTitle,
         taglist,
         targetValue: entry.value,
+        targetDisplayTitle: entry.display_title,
+        entryTagValue,
       });
     },
     [tracks],
@@ -92,9 +105,19 @@ export function useTagDropConfirm() {
     }
   }, [pending, patchTrack, refresh]);
 
+  const sublistLabel = pending
+    ? getTaglistValueSingularLabel(pending.taglist)
+    : "";
+  const partitionLabel = pending
+    ? formatTaglistLabel(pending.targetValue, pending.targetDisplayTitle)
+    : "";
+  const entryTagKey = pending?.taglist.entry_tag_key.trim() ?? "";
+
   const confirmDialog = pending ? (
     <ConfirmDialog
-      title={pending.targetValue == null ? "Remove tag" : "Set tag"}
+      title={
+        pending.targetValue == null ? "Remove tag" : `Move to ${sublistLabel}`
+      }
       message={
         pending.targetValue == null ? (
           <>
@@ -116,13 +139,15 @@ export function useTagDropConfirm() {
           </>
         ) : (
           <>
-            Set tag &ldquo;{pending.taglist.tag_key}&rdquo; on &ldquo;
-            <DemoBlurText blur={shouldBlurTrackField("title")}>
-              {pending.trackTitle}
+            Move &ldquo;
+            <DemoBlurText
+              blur={shouldBlurTagKey(entryTagKey || pending.taglist.entry_tag_key)}
+            >
+              {pending.entryTagValue ?? ""}
             </DemoBlurText>
-            &rdquo; to &ldquo;
+            &rdquo; to {sublistLabel} &ldquo;
             <DemoBlurText blur={shouldBlurTagKey(pending.taglist.tag_key)}>
-              {pending.targetValue}
+              {partitionLabel}
             </DemoBlurText>
             &rdquo;?
             <br />
@@ -138,7 +163,7 @@ export function useTagDropConfirm() {
           </>
         )
       }
-      confirmLabel={pending.targetValue == null ? "Remove" : "Set tag"}
+      confirmLabel={pending.targetValue == null ? "Remove" : "Move"}
       cancelLabel="Cancel"
       busy={saving}
       onConfirm={() => void confirmTagDrop()}
