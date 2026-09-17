@@ -155,18 +155,21 @@ export function TagEditorModal({
                   <label key={field.key} className="block text-xs">
                     <span className="mb-1 block text-muted">{field.key}</span>
                     {field.editable ? (
-                      <div
-                        className={blurValue ? "rounded-md" : undefined}
-                        style={blurValue ? { filter: "blur(6px)" } : undefined}
-                      >
+                      blurValue ? (
+                        <div
+                          className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground"
+                          aria-hidden
+                        >
+                          <DemoBlurText blur>{field.value}</DemoBlurText>
+                        </div>
+                      ) : (
                         <input
                           value={field.value}
                           onChange={(event) => updateField(index, event.target.value)}
-                          disabled={saving || blurValue}
-                          readOnly={blurValue}
-                          className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground disabled:opacity-100"
+                          disabled={saving}
+                          className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground"
                         />
-                      </div>
+                      )
                     ) : (
                       <div className="rounded-md border border-border bg-background px-2 py-1.5 text-sm text-muted">
                         <DemoBlurText blur={blurValue}>{field.value}</DemoBlurText>
