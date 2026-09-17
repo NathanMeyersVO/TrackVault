@@ -4,7 +4,6 @@ import { listen } from "@tauri-apps/api/event";
 
 import { api, formatDuration, type AudioCacheTrackReady } from "../lib/tauri";
 import { usePlayer } from "../hooks/usePlayer";
-import { useWaveformNormalize } from "../hooks/useWaveformNormalize";
 import {
   getDisplayPositionMs,
   isLibrarySourcedView,
@@ -37,7 +36,6 @@ export function NowPlayingBar() {
     seekToStart,
     seekToEnd,
   } = usePlayer();
-  const { normalize, setNormalize } = useWaveformNormalize();
   const view = usePlayerStore((state) => state.view);
   const { shouldBlurTrackField } = useDemoPrivacy();
   const applyDemoBlur = isLibrarySourcedView(view);
@@ -231,21 +229,6 @@ export function NowPlayingBar() {
         </div>
       </div>
 
-      <div className="mb-1 flex justify-end">
-        <label
-          className="flex cursor-pointer select-none items-center gap-1.5 text-xs text-muted"
-          title="When on, scales the waveform to fill the display so quiet and loud tracks are easier to compare. When off, shows raw peak levels — quiet tracks look smaller and loud tracks use more height. Display only; does not change playback volume."
-        >
-          <input
-            type="checkbox"
-            checked={normalize}
-            onChange={(event) => setNormalize(event.target.checked)}
-            className="accent-accent"
-          />
-          Normalize
-        </label>
-      </div>
-
       <div className="relative">
         <div className={transportBusy ? "opacity-60" : ""}>
           <Waveform
@@ -253,7 +236,6 @@ export function NowPlayingBar() {
             peaks={peaks}
             durationMs={durationMs}
             positionMs={displayPositionMs}
-            normalize={normalize}
             transportBusy={transportBusy}
             interactive={canSeek}
             onSeek={handleSeek}
