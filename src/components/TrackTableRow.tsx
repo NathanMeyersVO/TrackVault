@@ -3,7 +3,9 @@ import type { CSSProperties, DragEvent } from "react";
 import { setTrackDragData } from "../lib/dragDrop";
 import type { Playlist, Track } from "../lib/tauri";
 import { formatDuration } from "../lib/tauri";
+import { DemoBlurText } from "./DemoBlurText";
 import { useAppearance } from "../hooks/useAppearance";
+import { useDemoPrivacy } from "../hooks/useDemoPrivacy";
 import { usePlayerStore } from "../store/playerStore";
 import { TrackRowMenu } from "./TrackRowMenu";
 import { useTrackTooltip } from "./TrackTooltip";
@@ -32,6 +34,7 @@ interface TrackTableRowProps {
   onReorderDragEnd?: () => void;
   onReorderDragOver?: (event: DragEvent<HTMLTableRowElement>) => void;
   onReorderDrop?: (event: DragEvent<HTMLTableRowElement>) => void;
+  applyDemoBlur?: boolean;
 }
 
 function rowStyle(
@@ -94,10 +97,17 @@ export function TrackTableRow({
   onReorderDragEnd,
   onReorderDragOver,
   onReorderDrop,
+  applyDemoBlur = true,
 }: TrackTableRowProps) {
   const { settings } = useAppearance();
+  const { shouldBlurTrackField } = useDemoPrivacy();
+  const blurTitle = applyDemoBlur && shouldBlurTrackField("title");
+  const blurArtist = applyDemoBlur && shouldBlurTrackField("artist");
+  const blurAlbum = applyDemoBlur && shouldBlurTrackField("album");
   const setDraggingTrackId = usePlayerStore((state) => state.setDraggingTrackId);
-  const { onMouseEnter, onMouseLeave, tooltip } = useTrackTooltip(track.id);
+  const { onMouseEnter, onMouseLeave, tooltip } = useTrackTooltip(track.id, {
+    applyDemoBlur,
+  });
   const style = rowStyle(
     isPlaying,
     isCursor,
@@ -138,7 +148,7 @@ export function TrackTableRow({
             <button
               type="button"
               draggable
-              aria-label={`Reorder ${track.title}`}
+              aria-label={blurTitle ? "Reorder track" : `Reorder ${track.title}`}
               className="flex cursor-grab items-center justify-center rounded p-1 hover:bg-surface-hover hover:text-foreground active:cursor-grabbing"
               onClick={(event) => event.stopPropagation()}
               onDragStart={(event) => {
@@ -159,20 +169,26 @@ export function TrackTableRow({
           onMouseEnter={onMouseEnter}
           onMouseLeave={onMouseLeave}
         >
-          <div className="truncate font-medium">{track.title}</div>
-        </td>
-        <td className="px-4 py-2">
-          <div
-            className={`truncate ${isPlaying ? "" : "text-muted"}`}
-          >
-            {track.artist || "—"}
+          <div className="truncate font-medium">
+            <DemoBlurText blur={blurTitle}>{track.title}</DemoBlurText>
           </div>
         </td>
         <td className="px-4 py-2">
           <div
             className={`truncate ${isPlaying ? "" : "text-muted"}`}
           >
-            {track.album || "—"}
+            <DemoBlurText blur={blurArtist && Boolean(track.artist)}>
+              {track.artist || "—"}
+            </DemoBlurText>
+          </div>
+        </td>
+        <td className="px-4 py-2">
+          <div
+            className={`truncate ${isPlaying ? "" : "text-muted"}`}
+          >
+            <DemoBlurText blur={blurAlbum && Boolean(track.album)}>
+              {track.album || "—"}
+            </DemoBlurText>
           </div>
         </td>
         <td

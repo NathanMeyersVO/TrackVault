@@ -1,10 +1,20 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
+import { DemoBlurText } from "./DemoBlurText";
+import { useDemoPrivacy } from "../hooks/useDemoPrivacy";
 import type { TrackTagInfo } from "../lib/tauri";
 import { fetchTrackTags } from "../lib/trackTagsCache";
 
-export function useTrackTooltip(trackId: number) {
+interface UseTrackTooltipOptions {
+  applyDemoBlur?: boolean;
+}
+
+export function useTrackTooltip(
+  trackId: number,
+  { applyDemoBlur = true }: UseTrackTooltipOptions = {},
+) {
+  const { shouldBlurTagKey, shouldBlurFilename } = useDemoPrivacy();
   const [visible, setVisible] = useState(false);
   const [tags, setTags] = useState<TrackTagInfo | null>(null);
   const [loading, setLoading] = useState(false);
@@ -54,14 +64,23 @@ export function useTrackTooltip(trackId: number) {
         {loading && <div className="text-muted">Loading tags…</div>}
         {!loading && tags && (
           <>
-            <div className="mb-2 truncate font-medium text-foreground">{tags.file_name}</div>
+            <div className="mb-2 truncate font-medium text-foreground">
+              <DemoBlurText blur={applyDemoBlur && shouldBlurFilename()}>
+                {tags.file_name}
+              </DemoBlurText>
+            </div>
             {tags.fields.length === 0 ? (
               <div className="text-muted">No tags found.</div>
             ) : (
               <ul className="max-h-48 space-y-1 overflow-y-auto">
                 {tags.fields.map((field) => (
                   <li key={`${field.key}-${field.value}`} className="text-foreground">
-                    <span className="text-muted">{field.key}:</span> {field.value}
+                    <span className="text-muted">{field.key}:</span>{" "}
+                    <DemoBlurText
+                      blur={applyDemoBlur && shouldBlurTagKey(field.key)}
+                    >
+                      {field.value}
+                    </DemoBlurText>
                   </li>
                 ))}
               </ul>

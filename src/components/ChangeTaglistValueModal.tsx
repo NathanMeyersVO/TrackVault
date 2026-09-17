@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { api, type Taglist } from "../lib/tauri";
 import { getTaglistValueSingularLabel } from "../lib/taglistLabels";
+import { useDemoPrivacy } from "../hooks/useDemoPrivacy";
 import { invalidateTrackTags } from "../lib/trackTagsCache";
 import { usePlayerStore } from "../store/playerStore";
 
@@ -20,7 +21,9 @@ export function ChangeTaglistValueModal({
   taglist,
   onClose,
 }: ChangeTaglistValueModalProps) {
+  const { shouldBlurTagKey } = useDemoPrivacy();
   const patchTrack = usePlayerStore((state) => state.patchTrack);
+  const blurValue = shouldBlurTagKey(taglist.tag_key);
   const singularLabel = getTaglistValueSingularLabel(taglist);
   const [currentValue, setCurrentValue] = useState("");
   const [value, setValue] = useState("");
@@ -107,17 +110,24 @@ export function ChangeTaglistValueModal({
               <label className="mb-1 block text-xs text-muted">
                 {singularLabel} (tag: {taglist.tag_key})
               </label>
-              <input
-                autoFocus
-                value={value}
-                onChange={(event) => setValue(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" && !unchanged && !saving) {
-                    void handleSave();
-                  }
-                }}
-                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
-              />
+              <div
+                className={blurValue ? "rounded-md" : undefined}
+                style={blurValue ? { filter: "blur(6px)" } : undefined}
+              >
+                <input
+                  autoFocus={!blurValue}
+                  value={value}
+                  onChange={(event) => setValue(event.target.value)}
+                  readOnly={blurValue}
+                  disabled={blurValue}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" && !unchanged && !saving && !blurValue) {
+                      void handleSave();
+                    }
+                  }}
+                  className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground disabled:opacity-100"
+                />
+              </div>
               <p className="mt-3 text-xs text-muted">
                 This updates the file&apos;s metadata.
               </p>

@@ -50,6 +50,7 @@ pub struct Taglist {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TaglistSwapTarget {
     pub partition_value: Option<String>,
+    pub partition_display_title: Option<String>,
     pub track_id: i64,
     pub track_title: String,
 }

@@ -1794,6 +1794,7 @@ impl Database {
                 let (track_id, track_title) = matches[0].clone();
                 targets.push(TaglistSwapTarget {
                     partition_value: sublist.value.clone(),
+                    partition_display_title: sublist.display_title.clone(),
                     track_id,
                     track_title,
                 });
@@ -2569,12 +2570,18 @@ mod tests {
             ],
         )
         .unwrap();
+        db.set_taglist_value_title(taglist_id, "02", Some("Regional"))
+            .unwrap();
 
         let targets = db
             .list_taglist_swap_targets(taglist_id, Some("01"), track_a)
             .unwrap();
         assert_eq!(targets.len(), 1);
         assert_eq!(targets[0].partition_value.as_deref(), Some("02"));
+        assert_eq!(
+            targets[0].partition_display_title.as_deref(),
+            Some("Regional"),
+        );
         assert_eq!(targets[0].track_id, track_b);
 
         let partner = db

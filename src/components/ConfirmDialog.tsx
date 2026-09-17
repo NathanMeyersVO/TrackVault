@@ -1,8 +1,8 @@
-import { useEffect } from "react";
+import { useEffect, type ReactNode } from "react";
 
 export interface ConfirmDialogProps {
   title: string;
-  message: string;
+  message: ReactNode;
   confirmLabel?: string;
   cancelLabel?: string;
   secondaryLabel?: string;

@@ -5,7 +5,13 @@ import { listen } from "@tauri-apps/api/event";
 import { api, formatDuration, type AudioCacheTrackReady } from "../lib/tauri";
 import { usePlayer } from "../hooks/usePlayer";
 import { useWaveformNormalize } from "../hooks/useWaveformNormalize";
-import { usePlayerStore, getDisplayPositionMs } from "../store/playerStore";
+import {
+  getDisplayPositionMs,
+  isLibrarySourcedView,
+  usePlayerStore,
+} from "../store/playerStore";
+import { DemoBlurText } from "./DemoBlurText";
+import { useDemoPrivacy } from "../hooks/useDemoPrivacy";
 import { TransportControls } from "./TransportControls";
 import { VolumeControl } from "./VolumeControl";
 import { SeekIndicator } from "./SeekIndicator";
@@ -32,6 +38,12 @@ export function NowPlayingBar() {
     seekToEnd,
   } = usePlayer();
   const { normalize, setNormalize } = useWaveformNormalize();
+  const view = usePlayerStore((state) => state.view);
+  const { shouldBlurTrackField } = useDemoPrivacy();
+  const applyDemoBlur = isLibrarySourcedView(view);
+  const blurTitle = applyDemoBlur && shouldBlurTrackField("title");
+  const blurArtist = applyDemoBlur && shouldBlurTrackField("artist");
+  const blurAlbum = applyDemoBlur && shouldBlurTrackField("album");
   const [peaks, setPeaks] = useState<number[]>([]);
   const [peakDurationMs, setPeakDurationMs] = useState(0);
   const [peaksEpoch, setPeaksEpoch] = useState(0);
@@ -178,12 +190,26 @@ export function NowPlayingBar() {
         </div>
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-medium text-foreground">
-            {displayTrack?.title ?? "Not playing"}
+            {displayTrack?.title != null ? (
+              <DemoBlurText blur={blurTitle}>{displayTrack.title}</DemoBlurText>
+            ) : (
+              "Not playing"
+            )}
           </div>
           <div className="truncate text-xs text-muted">
-            {displayTrack
-              ? `${displayTrack.artist || "Unknown artist"} — ${displayTrack.album || "Unknown album"}`
-              : "Choose a track to play"}
+            {displayTrack ? (
+              <>
+                <DemoBlurText blur={blurArtist && Boolean(displayTrack.artist)}>
+                  {displayTrack.artist || "Unknown artist"}
+                </DemoBlurText>
+                {" — "}
+                <DemoBlurText blur={blurAlbum && Boolean(displayTrack.album)}>
+                  {displayTrack.album || "Unknown album"}
+                </DemoBlurText>
+              </>
+            ) : (
+              "Choose a track to play"
+            )}
           </div>
         </div>
         <TransportControls

@@ -1,6 +1,8 @@
 import { useCallback, useState } from "react";
 
 import { ConfirmDialog } from "../components/ConfirmDialog";
+import { DemoBlurText } from "../components/DemoBlurText";
+import { useDemoPrivacy } from "./useDemoPrivacy";
 import { api, type Taglist, type TaglistValue } from "../lib/tauri";
 import { invalidateTrackTags } from "../lib/trackTagsCache";
 import { useLibrary } from "./usePlayer";
@@ -26,6 +28,7 @@ function tagValuesMatch(
 }
 
 export function useTagDropConfirm() {
+  const { shouldBlurTagKey, shouldBlurTrackField } = useDemoPrivacy();
   const { refresh } = useLibrary();
   const tracks = usePlayerStore((state) => state.tracks);
   const patchTrack = usePlayerStore((state) => state.patchTrack);
@@ -93,9 +96,47 @@ export function useTagDropConfirm() {
     <ConfirmDialog
       title={pending.targetValue == null ? "Remove tag" : "Set tag"}
       message={
-        pending.targetValue == null
-          ? `Remove "${pending.taglist.tag_key}" from "${pending.trackTitle}"?\n\nThis updates the file's metadata.${error ? `\n\n${error}` : ""}`
-          : `Set tag "${pending.taglist.tag_key}" on "${pending.trackTitle}" to "${pending.targetValue}"?\n\nThis updates the file's metadata.${error ? `\n\n${error}` : ""}`
+        pending.targetValue == null ? (
+          <>
+            Remove &ldquo;{pending.taglist.tag_key}&rdquo; from &ldquo;
+            <DemoBlurText blur={shouldBlurTrackField("title")}>
+              {pending.trackTitle}
+            </DemoBlurText>
+            &rdquo;?
+            <br />
+            <br />
+            This updates the file&apos;s metadata.
+            {error ? (
+              <>
+                <br />
+                <br />
+                {error}
+              </>
+            ) : null}
+          </>
+        ) : (
+          <>
+            Set tag &ldquo;{pending.taglist.tag_key}&rdquo; on &ldquo;
+            <DemoBlurText blur={shouldBlurTrackField("title")}>
+              {pending.trackTitle}
+            </DemoBlurText>
+            &rdquo; to &ldquo;
+            <DemoBlurText blur={shouldBlurTagKey(pending.taglist.tag_key)}>
+              {pending.targetValue}
+            </DemoBlurText>
+            &rdquo;?
+            <br />
+            <br />
+            This updates the file&apos;s metadata.
+            {error ? (
+              <>
+                <br />
+                <br />
+                {error}
+              </>
+            ) : null}
+          </>
+        )
       }
       confirmLabel={pending.targetValue == null ? "Remove" : "Set tag"}
       cancelLabel="Cancel"

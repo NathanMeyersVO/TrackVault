@@ -47,7 +47,7 @@ export function TaglistView({ taglistId, value }: TaglistViewProps) {
     : undefined;
   const swapTaglistEntryLabel =
     taglist && taglist.entry_tag_key.trim()
-      ? taglist.entry_tag_key
+      ? getTaglistValueSingularLabel(taglist)
       : undefined;
   const swappingTrack =
     swappingTrackId != null

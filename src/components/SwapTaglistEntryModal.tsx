@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { api, type Taglist, type TaglistSwapTarget } from "../lib/tauri";
+import { DemoBlurText } from "./DemoBlurText";
+import { useDemoPrivacy } from "../hooks/useDemoPrivacy";
 import {
   formatTaglistLabel,
   getTaglistValueSingularLabel,
@@ -25,6 +27,13 @@ export function SwapTaglistEntryModal({
   onClose,
   onSwapped,
 }: SwapTaglistEntryModalProps) {
+  const { shouldBlurTagKey, shouldBlurTrackField } = useDemoPrivacy();
+  const blurTrackTitle = shouldBlurTrackField("title");
+  const blurPartition = shouldBlurTagKey(taglist.tag_key);
+  const entryKey = taglist.entry_tag_key.trim();
+  const blurTargetTrackTitle =
+    shouldBlurTrackField("title") ||
+    (entryKey.length > 0 && shouldBlurTagKey(entryKey));
   const [targets, setTargets] = useState<TaglistSwapTarget[]>([]);
   const [selectedValue, setSelectedValue] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -100,7 +109,7 @@ export function SwapTaglistEntryModal({
             id="swap-taglist-entry-title"
             className="text-sm font-semibold text-foreground"
           >
-            Swap by {entryLabel}
+            Swap {sublistLabel}
           </h2>
           <button
             type="button"
@@ -115,8 +124,10 @@ export function SwapTaglistEntryModal({
 
         <div className="space-y-3 px-4 py-3">
           <p className="text-sm text-muted">
-            Exchange partition tags for &ldquo;{trackTitle}&rdquo; with another
-            track in a different {sublistLabel} that has the same {entryLabel}.
+            Exchange partition tags for &ldquo;
+            <DemoBlurText blur={blurTrackTitle}>{trackTitle}</DemoBlurText>
+            &rdquo; with another track in a different {sublistLabel} that has the
+            same {entryLabel}.
           </p>
 
           {loading ? (
@@ -129,30 +140,43 @@ export function SwapTaglistEntryModal({
               {entryLabel}.
             </div>
           ) : (
-            <label className="block text-xs text-muted">
-              Target {sublistLabel}
-              <select
-                value={selectedValue ?? ""}
-                onChange={(event) => {
-                  const next = event.target.value;
-                  setSelectedValue(next === "" ? null : next);
-                }}
-                className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
+            <div className="text-xs text-muted">
+              <span className="mb-1 block">Target {sublistLabel}</span>
+              <div
+                role="listbox"
+                aria-label={`Target ${sublistLabel}`}
+                className="max-h-48 space-y-1 overflow-y-auto rounded-md border border-border bg-background p-1"
               >
-                {targets.map((target) => (
-                  <option
-                    key={`${target.partition_value ?? "NO-TAG"}:${target.track_id}`}
-                    value={target.partition_value ?? ""}
-                  >
-                    {formatTaglistLabel(
-                      target.partition_value,
-                      null,
-                    )}{" "}
-                    → {target.track_title}
-                  </option>
-                ))}
-              </select>
-            </label>
+                {targets.map((target) => {
+                  const selected = selectedValue === target.partition_value;
+                  return (
+                    <button
+                      key={`${target.partition_value ?? "NO-TAG"}:${target.track_id}`}
+                      type="button"
+                      role="option"
+                      aria-selected={selected}
+                      onClick={() => setSelectedValue(target.partition_value)}
+                      className={`w-full rounded px-3 py-2 text-left text-sm text-foreground ${
+                        selected
+                          ? "bg-accent/20 ring-1 ring-accent"
+                          : "hover:bg-surface-hover"
+                      }`}
+                    >
+                      <DemoBlurText blur={blurPartition}>
+                        {formatTaglistLabel(
+                          target.partition_value,
+                          target.partition_display_title,
+                        )}
+                      </DemoBlurText>
+                      <span className="text-muted"> → </span>
+                      <DemoBlurText blur={blurTargetTrackTitle}>
+                        {target.track_title}
+                      </DemoBlurText>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           )}
 
           {error && <p className="text-sm text-red-400">{error}</p>}

@@ -46,6 +46,7 @@ export interface Taglist {
 
 export interface TaglistSwapTarget {
   partition_value: string | null;
+  partition_display_title?: string | null;
   track_id: number;
   track_title: string;
 }
@@ -125,6 +126,11 @@ export const COMMON_TAG_KEYS = [
 
 export interface ThemeSettings {
   theme_id: string;
+}
+
+export interface DemoPrivacySettings {
+  sensitive_tag_keys: string[];
+  blur_filenames: boolean;
 }
 
 export type ApplicationId = "none" | "usfs_ems";
@@ -308,6 +314,10 @@ export const api = {
     invoke<ApplicationSettings>("get_application_settings"),
   setApplicationSettings: (settings: ApplicationSettings) =>
     invoke<ApplicationSettings>("set_application_settings", { settings }),
+  getDemoPrivacySettings: () =>
+    invoke<DemoPrivacySettings>("get_demo_privacy_settings"),
+  setDemoPrivacySettings: (settings: DemoPrivacySettings) =>
+    invoke<DemoPrivacySettings>("set_demo_privacy_settings", { settings }),
 };
 
 export function formatDuration(ms: number): string {
