@@ -42,8 +42,16 @@ pub struct Taglist {
     pub id: i64,
     pub name: String,
     pub tag_key: String,
+    pub entry_tag_key: String,
     pub value_singular_name: String,
     pub created_at: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TaglistSwapTarget {
+    pub partition_value: Option<String>,
+    pub track_id: i64,
+    pub track_title: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

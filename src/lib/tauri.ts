@@ -39,8 +39,15 @@ export interface Taglist {
   id: number;
   name: string;
   tag_key: string;
+  entry_tag_key: string;
   value_singular_name: string;
   created_at: number;
+}
+
+export interface TaglistSwapTarget {
+  partition_value: string | null;
+  track_id: number;
+  track_title: string;
 }
 
 export interface TaglistValue {
@@ -217,8 +224,18 @@ export const api = {
     invoke<void>("reorder_playlist_tracks", { playlistId, trackIds }),
   reorderPlaylists: (playlistIds: number[]) =>
     invoke<void>("reorder_playlists", { playlistIds }),
-  createTaglist: (name: string, tagKey: string, valueSingularName: string) =>
-    invoke<number>("create_taglist", { name, tagKey, valueSingularName }),
+  createTaglist: (
+    name: string,
+    tagKey: string,
+    entryTagKey: string,
+    valueSingularName: string,
+  ) =>
+    invoke<number>("create_taglist", {
+      name,
+      tagKey,
+      entryTagKey,
+      valueSingularName,
+    }),
   deleteTaglist: (id: number) => invoke<void>("delete_taglist", { id }),
   listTaglists: () => invoke<Taglist[]>("list_taglists"),
   listTaglistValues: (taglistId: number) =>
@@ -244,6 +261,28 @@ export const api = {
   ) => invoke<void>("reorder_taglist_tracks", { taglistId, value, trackIds }),
   reorderTaglistValues: (taglistId: number, tagValues: string[]) =>
     invoke<void>("reorder_taglist_values", { taglistId, tagValues }),
+  listTaglistSwapTargets: (
+    taglistId: number,
+    sourceValue: string | null,
+    sourceTrackId: number,
+  ) =>
+    invoke<TaglistSwapTarget[]>("list_taglist_swap_targets", {
+      taglistId,
+      sourceValue,
+      sourceTrackId,
+    }),
+  swapTaglistEntries: (
+    taglistId: number,
+    sourceValue: string | null,
+    targetValue: string | null,
+    sourceTrackId: number,
+  ) =>
+    invoke<Track[]>("swap_taglist_entries", {
+      taglistId,
+      sourceValue,
+      targetValue,
+      sourceTrackId,
+    }),
   playTrack: (trackId: number, startMs?: number, autoplay = true) =>
     invoke<PlaybackState>("play_track", { trackId, startMs, autoplay }),
   pausePlayback: () => invoke<PlaybackState>("pause_playback"),

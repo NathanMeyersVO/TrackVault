@@ -476,6 +476,8 @@ export function Sidebar({ width }: { width: number }) {
   const [newTaglistName, setNewTaglistName] = useState("");
   const [newTaglistValueSingular, setNewTaglistValueSingular] = useState("");
   const [newTaglistKey, setNewTaglistKey] = useState<string>(COMMON_TAG_KEYS[0]);
+  const [newTaglistEntryKey, setNewTaglistEntryKey] =
+    useState<string>("Track Title");
   const [dragOverPlaylistId, setDragOverPlaylistId] = useState<number | null>(null);
   const [dragOverTaglistTarget, setDragOverTaglistTarget] =
     useState<TaglistDropTarget | null>(null);
@@ -764,7 +766,14 @@ export function Sidebar({ width }: { width: number }) {
     const name = newTaglistName.trim();
     const valueSingular = newTaglistValueSingular.trim();
     if (!name || !valueSingular) return;
-    await api.createTaglist(name, newTaglistKey, valueSingular);
+    if (!newTaglistKey.trim() || !newTaglistEntryKey.trim()) return;
+    if (newTaglistKey === newTaglistEntryKey) return;
+    await api.createTaglist(
+      name,
+      newTaglistKey,
+      newTaglistEntryKey,
+      valueSingular,
+    );
     setNewTaglistName("");
     setNewTaglistValueSingular("");
     setCreatingTaglist(false);
@@ -1241,10 +1250,23 @@ export function Sidebar({ width }: { width: number }) {
               value={newTaglistKey}
               onChange={(e) => setNewTaglistKey(e.target.value)}
               className="w-full rounded-md border border-border bg-background px-2 py-1 text-sm"
+              aria-label="Partition tag"
             >
               {COMMON_TAG_KEYS.map((key) => (
                 <option key={key} value={key}>
-                  {key}
+                  Partition: {key}
+                </option>
+              ))}
+            </select>
+            <select
+              value={newTaglistEntryKey}
+              onChange={(e) => setNewTaglistEntryKey(e.target.value)}
+              className="w-full rounded-md border border-border bg-background px-2 py-1 text-sm"
+              aria-label="Entry tag"
+            >
+              {COMMON_TAG_KEYS.map((key) => (
+                <option key={key} value={key}>
+                  Entry: {key}
                 </option>
               ))}
             </select>

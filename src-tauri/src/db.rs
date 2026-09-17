@@ -4,12 +4,14 @@ use std::path::Path;
 use rusqlite::{params, Connection};
 use thiserror::Error;
 
-use crate::models::{Collection, CollectionPlaybackState, Playlist, Taglist, TaglistValue, Track};
+use crate::models::{Collection, CollectionPlaybackState, Playlist, Taglist, TaglistSwapTarget, TaglistValue, Track};
 
 #[derive(Debug, Error)]
 pub enum DbError {
     #[error("database error: {0}")]
     Sqlite(#[from] rusqlite::Error),
+    #[error("{0}")]
+    InvalidOperation(String),
 }
 
 pub struct Database {
@@ -205,7 +207,22 @@ impl Database {
             "ALTER TABLE taglists ADD COLUMN value_singular_name TEXT NOT NULL DEFAULT ''",
             [],
         );
+        let _ = self.conn.execute(
+            "ALTER TABLE taglists ADD COLUMN entry_tag_key TEXT NOT NULL DEFAULT ''",
+            [],
+        );
         Ok(())
+    }
+
+    fn map_taglist_row(row: &rusqlite::Row<'_>) -> Result<Taglist, rusqlite::Error> {
+        Ok(Taglist {
+            id: row.get(0)?,
+            name: row.get(1)?,
+            tag_key: row.get(2)?,
+            entry_tag_key: row.get(3)?,
+            value_singular_name: row.get(4)?,
+            created_at: row.get(5)?,
+        })
     }
 
     fn map_collection_row(row: &rusqlite::Row<'_>) -> Result<Collection, rusqlite::Error> {
@@ -1151,12 +1168,13 @@ impl Database {
         &self,
         name: &str,
         tag_key: &str,
+        entry_tag_key: &str,
         value_singular_name: &str,
     ) -> Result<i64, DbError> {
         let now = chrono_now();
         self.conn.execute(
-            "INSERT INTO taglists (name, tag_key, value_singular_name, created_at) VALUES (?1, ?2, ?3, ?4)",
-            params![name, tag_key, value_singular_name, now],
+            "INSERT INTO taglists (name, tag_key, entry_tag_key, value_singular_name, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![name, tag_key, entry_tag_key, value_singular_name, now],
         )?;
         Ok(self.conn.last_insert_rowid())
     }
@@ -1178,20 +1196,22 @@ impl Database {
 
     pub fn get_taglist_by_name(&self, name: &str) -> Result<Option<Taglist>, DbError> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, name, tag_key, value_singular_name, created_at FROM taglists WHERE name = ?1 COLLATE NOCASE LIMIT 1",
+            "SELECT id, name, tag_key, entry_tag_key, value_singular_name, created_at FROM taglists WHERE name = ?1 COLLATE NOCASE LIMIT 1",
         )?;
         let mut rows = stmt.query(params![name])?;
         if let Some(row) = rows.next()? {
-            Ok(Some(Taglist {
-                id: row.get(0)?,
-                name: row.get(1)?,
-                tag_key: row.get(2)?,
-                value_singular_name: row.get(3)?,
-                created_at: row.get(4)?,
-            }))
+            Ok(Some(Self::map_taglist_row(&row)?))
         } else {
             Ok(None)
         }
+    }
+
+    pub fn set_taglist_entry_tag_key(&self, id: i64, entry_tag_key: &str) -> Result<(), DbError> {
+        self.conn.execute(
+            "UPDATE taglists SET entry_tag_key = ?1 WHERE id = ?2",
+            params![entry_tag_key, id],
+        )?;
+        Ok(())
     }
 
     pub fn set_taglist_value_singular_name(
@@ -1208,33 +1228,19 @@ impl Database {
 
     pub fn list_taglists(&self) -> Result<Vec<Taglist>, DbError> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, name, tag_key, value_singular_name, created_at FROM taglists ORDER BY name COLLATE NOCASE",
+            "SELECT id, name, tag_key, entry_tag_key, value_singular_name, created_at FROM taglists ORDER BY name COLLATE NOCASE",
         )?;
-        let rows = stmt.query_map([], |row| {
-            Ok(Taglist {
-                id: row.get(0)?,
-                name: row.get(1)?,
-                tag_key: row.get(2)?,
-                value_singular_name: row.get(3)?,
-                created_at: row.get(4)?,
-            })
-        })?;
+        let rows = stmt.query_map([], Self::map_taglist_row)?;
         Ok(rows.filter_map(Result::ok).collect())
     }
 
     pub fn get_taglist(&self, id: i64) -> Result<Option<Taglist>, DbError> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, name, tag_key, value_singular_name, created_at FROM taglists WHERE id = ?1",
+            "SELECT id, name, tag_key, entry_tag_key, value_singular_name, created_at FROM taglists WHERE id = ?1",
         )?;
         let mut rows = stmt.query(params![id])?;
         if let Some(row) = rows.next()? {
-            Ok(Some(Taglist {
-                id: row.get(0)?,
-                name: row.get(1)?,
-                tag_key: row.get(2)?,
-                value_singular_name: row.get(3)?,
-                created_at: row.get(4)?,
-            }))
+            Ok(Some(Self::map_taglist_row(&row)?))
         } else {
             Ok(None)
         }
@@ -1661,6 +1667,200 @@ impl Database {
         }
         Ok(())
     }
+
+    pub fn normalize_tag_value_for_match(value: &str) -> String {
+        value.trim().to_lowercase()
+    }
+
+    pub fn require_single_tag_value(
+        &self,
+        track_id: i64,
+        tag_key: &str,
+    ) -> Result<String, DbError> {
+        let values = self.get_track_tag_values(track_id, tag_key)?;
+        if values.is_empty() {
+            return Err(DbError::InvalidOperation(
+                "Track has no value for entry tag".into(),
+            ));
+        }
+        if values.len() > 1 {
+            return Err(DbError::InvalidOperation(
+                "Track has multiple values for entry tag".into(),
+            ));
+        }
+        Ok(values[0].clone())
+    }
+
+    fn tracks_in_sublist_matching_entry(
+        &self,
+        partition_key: &str,
+        partition_value: Option<&str>,
+        entry_key: &str,
+        entry_value_normalized: &str,
+    ) -> Result<Vec<(i64, String)>, DbError> {
+        let tracks: Vec<(i64, String)> = if let Some(partition_value) = partition_value {
+            let mut stmt = self.conn.prepare(
+                "SELECT DISTINCT t.id, t.title
+                 FROM tracks t
+                 JOIN track_tags tt_part ON tt_part.track_id = t.id
+                   AND tt_part.tag_key = ?1 AND tt_part.tag_value = ?2
+                 JOIN track_tags tt_entry ON tt_entry.track_id = t.id
+                   AND tt_entry.tag_key = ?3
+                 WHERE t.collection_id IS NULL",
+            )?;
+            let rows = stmt.query_map(
+                params![partition_key, partition_value, entry_key],
+                |row| Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?)),
+            )?;
+            rows.filter_map(Result::ok).collect()
+        } else {
+            let mut stmt = self.conn.prepare(
+                "SELECT DISTINCT t.id, t.title
+                 FROM tracks t
+                 JOIN track_tags tt_entry ON tt_entry.track_id = t.id
+                   AND tt_entry.tag_key = ?1
+                 WHERE t.collection_id IS NULL
+                   AND NOT EXISTS (
+                     SELECT 1 FROM track_tags tt_part
+                     WHERE tt_part.track_id = t.id AND tt_part.tag_key = ?2
+                   )",
+            )?;
+            let rows = stmt.query_map(params![entry_key, partition_key], |row| {
+                Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+            })?;
+            rows.filter_map(Result::ok).collect()
+        };
+
+        Ok(tracks
+            .into_iter()
+            .filter(|(track_id, _)| {
+                self.get_track_tag_values(*track_id, entry_key)
+                    .ok()
+                    .and_then(|values| {
+                        if values.len() != 1 {
+                            return None;
+                        }
+                        Some(Self::normalize_tag_value_for_match(&values[0])
+                            == entry_value_normalized)
+                    })
+                    .unwrap_or(false)
+            })
+            .collect())
+    }
+
+    fn partition_values_equal(a: Option<&str>, b: Option<&str>) -> bool {
+        match (a, b) {
+            (None, None) => true,
+            (Some(a), Some(b)) => a == b,
+            _ => false,
+        }
+    }
+
+    pub fn list_taglist_swap_targets(
+        &self,
+        taglist_id: i64,
+        source_partition: Option<&str>,
+        source_track_id: i64,
+    ) -> Result<Vec<TaglistSwapTarget>, DbError> {
+        let taglist = self
+            .get_taglist(taglist_id)?
+            .ok_or(DbError::Sqlite(rusqlite::Error::QueryReturnedNoRows))?;
+        if taglist.entry_tag_key.trim().is_empty() {
+            return Ok(Vec::new());
+        }
+
+        if !self.track_in_taglist_sublist(&taglist.tag_key, source_partition.unwrap_or(""), source_track_id)?
+        {
+            return Ok(Vec::new());
+        }
+
+        let entry_value = self.require_single_tag_value(source_track_id, &taglist.entry_tag_key)?;
+        let entry_normalized = Self::normalize_tag_value_for_match(&entry_value);
+
+        let sublists = self.list_taglist_values(&taglist.tag_key, taglist_id)?;
+        let mut targets = Vec::new();
+        for sublist in sublists {
+            let partition_value = sublist.value.as_deref();
+            if Self::partition_values_equal(source_partition, partition_value) {
+                continue;
+            }
+            let matches = self.tracks_in_sublist_matching_entry(
+                &taglist.tag_key,
+                partition_value,
+                &taglist.entry_tag_key,
+                &entry_normalized,
+            )?;
+            if matches.len() == 1 {
+                let (track_id, track_title) = matches[0].clone();
+                targets.push(TaglistSwapTarget {
+                    partition_value: sublist.value.clone(),
+                    track_id,
+                    track_title,
+                });
+            }
+        }
+        Ok(targets)
+    }
+
+    pub fn resolve_taglist_swap_partner(
+        &self,
+        taglist_id: i64,
+        source_partition: Option<&str>,
+        target_partition: Option<&str>,
+        source_track_id: i64,
+    ) -> Result<i64, DbError> {
+        let targets = self.list_taglist_swap_targets(taglist_id, source_partition, source_track_id)?;
+        let partner = targets
+            .into_iter()
+            .find(|target| {
+                Self::partition_values_equal(
+                    target_partition,
+                    target.partition_value.as_deref(),
+                )
+            })
+            .ok_or_else(|| {
+                DbError::InvalidOperation("No matching track in target sublist".into())
+            })?;
+        Ok(partner.track_id)
+    }
+
+    pub fn apply_taglist_swap_order_slots(
+        &self,
+        taglist_id: i64,
+        source_partition: Option<&str>,
+        target_partition: Option<&str>,
+        source_track_id: i64,
+        partner_track_id: i64,
+        source_order_before: &[i64],
+        target_order_before: &[i64],
+    ) -> Result<(), DbError> {
+        let source_key = source_partition.unwrap_or("");
+        let target_key = target_partition.unwrap_or("");
+
+        if self.taglist_sublist_has_custom_order(taglist_id, source_key)? {
+            if let Some(idx) = source_order_before
+                .iter()
+                .position(|&id| id == source_track_id)
+            {
+                let mut order: Vec<i64> = source_order_before.to_vec();
+                order[idx] = partner_track_id;
+                self.reorder_taglist_tracks(taglist_id, source_partition, &order)?;
+            }
+        }
+
+        if self.taglist_sublist_has_custom_order(taglist_id, target_key)? {
+            if let Some(idx) = target_order_before
+                .iter()
+                .position(|&id| id == partner_track_id)
+            {
+                let mut order: Vec<i64> = target_order_before.to_vec();
+                order[idx] = source_track_id;
+                self.reorder_taglist_tracks(taglist_id, target_partition, &order)?;
+            }
+        }
+
+        Ok(())
+    }
 }
 
 pub fn normalize_collection_playback_mode(mode: &str) -> &'static str {
@@ -1883,7 +2083,7 @@ mod tests {
     #[test]
     fn taglist_values_custom_order_persisted_with_no_tag_last() {
         let db = test_db();
-        let taglist_id = db.create_taglist("Composers", "Composer", "").unwrap();
+        let taglist_id = db.create_taglist("Composers", "Composer", "", "").unwrap();
         let track_a = insert_track(&db, "A");
         let track_b = insert_track(&db, "B");
         let track_c = insert_track(&db, "C");
@@ -1913,7 +2113,7 @@ mod tests {
     #[test]
     fn new_taglist_value_inserts_at_default_position() {
         let db = test_db();
-        let taglist_id = db.create_taglist("Composers", "Composer", "").unwrap();
+        let taglist_id = db.create_taglist("Composers", "Composer", "", "").unwrap();
         let track_a = insert_track(&db, "A");
         let track_b = insert_track(&db, "B");
 
@@ -2055,7 +2255,7 @@ mod tests {
     #[test]
     fn taglist_values_include_imported_display_titles() {
         let db = test_db();
-        let taglist_id = db.create_taglist("Events", "Comment", "").unwrap();
+        let taglist_id = db.create_taglist("Events", "Comment", "", "").unwrap();
         let track_id = insert_track(&db, "Event Track");
         db.replace_track_tags(
             track_id,
@@ -2081,7 +2281,7 @@ mod tests {
     #[test]
     fn set_taglist_value_title_upserts_updates_and_clears() {
         let db = test_db();
-        let taglist_id = db.create_taglist("Events", "Comment", "").unwrap();
+        let taglist_id = db.create_taglist("Events", "Comment", "", "").unwrap();
         let track_id = insert_track(&db, "Event Track");
         db.replace_track_tags(
             track_id,
@@ -2138,7 +2338,7 @@ mod tests {
     #[test]
     fn taglist_custom_order_overrides_metadata_sort() {
         let db = test_db();
-        let taglist_id = db.create_taglist("Events", "Comment", "").unwrap();
+        let taglist_id = db.create_taglist("Events", "Comment", "", "").unwrap();
         let track_a = insert_track(&db, "A");
         let track_b = insert_track(&db, "B");
         db.replace_track_tags(
@@ -2165,7 +2365,7 @@ mod tests {
     #[test]
     fn tag_change_moves_track_out_of_reordered_old_sublist_only() {
         let db = test_db();
-        let taglist_id = db.create_taglist("Events", "Comment", "").unwrap();
+        let taglist_id = db.create_taglist("Events", "Comment", "", "").unwrap();
         let track_a = insert_track(&db, "A");
         let track_b = insert_track(&db, "B");
         db.replace_track_tags(
@@ -2215,7 +2415,7 @@ mod tests {
     #[test]
     fn tag_change_moves_track_between_two_reordered_sublists() {
         let db = test_db();
-        let taglist_id = db.create_taglist("Events", "Comment", "").unwrap();
+        let taglist_id = db.create_taglist("Events", "Comment", "", "").unwrap();
         let track_a = insert_track(&db, "A");
         let track_b = insert_track(&db, "B");
         db.replace_track_tags(
@@ -2269,7 +2469,7 @@ mod tests {
     fn delete_track_cascades_playlist_and_taglist_order() {
         let db = test_db();
         let playlist_id = db.create_playlist("Set").unwrap();
-        let taglist_id = db.create_taglist("Events", "Comment", "").unwrap();
+        let taglist_id = db.create_taglist("Events", "Comment", "", "").unwrap();
         let track_id = insert_track(&db, "Delete Me");
         db.replace_track_tags(
             track_id,
@@ -2334,5 +2534,52 @@ mod tests {
         assert!(db.get_peaks(track_id).unwrap().is_none());
         assert!(db.get_seek_index(track_id).unwrap().is_none());
         assert!(db.audio_cache_incomplete(track_id).unwrap());
+    }
+
+    #[test]
+    fn list_taglist_swap_targets_finds_unique_partner() {
+        let db = test_db();
+        let taglist_id = db
+            .create_taglist("Events", "Composer", "Track Title", "Event")
+            .unwrap();
+        let track_a = insert_track(&db, "Skater-A");
+        let track_b = insert_track(&db, "Skater-B");
+        let track_c = insert_track(&db, "Other-C");
+        db.replace_track_tags(
+            track_a,
+            &[
+                ("Composer".to_string(), "01".to_string()),
+                ("Track Title".to_string(), "Skater Program".to_string()),
+            ],
+        )
+        .unwrap();
+        db.replace_track_tags(
+            track_b,
+            &[
+                ("Composer".to_string(), "02".to_string()),
+                ("Track Title".to_string(), "Skater Program".to_string()),
+            ],
+        )
+        .unwrap();
+        db.replace_track_tags(
+            track_c,
+            &[
+                ("Composer".to_string(), "02".to_string()),
+                ("Track Title".to_string(), "Other Program".to_string()),
+            ],
+        )
+        .unwrap();
+
+        let targets = db
+            .list_taglist_swap_targets(taglist_id, Some("01"), track_a)
+            .unwrap();
+        assert_eq!(targets.len(), 1);
+        assert_eq!(targets[0].partition_value.as_deref(), Some("02"));
+        assert_eq!(targets[0].track_id, track_b);
+
+        let partner = db
+            .resolve_taglist_swap_partner(taglist_id, Some("01"), Some("02"), track_a)
+            .unwrap();
+        assert_eq!(partner, track_b);
     }
 }

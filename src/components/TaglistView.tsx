@@ -10,6 +10,7 @@ import { usePlayerStore, serializeView } from "../store/playerStore";
 import { playerController } from "../playerController";
 import { scrollSidebarItem, sidebarSublistId } from "../lib/sidebarNavigation";
 import { ChangeTaglistValueModal } from "./ChangeTaglistValueModal";
+import { SwapTaglistEntryModal } from "./SwapTaglistEntryModal";
 import { TagEditorModal } from "./TagEditorModal";
 import { TrackSearchInput } from "./TrackSearchInput";
 import { TrackTable } from "./TrackTable";
@@ -37,12 +38,21 @@ export function TaglistView({ taglistId, value }: TaglistViewProps) {
   const [tracksLoaded, setTracksLoaded] = useState(false);
   const [editingTrackId, setEditingTrackId] = useState<number | null>(null);
   const [changingTrackId, setChangingTrackId] = useState<number | null>(null);
+  const [swappingTrackId, setSwappingTrackId] = useState<number | null>(null);
   const { query, setQuery, filteredTracks, isSearching } = useTrackSearch(tracks);
 
   const taglist = taglists.find((entry) => entry.id === taglistId);
   const changeTaglistValueLabel = taglist
     ? getTaglistValueSingularLabel(taglist)
     : undefined;
+  const swapTaglistEntryLabel =
+    taglist && taglist.entry_tag_key.trim()
+      ? taglist.entry_tag_key
+      : undefined;
+  const swappingTrack =
+    swappingTrackId != null
+      ? tracks.find((track) => track.id === swappingTrackId)
+      : undefined;
   const currentValue = values.find((entry) => entry.value === value);
   const displayName = formatTaglistLabel(value, currentValue?.display_title);
 
@@ -180,7 +190,13 @@ export function TaglistView({ taglistId, value }: TaglistViewProps) {
       <div className="border-b border-border px-4 py-3">
         <h2 className="text-base font-semibold text-white">{displayName}</h2>
         <p className="text-xs text-muted">
-          {taglist ? `${taglist.name} · ${taglist.tag_key} · ` : ""}
+          {taglist
+            ? `${taglist.name} · partition: ${taglist.tag_key}${
+                taglist.entry_tag_key.trim()
+                  ? ` · entry: ${taglist.entry_tag_key}`
+                  : ""
+              } · `
+            : ""}
           {isSearching
             ? `${filteredTracks.length} of ${tracks.length} track${tracks.length === 1 ? "" : "s"}`
             : `${tracks.length} track${tracks.length === 1 ? "" : "s"}`}
@@ -199,6 +215,8 @@ export function TaglistView({ taglistId, value }: TaglistViewProps) {
           onEditTags={setEditingTrackId}
           changeTaglistValueLabel={changeTaglistValueLabel}
           onChangeTaglistValue={setChangingTrackId}
+          swapTaglistEntryLabel={swapTaglistEntryLabel}
+          onSwapTaglistEntry={swapTaglistEntryLabel ? setSwappingTrackId : undefined}
           onDeleteTrack={requestDeleteTrack}
           onReorderTracks={isSearching ? undefined : reorderTracks}
           emptyMessage={
@@ -232,6 +250,20 @@ export function TaglistView({ taglistId, value }: TaglistViewProps) {
           trackId={changingTrackId}
           taglist={taglist}
           onClose={() => setChangingTrackId(null)}
+        />
+      )}
+      {swappingTrackId != null && swappingTrack && taglist && (
+        <SwapTaglistEntryModal
+          taglist={taglist}
+          taglistId={taglistId}
+          partitionValue={value}
+          trackId={swappingTrackId}
+          trackTitle={swappingTrack.title}
+          onClose={() => setSwappingTrackId(null)}
+          onSwapped={() => {
+            refreshTracks();
+            refreshValues();
+          }}
         />
       )}
     </div>

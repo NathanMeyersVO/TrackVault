@@ -6,6 +6,7 @@ use crate::title_map;
 
 const EVENTS_TAGLIST_NAME: &str = "Events";
 const EVENTS_TAG_KEY: &str = "Composer";
+const EVENTS_ENTRY_TAG_KEY: &str = "Track Title";
 const EVENTS_VALUE_SINGULAR_NAME: &str = "Event";
 
 pub fn apply_application_library_setup(
@@ -39,12 +40,17 @@ fn ensure_events_taglist(db: &Database) -> Result<i64, String> {
             db.set_taglist_value_singular_name(taglist.id, EVENTS_VALUE_SINGULAR_NAME)
                 .map_err(|e| e.to_string())?;
         }
+        if taglist.entry_tag_key.trim().is_empty() {
+            db.set_taglist_entry_tag_key(taglist.id, EVENTS_ENTRY_TAG_KEY)
+                .map_err(|e| e.to_string())?;
+        }
         return Ok(taglist.id);
     }
 
     db.create_taglist(
         EVENTS_TAGLIST_NAME,
         EVENTS_TAG_KEY,
+        EVENTS_ENTRY_TAG_KEY,
         EVENTS_VALUE_SINGULAR_NAME,
     )
     .map_err(|e| e.to_string())
@@ -125,6 +131,7 @@ mod tests {
         assert_eq!(taglists.len(), 1);
         assert_eq!(taglists[0].name, "Events");
         assert_eq!(taglists[0].tag_key, "Composer");
+        assert_eq!(taglists[0].entry_tag_key, "Track Title");
         assert_eq!(taglists[0].value_singular_name, "Event");
     }
 
@@ -142,6 +149,7 @@ mod tests {
         assert_eq!(taglists.len(), 1);
         assert_eq!(taglists[0].name, "Events");
         assert_eq!(taglists[0].tag_key, "Composer");
+        assert_eq!(taglists[0].entry_tag_key, "Track Title");
         assert_eq!(taglists[0].value_singular_name, "Event");
 
         let (track_id, _) = db
@@ -172,7 +180,7 @@ mod tests {
     #[test]
     fn ems_reuses_existing_events_taglist_and_imports_xls() {
         let (db, library) = test_library();
-        db.create_taglist("Events", "Comment", "").unwrap();
+        db.create_taglist("Events", "Comment", "", "").unwrap();
         write_event_schedule_xlsx(
             &library.join("schedule.xlsx"),
             &[("01", "Showcase: Pre-Preliminary")],

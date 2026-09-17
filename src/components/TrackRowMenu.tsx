@@ -6,6 +6,8 @@ interface TrackRowMenuProps {
   onEditTags: () => void;
   changeTaglistValueLabel?: string;
   onChangeTaglistValue?: () => void;
+  swapTaglistEntryLabel?: string;
+  onSwapTaglistEntry?: () => void;
   onDeleteTrack?: () => void;
   playlists?: Playlist[];
   onAddToPlaylist?: (playlistId: number) => void;
@@ -16,6 +18,8 @@ export function TrackRowMenu({
   onEditTags,
   changeTaglistValueLabel,
   onChangeTaglistValue,
+  swapTaglistEntryLabel,
+  onSwapTaglistEntry,
   onDeleteTrack,
   playlists,
   onAddToPlaylist,
@@ -87,6 +91,20 @@ export function TrackRowMenu({
               className="block w-full px-3 py-1.5 text-left text-xs text-foreground hover:bg-surface-hover"
             >
               Change {changeTaglistValueLabel}…
+            </button>
+          )}
+
+          {swapTaglistEntryLabel && onSwapTaglistEntry && (
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                closeMenu();
+                onSwapTaglistEntry();
+              }}
+              className="block w-full px-3 py-1.5 text-left text-xs text-foreground hover:bg-surface-hover"
+            >
+              Swap by {swapTaglistEntryLabel}…
             </button>
           )}
 
