@@ -61,31 +61,42 @@ export function AppMenuBar() {
   const libraryItems: MenuEntry[] = [
     {
       label: "Choose Library Folder",
+      title:
+        "Select the folder to scan for audio files and index in the library.",
       onClick: () => void chooseLibraryFolder(),
       disabled: actionsDisabled,
     },
     {
       label: libraryUploading ? "Uploading to library…" : "Upload to Library",
+      title: "Copy audio files into the library folder and add them to the index.",
       onClick: () => void uploadToLibrary(),
       disabled: libraryUploadDisabled,
     },
     {
       label: scanning ? "Scanning…" : "Rescan Library",
+      title:
+        "Re-scan the library folder for new, changed, or removed files.",
       onClick: () => void scanLibrary(),
       disabled: libraryActionsDisabled,
     },
     {
       label: savingConfig ? "Saving…" : "Save Library Configuration",
+      title:
+        "Write library playlists and taglists to trackvault.json in the library folder.",
       onClick: () => void saveConfiguration(),
       disabled: libraryActionsDisabled || savingConfig,
     },
     {
       label: loadingConfig ? "Loading…" : "Load Library Configuration",
+      title:
+        "Replace library playlists and taglists from trackvault.json (indexed tracks unchanged).",
       onClick: () => void requestLoadConfiguration(),
       disabled: libraryActionsDisabled || loadingConfig,
     },
     {
       label: closingLibrary ? "Closing library…" : "Close Library",
+      title:
+        "Disconnect the library folder and clear indexed tracks, playlists, and taglists from the app.",
       onClick: () => void requestCloseLibrary(),
       disabled: actionsDisabled,
     },
@@ -94,6 +105,7 @@ export function AppMenuBar() {
   const storedCollectionItems: MenuEntry[] = [
     {
       label: importingCollection ? "Importing…" : "Import stored collection",
+      title: "Import a .tgz stored collection from disk.",
       onClick: () => void importCollection(),
       disabled: actionsDisabled,
     },
@@ -101,6 +113,7 @@ export function AppMenuBar() {
       label: collectionUploading
         ? "Uploading to stored collection…"
         : collectionUploadLabel,
+      title: "Copy audio files into the active stored collection.",
       onClick: () => void uploadToCollection(),
       disabled: collectionUploadDisabled,
     },
@@ -109,6 +122,7 @@ export function AppMenuBar() {
   const fileItems: MenuEntry[] = [
     {
       label: "Exit",
+      title: "Quit TrackVault.",
       onClick: () => void getCurrentWindow().close(),
     },
   ];
@@ -127,16 +141,20 @@ export function AppMenuBar() {
   const viewItems: MenuEntry[] = [
     {
       label: "Demo mode",
+      title:
+        "Blur sensitive tag values on screen for this session (visual only).",
       checked: demoModeEnabled,
       onClick: () => setDemoModeEnabled(!demoModeEnabled),
     },
     {
       label: "Demo / privacy…",
+      title: "Choose which tag keys are sensitive and filename blur options.",
       onClick: () => setDemoPrivacyOpen(true),
     },
     { separator: true },
     {
       label: "Appearance…",
+      title: "Change color theme and appearance.",
       onClick: () => setAppearanceOpen(true),
     },
   ];
@@ -144,10 +162,12 @@ export function AppMenuBar() {
   const helpItems: MenuEntry[] = [
     {
       label: "Keyboard shortcuts…",
+      title: "View keyboard shortcuts for playback and navigation.",
       onClick: () => setShortcutsOpen(true),
     },
     {
       label: "About TrackVault…",
+      title: "Version and application information.",
       onClick: () => setAboutOpen(true),
     },
   ];

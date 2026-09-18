@@ -5,7 +5,11 @@ export const APPLICATION_OPTIONS: {
   label: string;
   title?: string;
 }[] = [
-  { id: "none", label: "None" },
+  {
+    id: "none",
+    label: "None",
+    title: "No application-specific automation.",
+  },
   {
     id: "usfs_ems",
     label: "USFigureSkating EMS",
