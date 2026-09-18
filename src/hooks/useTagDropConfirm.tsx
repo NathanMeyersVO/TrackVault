@@ -1,9 +1,18 @@
 import { useCallback, useState } from "react";
 
 import { ConfirmDialog } from "../components/ConfirmDialog";
+import {
+  TagDropChoiceModal,
+  type TagDropChoiceMode,
+} from "../components/TagDropChoiceModal";
 import { DemoBlurText } from "../components/DemoBlurText";
 import { useDemoPrivacy } from "./useDemoPrivacy";
-import { api, type Taglist, type TaglistValue } from "../lib/tauri";
+import {
+  api,
+  type Taglist,
+  type TaglistSwapTarget,
+  type TaglistValue,
+} from "../lib/tauri";
 import {
   formatTaglistLabel,
   getTaglistValueSingularLabel,
@@ -19,6 +28,8 @@ interface PendingTagDrop {
   targetValue: string | null;
   targetDisplayTitle?: string | null;
   entryTagValue: string | null;
+  sourcePartitionValue: string | null;
+  swapPartner?: TaglistSwapTarget;
 }
 
 function normalizeTagValue(value: string | null | undefined): string | null {
@@ -33,12 +44,22 @@ function tagValuesMatch(
   return normalizeTagValue(current) === normalizeTagValue(target);
 }
 
+function partitionsEqual(
+  a: string | null | undefined,
+  b: string | null | undefined,
+): boolean {
+  if (a == null && b == null) return true;
+  if (a != null && b != null) return a === b;
+  return false;
+}
+
 export function useTagDropConfirm() {
   const { shouldBlurTagKey, shouldBlurTrackField } = useDemoPrivacy();
   const { refresh } = useLibrary();
   const tracks = usePlayerStore((state) => state.tracks);
   const patchTrack = usePlayerStore((state) => state.patchTrack);
   const [pending, setPending] = useState<PendingTagDrop | null>(null);
+  const [dropMode, setDropMode] = useState<TagDropChoiceMode>("swap");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -66,7 +87,24 @@ export function useTagDropConfirm() {
         return;
       }
 
+      let swapPartner: TaglistSwapTarget | undefined;
+      if (entry.value != null) {
+        try {
+          const targets = await api.listTaglistSwapTargets(
+            taglist.id,
+            currentValue,
+            trackId,
+          );
+          swapPartner = targets.find((target) =>
+            partitionsEqual(target.partition_value, entry.value),
+          );
+        } catch (err) {
+          console.error(err);
+        }
+      }
+
       setError(null);
+      setDropMode(swapPartner ? "swap" : "move");
       setPending({
         trackId,
         trackTitle,
@@ -74,6 +112,8 @@ export function useTagDropConfirm() {
         targetValue: entry.value,
         targetDisplayTitle: entry.display_title,
         entryTagValue,
+        sourcePartitionValue: currentValue,
+        swapPartner,
       });
     },
     [tracks],
@@ -91,11 +131,24 @@ export function useTagDropConfirm() {
     setSaving(true);
     setError(null);
     try {
-      const updated = await api.updateTrackTags(pending.trackId, [
-        { key: pending.taglist.tag_key, value: pending.targetValue ?? "" },
-      ]);
-      patchTrack(updated);
-      invalidateTrackTags(pending.trackId);
+      if (pending.swapPartner && dropMode === "swap") {
+        const updated = await api.swapTaglistEntries(
+          pending.taglist.id,
+          pending.sourcePartitionValue,
+          pending.targetValue,
+          pending.trackId,
+        );
+        for (const track of updated) {
+          patchTrack(track);
+          invalidateTrackTags(track.id);
+        }
+      } else {
+        const updated = await api.updateTrackTags(pending.trackId, [
+          { key: pending.taglist.tag_key, value: pending.targetValue ?? "" },
+        ]);
+        patchTrack(updated);
+        invalidateTrackTags(pending.trackId);
+      }
       await refresh();
       setPending(null);
     } catch (err) {
@@ -103,7 +156,7 @@ export function useTagDropConfirm() {
     } finally {
       setSaving(false);
     }
-  }, [pending, patchTrack, refresh]);
+  }, [dropMode, pending, patchTrack, refresh]);
 
   const sublistLabel = pending
     ? getTaglistValueSingularLabel(pending.taglist)
@@ -112,64 +165,94 @@ export function useTagDropConfirm() {
     ? formatTaglistLabel(pending.targetValue, pending.targetDisplayTitle)
     : "";
   const entryTagKey = pending?.taglist.entry_tag_key.trim() ?? "";
+  const blurPartnerTitle =
+    shouldBlurTrackField("title") ||
+    (entryTagKey.length > 0 && shouldBlurTagKey(entryTagKey));
 
-  const confirmDialog = pending ? (
-    <ConfirmDialog
-      title={
-        pending.targetValue == null ? "Remove tag" : `Move to ${sublistLabel}`
-      }
-      message={
-        pending.targetValue == null ? (
-          <>
-            Remove &ldquo;{pending.taglist.tag_key}&rdquo; from &ldquo;
-            <DemoBlurText blur={shouldBlurTrackField("title")}>
-              {pending.trackTitle}
-            </DemoBlurText>
-            &rdquo;?
-            <br />
-            <br />
-            This updates the file&apos;s metadata.
-            {error ? (
-              <>
-                <br />
-                <br />
-                {error}
-              </>
-            ) : null}
-          </>
-        ) : (
-          <>
-            Move &ldquo;
-            <DemoBlurText
-              blur={shouldBlurTagKey(entryTagKey || pending.taglist.entry_tag_key)}
-            >
-              {pending.entryTagValue ?? ""}
-            </DemoBlurText>
-            &rdquo; to {sublistLabel} &ldquo;
-            <DemoBlurText blur={shouldBlurTagKey(pending.taglist.tag_key)}>
-              {partitionLabel}
-            </DemoBlurText>
-            &rdquo;?
-            <br />
-            <br />
-            This updates the file&apos;s metadata.
-            {error ? (
-              <>
-                <br />
-                <br />
-                {error}
-              </>
-            ) : null}
-          </>
+  const confirmDialog = pending
+    ? pending.targetValue != null && pending.swapPartner
+      ? (
+          <TagDropChoiceModal
+            title={`Move to ${sublistLabel}`}
+            sublistLabel={sublistLabel}
+            partitionLabel={partitionLabel}
+            entryTagValue={pending.entryTagValue}
+            blurEntryValue={shouldBlurTagKey(
+              entryTagKey || pending.taglist.entry_tag_key,
+            )}
+            blurPartition={shouldBlurTagKey(pending.taglist.tag_key)}
+            blurPartnerTitle={blurPartnerTitle}
+            swapPartner={pending.swapPartner}
+            mode={dropMode}
+            onModeChange={setDropMode}
+            error={error}
+            busy={saving}
+            onConfirm={() => void confirmTagDrop()}
+            onCancel={cancelTagDrop}
+          />
         )
-      }
-      confirmLabel={pending.targetValue == null ? "Remove" : "Move"}
-      cancelLabel="Cancel"
-      busy={saving}
-      onConfirm={() => void confirmTagDrop()}
-      onCancel={cancelTagDrop}
-    />
-  ) : null;
+      : (
+          <ConfirmDialog
+            title={
+              pending.targetValue == null
+                ? "Remove tag"
+                : `Move to ${sublistLabel}`
+            }
+            message={
+              pending.targetValue == null ? (
+                <>
+                  Remove &ldquo;{pending.taglist.tag_key}&rdquo; from &ldquo;
+                  <DemoBlurText blur={shouldBlurTrackField("title")}>
+                    {pending.trackTitle}
+                  </DemoBlurText>
+                  &rdquo;?
+                  <br />
+                  <br />
+                  This updates the file&apos;s metadata.
+                  {error ? (
+                    <>
+                      <br />
+                      <br />
+                      {error}
+                    </>
+                  ) : null}
+                </>
+              ) : (
+                <>
+                  Move &ldquo;
+                  <DemoBlurText
+                    blur={shouldBlurTagKey(
+                      entryTagKey || pending.taglist.entry_tag_key,
+                    )}
+                  >
+                    {pending.entryTagValue ?? ""}
+                  </DemoBlurText>
+                  &rdquo; to {sublistLabel} &ldquo;
+                  <DemoBlurText blur={shouldBlurTagKey(pending.taglist.tag_key)}>
+                    {partitionLabel}
+                  </DemoBlurText>
+                  &rdquo;?
+                  <br />
+                  <br />
+                  This updates the file&apos;s metadata.
+                  {error ? (
+                    <>
+                      <br />
+                      <br />
+                      {error}
+                    </>
+                  ) : null}
+                </>
+              )
+            }
+            confirmLabel={pending.targetValue == null ? "Remove" : "Move"}
+            cancelLabel="Cancel"
+            busy={saving}
+            onConfirm={() => void confirmTagDrop()}
+            onCancel={cancelTagDrop}
+          />
+        )
+    : null;
 
   return {
     requestTagDrop,
