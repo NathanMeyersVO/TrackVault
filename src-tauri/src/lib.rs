@@ -1,3 +1,4 @@
+pub mod anonymize;
 mod app_settings;
 mod application;
 mod demo_privacy;

@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "TrackVault — local music library player"
 authors = ["you"]
 edition = "2021"
+default-run = "trackvault"
 
 [lib]
 name = "trackvault_lib"
@@ -29,6 +30,12 @@ thiserror = "2"
 parking_lot = "0.12"
 tar = "0.4"
 flate2 = "1"
+fake = { version = "2", features = ["derive"] }
+rand = "0.8"
+
+[[bin]]
+name = "anonymize-library"
+path = "src/bin/anonymize_library.rs"
 
 [dev-dependencies]
 rust_xlsxwriter = "0.79"
