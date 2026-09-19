@@ -6,8 +6,6 @@ import {
   type Track,
   type TrackTagInfo,
 } from "../lib/tauri";
-import { DemoBlurText } from "./DemoBlurText";
-import { useDemoPrivacy } from "../hooks/useDemoPrivacy";
 import { invalidateTrackTags } from "../lib/trackTagsCache";
 import { usePlayerStore } from "../store/playerStore";
 
@@ -20,15 +18,12 @@ interface EditableField {
 interface TagEditorModalProps {
   trackId: number;
   onClose: () => void;
-  applyDemoBlur?: boolean;
 }
 
 export function TagEditorModal({
   trackId,
   onClose,
-  applyDemoBlur = true,
 }: TagEditorModalProps) {
-  const { shouldBlurTagKey, shouldBlurFilename } = useDemoPrivacy();
   const patchTrack = usePlayerStore((state) => state.patchTrack);
   const [info, setInfo] = useState<TrackTagInfo | null>(null);
   const [fields, setFields] = useState<EditableField[]>([]);
@@ -133,12 +128,7 @@ export function TagEditorModal({
             <>
               <div className="mb-3 text-xs text-muted">
                 File:{" "}
-                <DemoBlurText
-                  blur={applyDemoBlur && shouldBlurFilename()}
-                  className="text-foreground"
-                >
-                  {info.file_name}
-                </DemoBlurText>
+                <span className="text-foreground">{info.file_name}</span>
                 {info.tag_type && (
                   <>
                     {" "}
@@ -148,36 +138,23 @@ export function TagEditorModal({
               </div>
 
               <div className="space-y-2">
-                {fields.map((field, index) => {
-                  const blurValue =
-                    applyDemoBlur && shouldBlurTagKey(field.key);
-                  return (
+                {fields.map((field, index) => (
                   <label key={field.key} className="block text-xs">
                     <span className="mb-1 block text-muted">{field.key}</span>
                     {field.editable ? (
-                      blurValue ? (
-                        <div
-                          className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground"
-                          aria-hidden
-                        >
-                          <DemoBlurText blur>{field.value}</DemoBlurText>
-                        </div>
-                      ) : (
-                        <input
-                          value={field.value}
-                          onChange={(event) => updateField(index, event.target.value)}
-                          disabled={saving}
-                          className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground"
-                        />
-                      )
+                      <input
+                        value={field.value}
+                        onChange={(event) => updateField(index, event.target.value)}
+                        disabled={saving}
+                        className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground"
+                      />
                     ) : (
                       <div className="rounded-md border border-border bg-background px-2 py-1.5 text-sm text-muted">
-                        <DemoBlurText blur={blurValue}>{field.value}</DemoBlurText>
+                        {field.value}
                       </div>
                     )}
                   </label>
-                  );
-                })}
+                ))}
               </div>
 
               {availableKeys.length > 0 && (

@@ -128,11 +128,6 @@ export interface ThemeSettings {
   theme_id: string;
 }
 
-export interface DemoPrivacySettings {
-  sensitive_tag_keys: string[];
-  blur_filenames: boolean;
-}
-
 export type ApplicationId = "none" | "usfs_ems";
 
 export interface ApplicationSettings {
@@ -314,10 +309,6 @@ export const api = {
     invoke<ApplicationSettings>("get_application_settings"),
   setApplicationSettings: (settings: ApplicationSettings) =>
     invoke<ApplicationSettings>("set_application_settings", { settings }),
-  getDemoPrivacySettings: () =>
-    invoke<DemoPrivacySettings>("get_demo_privacy_settings"),
-  setDemoPrivacySettings: (settings: DemoPrivacySettings) =>
-    invoke<DemoPrivacySettings>("set_demo_privacy_settings", { settings }),
 };
 
 export function formatDuration(ms: number): string {

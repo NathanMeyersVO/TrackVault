@@ -208,7 +208,6 @@ export function CollectionView({ collectionId }: CollectionViewProps) {
           onDeleteTrack={requestDeleteTrack}
           onReorderTracks={isSearching ? undefined : reorderTracks}
           draggable={false}
-          applyDemoBlur={false}
           emptyMessage={
             isSearching
               ? "No tracks match your search."
@@ -220,7 +219,6 @@ export function CollectionView({ collectionId }: CollectionViewProps) {
       {editingTrackId != null && (
         <TagEditorModal
           trackId={editingTrackId}
-          applyDemoBlur={false}
           onClose={() => setEditingTrackId(null)}
         />
       )}

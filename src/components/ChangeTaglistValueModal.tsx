@@ -2,8 +2,6 @@ import { useCallback, useEffect, useState } from "react";
 
 import { api, type Taglist } from "../lib/tauri";
 import { getTaglistValueSingularLabel } from "../lib/taglistLabels";
-import { DemoBlurText } from "./DemoBlurText";
-import { useDemoPrivacy } from "../hooks/useDemoPrivacy";
 import { invalidateTrackTags } from "../lib/trackTagsCache";
 import { usePlayerStore } from "../store/playerStore";
 
@@ -22,9 +20,7 @@ export function ChangeTaglistValueModal({
   taglist,
   onClose,
 }: ChangeTaglistValueModalProps) {
-  const { shouldBlurTagKey } = useDemoPrivacy();
   const patchTrack = usePlayerStore((state) => state.patchTrack);
-  const blurValue = shouldBlurTagKey(taglist.tag_key);
   const singularLabel = getTaglistValueSingularLabel(taglist);
   const [currentValue, setCurrentValue] = useState("");
   const [value, setValue] = useState("");
@@ -111,26 +107,17 @@ export function ChangeTaglistValueModal({
               <label className="mb-1 block text-xs text-muted">
                 {singularLabel} (tag: {taglist.tag_key})
               </label>
-              {blurValue ? (
-                <div
-                  className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
-                  aria-hidden
-                >
-                  <DemoBlurText blur>{value}</DemoBlurText>
-                </div>
-              ) : (
-                <input
-                  autoFocus
-                  value={value}
-                  onChange={(event) => setValue(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" && !unchanged && !saving) {
-                      void handleSave();
-                    }
-                  }}
-                  className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
-                />
-              )}
+              <input
+                autoFocus
+                value={value}
+                onChange={(event) => setValue(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !unchanged && !saving) {
+                    void handleSave();
+                  }
+                }}
+                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
+              />
               <p className="mt-3 text-xs text-muted">
                 This updates the file&apos;s metadata.
               </p>

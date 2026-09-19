@@ -2,21 +2,17 @@ import { useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
 import { AppearanceSettingsModal } from "./AppearanceSettingsModal";
-import { DemoPrivacySettingsModal } from "./DemoPrivacySettingsModal";
 import { AboutDialog } from "./AboutDialog";
 import { KeyboardShortcutsModal } from "./KeyboardShortcutsModal";
 import { MenuBarStatus, MenuDropdown, type MenuEntry } from "./MenuDropdown";
 import { useLibraryMenuActions } from "../hooks/useLibraryMenuActions";
 import { useApplication } from "../hooks/useApplication";
-import { useDemoPrivacy } from "../hooks/useDemoPrivacy";
 import { APPLICATION_OPTIONS } from "../lib/applicationLabels";
 
 export function AppMenuBar() {
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [appearanceOpen, setAppearanceOpen] = useState(false);
-  const [demoPrivacyOpen, setDemoPrivacyOpen] = useState(false);
-  const { demoModeEnabled, setDemoModeEnabled } = useDemoPrivacy();
   const {
     libraryFolder,
     collectionId,
@@ -140,19 +136,6 @@ export function AppMenuBar() {
 
   const viewItems: MenuEntry[] = [
     {
-      label: "Demo mode",
-      title:
-        "Blur sensitive tag values on screen for this session (visual only).",
-      checked: demoModeEnabled,
-      onClick: () => setDemoModeEnabled(!demoModeEnabled),
-    },
-    {
-      label: "Demo / privacy…",
-      title: "Choose which tag keys are sensitive and filename blur options.",
-      onClick: () => setDemoPrivacyOpen(true),
-    },
-    { separator: true },
-    {
       label: "Appearance…",
       title: "Change color theme and appearance.",
       onClick: () => setAppearanceOpen(true),
@@ -227,9 +210,6 @@ export function AppMenuBar() {
       ) : null}
       {appearanceOpen ? (
         <AppearanceSettingsModal onClose={() => setAppearanceOpen(false)} />
-      ) : null}
-      {demoPrivacyOpen ? (
-        <DemoPrivacySettingsModal onClose={() => setDemoPrivacyOpen(false)} />
       ) : null}
       {aboutOpen ? <AboutDialog onClose={() => setAboutOpen(false)} /> : null}
     </>

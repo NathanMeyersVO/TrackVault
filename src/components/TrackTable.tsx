@@ -35,7 +35,6 @@ interface TrackTableProps {
   onReorderTracks?: (orderedIds: number[]) => void;
   emptyMessage: string;
   draggable?: boolean;
-  applyDemoBlur?: boolean;
   footerRow?: TrackTableFooterRow;
 }
 
@@ -80,7 +79,6 @@ export function TrackTable({
   onReorderTracks,
   emptyMessage,
   draggable = true,
-  applyDemoBlur = true,
   footerRow,
 }: TrackTableProps) {
   const { settings } = useAppearance();
@@ -191,7 +189,6 @@ export function TrackTable({
               onRemoveTrackFromPlaylist={onRemoveTrackFromPlaylist}
               onDeleteTrack={onDeleteTrack}
               draggable={draggable}
-              applyDemoBlur={applyDemoBlur}
               reorderable={reorderable}
               isDragging={dragIndex === index}
               dropIndicator={

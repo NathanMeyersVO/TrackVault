@@ -58,6 +58,19 @@ npm run tauri build
 5. Click the waveform to seek within the current track.
 6. Click **Rescan library** in the sidebar to pick up files added, changed, or deleted outside the app.
 
+### Privacy / demo copies
+
+To share a library or record demos without real names in tags or filenames, use the **anonymize-library** CLI. It copies audio into a subfolder under your library root (default `DEMO_COPY/`), replaces **Track Title** with stable fake names, and renames file stems accordingly. Original files are not modified.
+
+From the repo root:
+
+```powershell
+cargo run --manifest-path src-tauri/Cargo.toml --bin anonymize-library -- `
+  --library "C:\path\to\your\library"
+```
+
+Use `--dry-run` to preview changes. Optional flags: `--output-subdir`, `--seed`.
+
 ## Project structure
 
 ```
@@ -68,6 +81,8 @@ src-tauri/src/       Rust backend
   waveform.rs        Peak generation (cached in DB)
   player.rs          Audio playback (rodio)
   commands.rs        Tauri IPC commands
+  anonymize.rs       Library anonymization (CLI)
+  bin/anonymize_library.rs
 ```
 
 ## Supported formats

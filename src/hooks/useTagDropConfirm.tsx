@@ -5,8 +5,6 @@ import {
   TagDropChoiceModal,
   type TagDropChoiceMode,
 } from "../components/TagDropChoiceModal";
-import { DemoBlurText } from "../components/DemoBlurText";
-import { useDemoPrivacy } from "./useDemoPrivacy";
 import {
   api,
   type Taglist,
@@ -54,7 +52,6 @@ function partitionsEqual(
 }
 
 export function useTagDropConfirm() {
-  const { shouldBlurTagKey, shouldBlurTrackField } = useDemoPrivacy();
   const { refresh } = useLibrary();
   const tracks = usePlayerStore((state) => state.tracks);
   const patchTrack = usePlayerStore((state) => state.patchTrack);
@@ -164,10 +161,6 @@ export function useTagDropConfirm() {
   const partitionLabel = pending
     ? formatTaglistLabel(pending.targetValue, pending.targetDisplayTitle)
     : "";
-  const entryTagKey = pending?.taglist.entry_tag_key.trim() ?? "";
-  const blurPartnerTitle =
-    shouldBlurTrackField("title") ||
-    (entryTagKey.length > 0 && shouldBlurTagKey(entryTagKey));
 
   const confirmDialog = pending
     ? pending.targetValue != null && pending.swapPartner
@@ -177,11 +170,6 @@ export function useTagDropConfirm() {
             sublistLabel={sublistLabel}
             partitionLabel={partitionLabel}
             entryTagValue={pending.entryTagValue}
-            blurEntryValue={shouldBlurTagKey(
-              entryTagKey || pending.taglist.entry_tag_key,
-            )}
-            blurPartition={shouldBlurTagKey(pending.taglist.tag_key)}
-            blurPartnerTitle={blurPartnerTitle}
             swapPartner={pending.swapPartner}
             mode={dropMode}
             onModeChange={setDropMode}
@@ -202,10 +190,7 @@ export function useTagDropConfirm() {
               pending.targetValue == null ? (
                 <>
                   Remove &ldquo;{pending.taglist.tag_key}&rdquo; from &ldquo;
-                  <DemoBlurText blur={shouldBlurTrackField("title")}>
-                    {pending.trackTitle}
-                  </DemoBlurText>
-                  &rdquo;?
+                  {pending.trackTitle}&rdquo;?
                   <br />
                   <br />
                   This updates the file&apos;s metadata.
@@ -219,19 +204,8 @@ export function useTagDropConfirm() {
                 </>
               ) : (
                 <>
-                  Move &ldquo;
-                  <DemoBlurText
-                    blur={shouldBlurTagKey(
-                      entryTagKey || pending.taglist.entry_tag_key,
-                    )}
-                  >
-                    {pending.entryTagValue ?? ""}
-                  </DemoBlurText>
-                  &rdquo; to {sublistLabel} &ldquo;
-                  <DemoBlurText blur={shouldBlurTagKey(pending.taglist.tag_key)}>
-                    {partitionLabel}
-                  </DemoBlurText>
-                  &rdquo;?
+                  Move &ldquo;{pending.entryTagValue ?? ""}&rdquo; to{" "}
+                  {sublistLabel} &ldquo;{partitionLabel}&rdquo;?
                   <br />
                   <br />
                   This updates the file&apos;s metadata.

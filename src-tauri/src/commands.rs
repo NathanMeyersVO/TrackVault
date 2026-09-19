@@ -848,23 +848,6 @@ pub fn update_track_tags(
 }
 
 #[tauri::command]
-pub fn get_demo_privacy_settings(
-    state: State<'_, AppState>,
-) -> Result<crate::demo_privacy::DemoPrivacySettings, String> {
-    let db = state.db.lock();
-    crate::demo_privacy::get_demo_privacy(&db)
-}
-
-#[tauri::command]
-pub fn set_demo_privacy_settings(
-    state: State<'_, AppState>,
-    settings: crate::demo_privacy::DemoPrivacySettings,
-) -> Result<crate::demo_privacy::DemoPrivacySettings, String> {
-    let db = state.db.lock();
-    crate::demo_privacy::set_demo_privacy(&db, settings)
-}
-
-#[tauri::command]
 pub fn get_app_settings(state: State<'_, AppState>) -> Result<crate::app_settings::ThemeSettings, String> {
     let db = state.db.lock();
     crate::app_settings::get_theme(&db)
