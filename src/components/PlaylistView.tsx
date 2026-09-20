@@ -4,6 +4,7 @@ import { listen } from "@tauri-apps/api/event";
 import { api, type Track } from "../lib/tauri";
 import { usePlayer } from "../hooks/usePlayer";
 import { useDeleteTrack } from "../hooks/useDeleteTrack";
+import { useReplaceLibraryTrackFile } from "../hooks/useReplaceLibraryTrackFile";
 import { useTrackSearch } from "../hooks/useTrackSearch";
 import { usePlayerStore, serializeView } from "../store/playerStore";
 import { playerController } from "../playerController";
@@ -25,6 +26,7 @@ export function PlaylistView({ playlistId }: PlaylistViewProps) {
   const { playTrack, selectTrack } = usePlayer();
   const [tracks, setTracks] = useState<Track[]>([]);
   const { requestDeleteTrack, confirmDialog: deleteConfirmDialog } = useDeleteTrack();
+  const { requestReplaceFile, replaceFileModal } = useReplaceLibraryTrackFile();
   const [editingTrackId, setEditingTrackId] = useState<number | null>(null);
   const { query, setQuery, filteredTracks, isSearching } = useTrackSearch(tracks);
 
@@ -101,6 +103,7 @@ export function PlaylistView({ playlistId }: PlaylistViewProps) {
           onEditTags={setEditingTrackId}
           onRemoveTrackFromPlaylist={removeTrack}
           onDeleteTrack={requestDeleteTrack}
+          onReplaceFile={requestReplaceFile}
           onReorderTracks={isSearching ? undefined : reorderTracks}
           emptyMessage={
             isSearching
@@ -110,6 +113,7 @@ export function PlaylistView({ playlistId }: PlaylistViewProps) {
         />
       </div>
       {deleteConfirmDialog}
+      {replaceFileModal}
       {editingTrackId != null && (
         <TagEditorModal
           trackId={editingTrackId}

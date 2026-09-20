@@ -32,6 +32,7 @@ interface TrackTableProps {
   onAddTrackToPlaylist?: (trackId: number, playlistId: number) => void;
   onRemoveTrackFromPlaylist?: (trackId: number) => void;
   onDeleteTrack?: (track: Track) => void;
+  onReplaceFile?: (track: Track) => void;
   onReorderTracks?: (orderedIds: number[]) => void;
   emptyMessage: string;
   draggable?: boolean;
@@ -76,6 +77,7 @@ export function TrackTable({
   onAddTrackToPlaylist,
   onRemoveTrackFromPlaylist,
   onDeleteTrack,
+  onReplaceFile,
   onReorderTracks,
   emptyMessage,
   draggable = true,
@@ -188,6 +190,7 @@ export function TrackTable({
               onAddTrackToPlaylist={onAddTrackToPlaylist}
               onRemoveTrackFromPlaylist={onRemoveTrackFromPlaylist}
               onDeleteTrack={onDeleteTrack}
+              onReplaceFile={onReplaceFile}
               draggable={draggable}
               reorderable={reorderable}
               isDragging={dragIndex === index}

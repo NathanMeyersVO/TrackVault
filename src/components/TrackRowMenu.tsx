@@ -9,6 +9,7 @@ interface TrackRowMenuProps {
   swapTaglistEntryLabel?: string;
   onSwapTaglistEntry?: () => void;
   onDeleteTrack?: () => void;
+  onReplaceFile?: () => void;
   playlists?: Playlist[];
   onAddToPlaylist?: (playlistId: number) => void;
   onRemoveFromPlaylist?: () => void;
@@ -21,6 +22,7 @@ export function TrackRowMenu({
   swapTaglistEntryLabel,
   onSwapTaglistEntry,
   onDeleteTrack,
+  onReplaceFile,
   playlists,
   onAddToPlaylist,
   onRemoveFromPlaylist,
@@ -153,6 +155,20 @@ export function TrackRowMenu({
               className="block w-full px-3 py-1.5 text-left text-xs text-red-400 hover:bg-surface-hover"
             >
               Remove from library playlist
+            </button>
+          )}
+
+          {onReplaceFile && (
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                closeMenu();
+                onReplaceFile();
+              }}
+              className="block w-full px-3 py-1.5 text-left text-xs text-foreground hover:bg-surface-hover"
+            >
+              Replace file…
             </button>
           )}
 

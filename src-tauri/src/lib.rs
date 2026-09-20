@@ -18,6 +18,7 @@ mod tag_index;
 mod tags;
 mod title_map;
 mod upload;
+mod replace_track;
 mod waveform;
 
 use commands::{
@@ -36,6 +37,7 @@ use commands::{
     save_collection_playback_state, save_library_config, scan_library, seek_playback,
     set_app_settings, set_application_settings, set_collection_continuous_volume, set_collection_playback_mode,
     set_library_folder, set_taglist_value_title, set_volume, stop_playback, update_track_tags, upload_collection_tracks, upload_tracks,
+    preview_replace_library_track_file, replace_library_track_file,
 };
 use tauri::Manager;
 
@@ -60,6 +62,8 @@ pub fn run() {
             scan_library,
             upload_tracks,
             check_upload_conflicts,
+            preview_replace_library_track_file,
+            replace_library_track_file,
             delete_track,
             create_collection,
             delete_collection,

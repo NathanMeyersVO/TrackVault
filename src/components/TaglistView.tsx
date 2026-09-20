@@ -5,6 +5,7 @@ import { api, type TaglistValue, type Track } from "../lib/tauri";
 import { formatTaglistLabel, getTaglistValueSingularLabel } from "../lib/taglistLabels";
 import { usePlayer } from "../hooks/usePlayer";
 import { useDeleteTrack } from "../hooks/useDeleteTrack";
+import { useReplaceLibraryTrackFile } from "../hooks/useReplaceLibraryTrackFile";
 import { useTrackSearch } from "../hooks/useTrackSearch";
 import { usePlayerStore, serializeView } from "../store/playerStore";
 import { playerController } from "../playerController";
@@ -33,6 +34,7 @@ export function TaglistView({ taglistId, value }: TaglistViewProps) {
   } = usePlayerStore();
   const { playTrack, selectTrack } = usePlayer();
   const { requestDeleteTrack, confirmDialog: deleteConfirmDialog } = useDeleteTrack();
+  const { requestReplaceFile, replaceFileModal } = useReplaceLibraryTrackFile();
   const [tracks, setTracks] = useState<Track[]>([]);
   const [values, setValues] = useState<TaglistValue[]>([]);
   const [tracksLoaded, setTracksLoaded] = useState(false);
@@ -218,6 +220,7 @@ export function TaglistView({ taglistId, value }: TaglistViewProps) {
           swapTaglistEntryLabel={swapTaglistEntryLabel}
           onSwapTaglistEntry={swapTaglistEntryLabel ? setSwappingTrackId : undefined}
           onDeleteTrack={requestDeleteTrack}
+          onReplaceFile={requestReplaceFile}
           onReorderTracks={isSearching ? undefined : reorderTracks}
           emptyMessage={
             isSearching
@@ -239,6 +242,7 @@ export function TaglistView({ taglistId, value }: TaglistViewProps) {
         />
       </div>
       {deleteConfirmDialog}
+      {replaceFileModal}
       {editingTrackId != null && (
         <TagEditorModal
           trackId={editingTrackId}

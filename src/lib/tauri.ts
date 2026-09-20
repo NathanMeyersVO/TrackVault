@@ -92,6 +92,27 @@ export interface UploadResult {
   errors: string[];
 }
 
+export interface ReplaceTrackTagValue {
+  key: string;
+  value: string;
+}
+
+export interface ReplaceTrackFileSide {
+  file_name: string;
+  duration_ms: number;
+  file_size_bytes: number;
+  tags: ReplaceTrackTagValue[];
+}
+
+export interface ReplaceTrackFilePreview {
+  existing: ReplaceTrackFileSide;
+  replacement: ReplaceTrackFileSide;
+  library_path_before: string;
+  library_path_after: string;
+  path_collision: boolean;
+  collision_message: string | null;
+}
+
 export interface TagField {
   key: string;
   value: string;
@@ -145,6 +166,13 @@ export const api = {
     invoke<UploadResult>("upload_tracks", { sourcePaths, overwrite }),
   checkUploadConflicts: (sourcePaths: string[]) =>
     invoke<string[]>("check_upload_conflicts", { sourcePaths }),
+  previewReplaceLibraryTrackFile: (trackId: number, sourcePath: string) =>
+    invoke<ReplaceTrackFilePreview>("preview_replace_library_track_file", {
+      trackId,
+      sourcePath,
+    }),
+  replaceLibraryTrackFile: (trackId: number, sourcePath: string) =>
+    invoke<Track>("replace_library_track_file", { trackId, sourcePath }),
   deleteTrack: (trackId: number) =>
     invoke<PlaybackState>("delete_track", { trackId }),
   saveLibraryConfig: () => invoke<string>("save_library_config"),

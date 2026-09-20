@@ -591,6 +591,40 @@ impl Database {
         })
     }
 
+    pub fn update_library_track_after_replace(
+        &self,
+        id: i64,
+        path: &str,
+        title: &str,
+        artist: &str,
+        album: &str,
+        duration_ms: i64,
+        track_number: Option<i32>,
+    ) -> Result<Track, DbError> {
+        self.conn.execute(
+            "UPDATE tracks SET
+               path = ?1,
+               title = ?2,
+               artist = ?3,
+               album = ?4,
+               duration_ms = ?5,
+               track_number = ?6,
+               peaks_json = CASE
+                 WHEN tracks.duration_ms != ?5 THEN NULL
+                 ELSE tracks.peaks_json
+               END,
+               seek_index_json = CASE
+                 WHEN tracks.duration_ms != ?5 THEN NULL
+                 ELSE tracks.seek_index_json
+               END
+             WHERE id = ?7",
+            params![path, title, artist, album, duration_ms, track_number, id],
+        )?;
+        self.get_track(id)?.ok_or_else(|| {
+            rusqlite::Error::QueryReturnedNoRows.into()
+        })
+    }
+
     pub fn get_peaks(&self, id: i64) -> Result<Option<String>, DbError> {
         let mut stmt = self.conn.prepare("SELECT peaks_json FROM tracks WHERE id = ?1")?;
         let mut rows = stmt.query(params![id])?;
@@ -2496,6 +2530,32 @@ mod tests {
             )
             .unwrap();
         assert_eq!(order_count, 0);
+    }
+
+    #[test]
+    fn update_library_track_path_keeps_playlist_membership() {
+        let db = test_db();
+        let playlist_id = db.create_playlist("Set").unwrap();
+        let track_id = insert_track(&db, "Original Name");
+        db.add_track_to_playlist(playlist_id, track_id).unwrap();
+
+        let new_path = "/music/renamed.wav";
+        db.update_library_track_after_replace(
+            track_id,
+            new_path,
+            "Renamed",
+            "Artist",
+            "Album",
+            120_000,
+            Some(1),
+        )
+        .unwrap();
+
+        let playlist_tracks = db.list_playlist_tracks(playlist_id).unwrap();
+        assert_eq!(playlist_tracks.len(), 1);
+        assert_eq!(playlist_tracks[0].id, track_id);
+        assert_eq!(playlist_tracks[0].path, new_path);
+        assert_eq!(db.get_track_path(track_id).unwrap(), Some(new_path.to_string()));
     }
 
     #[test]

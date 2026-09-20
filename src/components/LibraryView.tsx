@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api } from "../lib/tauri";
 import { useLibrary, usePlayer } from "../hooks/usePlayer";
 import { useDeleteTrack } from "../hooks/useDeleteTrack";
+import { useReplaceLibraryTrackFile } from "../hooks/useReplaceLibraryTrackFile";
 import { useTrackSearch } from "../hooks/useTrackSearch";
 import { usePlayerStore } from "../store/playerStore";
 import { playerController } from "../playerController";
@@ -16,6 +17,7 @@ export function LibraryView() {
   const { playTrack, selectTrack } = usePlayer();
   const { refresh } = useLibrary();
   const { requestDeleteTrack, confirmDialog: deleteConfirmDialog } = useDeleteTrack();
+  const { requestReplaceFile, replaceFileModal } = useReplaceLibraryTrackFile();
   const [editingTrackId, setEditingTrackId] = useState<number | null>(null);
   const { query, setQuery, filteredTracks, isSearching } = useTrackSearch(tracks);
 
@@ -57,6 +59,7 @@ export function LibraryView() {
           playlists={playlists}
           onAddTrackToPlaylist={handleAddToPlaylist}
           onDeleteTrack={requestDeleteTrack}
+          onReplaceFile={requestReplaceFile}
           emptyMessage={
             isSearching
               ? "No tracks match your search."
@@ -65,6 +68,7 @@ export function LibraryView() {
         />
       </div>
       {deleteConfirmDialog}
+      {replaceFileModal}
       {editingTrackId != null && (
         <TagEditorModal
           trackId={editingTrackId}

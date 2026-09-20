@@ -201,6 +201,45 @@ pub fn upload_tracks(
 }
 
 #[tauri::command]
+pub fn preview_replace_library_track_file(
+    state: State<'_, AppState>,
+    track_id: i64,
+    source_path: String,
+) -> Result<crate::replace_track::ReplaceTrackFilePreview, String> {
+    let db = state.db.lock();
+    crate::replace_track::preview_replace_library_track_file(
+        &db,
+        track_id,
+        Path::new(&source_path),
+    )
+}
+
+#[tauri::command]
+pub fn replace_library_track_file(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    track_id: i64,
+    source_path: String,
+) -> Result<Track, String> {
+    if state.player.state().track_id == Some(track_id) {
+        state.player.stop();
+    }
+
+    let track = {
+        let db = state.db.lock();
+        crate::replace_track::replace_library_track_file(
+            &db,
+            track_id,
+            Path::new(&source_path),
+        )?
+    };
+
+    let _ = app.emit("library-updated", ());
+    state.audio_cache.kick();
+    Ok(track)
+}
+
+#[tauri::command]
 pub fn delete_track(
     app: AppHandle,
     state: State<'_, AppState>,
