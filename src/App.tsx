@@ -1,4 +1,5 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { api } from "./lib/tauri";
 import { AppMenuBar } from "./components/AppMenuBar";
 import { Sidebar } from "./components/Sidebar";
 import { SidebarResizeHandle } from "./components/SidebarResizeHandle";
@@ -28,7 +29,7 @@ function isCollectionView(view: View): view is { collectionId: number } {
   return typeof view === "object" && "collectionId" in view;
 }
 
-function MainContent() {
+function MainContent({ scheduleStale }: { scheduleStale: boolean }) {
   const { view, tracks } = usePlayerStore();
   useLibrary();
 
@@ -47,9 +48,15 @@ function MainContent() {
         ) : null}
       </div>
 
+      {scheduleStale && (
+        <div className="border-t border-border bg-surface px-4 py-2 text-xs text-foreground">
+          Event schedule file changed.{" "}
+          <span className="text-muted">Use Library → Refresh Event Schedule.</span>
+        </div>
+      )}
       {view === "library" && tracks.length === 0 && (
         <div className="border-t border-border px-4 py-2 text-xs text-muted">
-          Tip: use Library → Choose Library Folder to scan MP3, FLAC, WAV, OGG, and M4A files.
+          Use Library → Projects to import a vendor delivery and open a project.
         </div>
       )}
     </main>
@@ -57,8 +64,18 @@ function MainContent() {
 }
 
 export default function App() {
+  const [scheduleStale, setScheduleStale] = useState(false);
+
   useEffect(() => {
     initPlayerController();
+  }, []);
+
+  useEffect(() => {
+    void api.getScheduleStale().then(setScheduleStale).catch(() => setScheduleStale(false));
+    const id = window.setInterval(() => {
+      void api.getScheduleStale().then(setScheduleStale).catch(() => setScheduleStale(false));
+    }, 60_000);
+    return () => window.clearInterval(id);
   }, []);
 
   const { selectTrack, playTrack, togglePlayPause, adjustVolume, seekToStart, seekToEnd } = usePlayer();
@@ -87,7 +104,7 @@ export default function App() {
       <div className="flex min-h-0 flex-1">
         <Sidebar width={sidebarWidth} />
         <SidebarResizeHandle width={sidebarWidth} onResizeStart={onResizeStart} />
-        <MainContent />
+        <MainContent scheduleStale={scheduleStale} />
       </div>
       <NowPlayingBar />
     </div>

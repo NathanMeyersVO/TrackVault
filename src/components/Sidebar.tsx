@@ -3,7 +3,15 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { listen } from "@tauri-apps/api/event";
 
 import { ConfirmDialog } from "./ConfirmDialog";
-import { api, COMMON_TAG_KEYS, type Collection, type Playlist, type Taglist, type TaglistValue } from "../lib/tauri";
+import {
+  api,
+  COMMON_TAG_KEYS,
+  type ApplicationId,
+  type Collection,
+  type Playlist,
+  type Taglist,
+  type TaglistValue,
+} from "../lib/tauri";
 import { getApplicationConfig } from "../lib/applicationConfig";
 import { formatTaglistLabel } from "../lib/taglistLabels";
 import {
@@ -25,7 +33,6 @@ import {
   sidebarSublistId,
 } from "../lib/sidebarNavigation";
 import { useLibrary } from "../hooks/usePlayer";
-import { useApplication } from "../hooks/useApplication";
 import { useTagDropConfirm } from "../hooks/useTagDropConfirm";
 import { usePlayerStore, type View } from "../store/playerStore";
 
@@ -464,9 +471,11 @@ export function Sidebar({ width }: { width: number }) {
     setPlaylists,
     draggingTrackId,
     setDraggingTrackId,
+    activeProject,
   } = usePlayerStore();
   const { refresh } = useLibrary();
-  const { applicationId } = useApplication();
+  const applicationId: ApplicationId =
+    activeProject?.application_id === "usfs_ems" ? "usfs_ems" : "none";
   const applicationConfig = getApplicationConfig(applicationId);
   const [newPlaylistName, setNewPlaylistName] = useState("");
   const [newCollectionName, setNewCollectionName] = useState("");

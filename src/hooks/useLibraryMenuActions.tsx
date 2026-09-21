@@ -9,8 +9,10 @@ import { open } from "@tauri-apps/plugin-dialog";
 
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { importCollectionFromDialog } from "../components/CollectionView";
+import { DeliveryPreviewModal } from "../components/DeliveryPreviewModal";
+import { ProjectHubModal } from "../components/ProjectHubModal";
 import { RemoteImportFromPhoneModal } from "../components/RemoteImportFromPhoneModal";
-import { api, type PlaybackState } from "../lib/tauri";
+import { api, type DeliveryPreview, type PlaybackState } from "../lib/tauri";
 import { clearTrackTagsCache } from "../lib/trackTagsCache";
 import { useLibrary } from "./usePlayer";
 import { useUploadTracks } from "./useUploadTracks";
@@ -32,6 +34,7 @@ const CLOSE_LIBRARY_MESSAGE =
 export function useLibraryMenuActions() {
   const {
     libraryFolder,
+    activeProject,
     scanning,
     view,
     collections,
@@ -109,6 +112,9 @@ export function useLibraryMenuActions() {
   const [remoteImportMode, setRemoteImportMode] = useState<
     "library" | "collection" | null
   >(null);
+  const [projectHubOpen, setProjectHubOpen] = useState(false);
+  const [deliveryPreview, setDeliveryPreview] = useState<DeliveryPreview | null>(null);
+  const [refreshingSchedule, setRefreshingSchedule] = useState(false);
 
   const resetLibraryFrontend = useCallback(
     (playback: PlaybackState) => {
@@ -163,6 +169,51 @@ export function useLibraryMenuActions() {
     },
     [clearUploadFeedback, libraryFolder, refresh, resetLibraryFrontend, setScanning],
   );
+
+  const openProjectHub = useCallback(() => {
+    setProjectHubOpen(true);
+  }, []);
+
+  const closeProjectHub = useCallback(() => {
+    setProjectHubOpen(false);
+  }, []);
+
+  const applyDeliveryUpdate = useCallback(async () => {
+    if (!activeProject) {
+      setConfigError("Open a project first.");
+      return;
+    }
+    const selected = await open({
+      multiple: true,
+      title: "Select delivery folder or archives",
+    });
+    if (selected == null) return;
+    const sources = Array.isArray(selected) ? selected : [selected];
+    setScanning(true);
+    setConfigError(null);
+    try {
+      const preview = await api.stageDelivery(sources, activeProject.id);
+      setDeliveryPreview(preview);
+    } catch (err) {
+      setConfigError(String(err));
+    } finally {
+      setScanning(false);
+    }
+  }, [activeProject, setConfigError, setScanning]);
+
+  const refreshProjectSchedule = useCallback(async () => {
+    setRefreshingSchedule(true);
+    setConfigError(null);
+    try {
+      const count = await api.refreshProjectSchedule();
+      await refresh();
+      setConfigMessage(`Refreshed ${count} event titles from schedule`);
+    } catch (err) {
+      setConfigError(String(err));
+    } finally {
+      setRefreshingSchedule(false);
+    }
+  }, [refresh]);
 
   const chooseLibraryFolder = useCallback(async () => {
     const selected = await open({
@@ -397,6 +448,26 @@ export function useLibraryMenuActions() {
 
   const remoteImportOpen = remoteImportMode != null;
 
+  const projectHubModal = projectHubOpen ? (
+    <ProjectHubModal onClose={closeProjectHub} />
+  ) : null;
+
+  const deliveryUpdateModal =
+    deliveryPreview && activeProject ? (
+      <DeliveryPreviewModal
+        preview={deliveryPreview}
+        mode="update"
+        projectName={activeProject.name}
+        applicationId={activeProject.application_id}
+        onClose={() => setDeliveryPreview(null)}
+        onApplied={async () => {
+          setDeliveryPreview(null);
+          await refresh();
+          setConfigMessage("Delivery update applied");
+        }}
+      />
+    ) : null;
+
   const remoteImportModal =
     remoteImportMode === "library" ? (
       <RemoteImportFromPhoneModal
@@ -429,6 +500,7 @@ export function useLibraryMenuActions() {
 
   return {
     libraryFolder,
+    activeProject,
     collectionId,
     collectionName,
     scanning,
@@ -449,6 +521,12 @@ export function useLibraryMenuActions() {
     closeLibraryConfirmDialog,
     changeLibraryConfirmDialog,
     chooseLibraryFolder,
+    openProjectHub,
+    applyDeliveryUpdate,
+    refreshProjectSchedule,
+    refreshingSchedule,
+    projectHubModal,
+    deliveryUpdateModal,
     uploadToLibrary,
     uploadToCollection,
     openLibraryRemoteUpload,

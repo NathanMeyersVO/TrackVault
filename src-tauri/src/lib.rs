@@ -7,6 +7,10 @@ mod collections;
 mod commands;
 mod config;
 mod db;
+mod delivery;
+mod file_hash;
+mod project_config;
+mod projects;
 mod models;
 mod library_path;
 mod library_setup;
@@ -28,7 +32,9 @@ use commands::{
     close_library, create_collection, create_playlist, create_taglist, delete_collection,
     delete_collection_track, delete_playlist, delete_taglist, delete_track, export_collection,
     get_app_settings, get_application_settings, get_collection_playback_state, get_collection_tracks,
-    get_library_folder,
+    apply_staged_delivery, create_project, delete_project, get_active_project, get_library_folder,
+    get_schedule_stale, list_projects, open_project, preview_delivery_with_mode,
+    refresh_project_schedule, stage_delivery, update_project_application,
     get_playback_state, get_playlist_tracks, get_taglist_tracks, get_track, get_track_peaks,
     get_track_tags, get_volume, import_collection, import_taglist_titles, init_state,
     list_collections, list_playlists, list_taglist_values, list_taglists, list_tracks,
@@ -61,6 +67,17 @@ pub fn run() {
             get_track,
             get_library_folder,
             set_library_folder,
+            list_projects,
+            get_active_project,
+            create_project,
+            open_project,
+            update_project_application,
+            delete_project,
+            stage_delivery,
+            preview_delivery_with_mode,
+            apply_staged_delivery,
+            refresh_project_schedule,
+            get_schedule_stale,
             save_library_config,
             load_library_config,
             close_library,

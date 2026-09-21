@@ -993,7 +993,7 @@ impl Database {
         &self,
         taglist_id: i64,
     ) -> Result<HashMap<String, String>, DbError> {
-        self.get_taglist_titles(taglist_id)
+        self.get_taglist_value_titles(taglist_id)
     }
 
     pub fn list_taglist_track_order(
@@ -1327,7 +1327,7 @@ impl Database {
         Ok(())
     }
 
-    fn get_taglist_titles(
+    pub fn get_taglist_value_titles(
         &self,
         taglist_id: i64,
     ) -> Result<std::collections::HashMap<String, String>, DbError> {
@@ -1402,7 +1402,7 @@ impl Database {
         tag_key: &str,
         taglist_id: i64,
     ) -> Result<Vec<TaglistValue>, DbError> {
-        let titles = self.get_taglist_titles(taglist_id)?;
+        let titles = self.get_taglist_value_titles(taglist_id)?;
         let mut counts: HashMap<String, i64> = HashMap::new();
 
         let mut stmt = self.conn.prepare(

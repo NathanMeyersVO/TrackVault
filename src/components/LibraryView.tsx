@@ -12,8 +12,15 @@ import { TrackSearchInput } from "./TrackSearchInput";
 import { TrackTable } from "./TrackTable";
 
 export function LibraryView() {
-  const { tracks, playlists, playback, cursorTrackId, setActiveTrackIds } =
-    usePlayerStore();
+  const {
+    tracks,
+    playlists,
+    playback,
+    cursorTrackId,
+    setActiveTrackIds,
+    activeProject,
+    libraryFolder,
+  } = usePlayerStore();
   const { playTrack, selectTrack } = usePlayer();
   const { refresh } = useLibrary();
   const { requestDeleteTrack, confirmDialog: deleteConfirmDialog } = useDeleteTrack();
@@ -26,6 +33,14 @@ export function LibraryView() {
     setActiveTrackIds(trackIds);
     playerController.syncTracklistContext("library", trackIds);
   }, [filteredTracks, setActiveTrackIds]);
+
+  const hasOpenProject = activeProject != null || libraryFolder != null;
+
+  const libraryEmptyMessage = isSearching
+    ? "No tracks match your search."
+    : !hasOpenProject
+      ? "Open or create a project: Library → Projects…"
+      : "No tracks in this project yet. Import a delivery via Library → Projects… or Apply Delivery Update…";
 
   const handleAddToPlaylist = useCallback(
     async (trackId: number, playlistId: number) => {
@@ -60,11 +75,7 @@ export function LibraryView() {
           onAddTrackToPlaylist={handleAddToPlaylist}
           onDeleteTrack={requestDeleteTrack}
           onReplaceFile={requestReplaceFile}
-          emptyMessage={
-            isSearching
-              ? "No tracks match your search."
-              : "Choose a library folder to get started."
-          }
+          emptyMessage={libraryEmptyMessage}
         />
       </div>
       {deleteConfirmDialog}

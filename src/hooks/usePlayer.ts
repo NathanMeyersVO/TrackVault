@@ -14,39 +14,47 @@ import { usePlayerStore } from "../store/playerStore";
 
 export function useLibrary() {
 
-  const { setTracks, setPlaylists, setTaglists, setCollections, setScanning, setLibraryFolder, setAudioCacheProgress, setLibraryScanProgress } =
-
-    usePlayerStore();
+  const {
+    setTracks,
+    setPlaylists,
+    setTaglists,
+    setCollections,
+    setLibraryFolder,
+    setActiveProject,
+    setScanning,
+    setAudioCacheProgress,
+    setLibraryScanProgress,
+  } = usePlayerStore();
 
 
 
   const refresh = useCallback(async () => {
 
-    const [tracks, playlists, taglists, collections, libraryFolder] = await Promise.all([
-
-      api.listTracks(),
-
-      api.listPlaylists(),
-
-      api.listTaglists(),
-
-      api.listCollections(),
-
-      api.getLibraryFolder(),
-
-    ]);
+    const [tracks, playlists, taglists, collections, libraryFolder, activeProject] =
+      await Promise.all([
+        api.listTracks(),
+        api.listPlaylists(),
+        api.listTaglists(),
+        api.listCollections(),
+        api.getLibraryFolder(),
+        api.getActiveProject(),
+      ]);
 
     setTracks(tracks);
-
     setPlaylists(playlists);
-
     setTaglists(taglists);
-
     setCollections(collections);
-
     setLibraryFolder(libraryFolder);
+    setActiveProject(activeProject);
 
-  }, [setTracks, setPlaylists, setTaglists, setCollections, setLibraryFolder]);
+  }, [
+    setTracks,
+    setPlaylists,
+    setTaglists,
+    setCollections,
+    setLibraryFolder,
+    setActiveProject,
+  ]);
 
 
 

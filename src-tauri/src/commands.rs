@@ -12,6 +12,12 @@ use crate::models::{
     WaveformPeaks,
 };
 use crate::player::AudioPlayer;
+use crate::delivery::{
+    apply_delivery, append_full_replace_removals, build_preview, stage_delivery_sources,
+    ApplyDeliveryResult, ApplyMode, DeliveryPreview, DeliverySessionStore, StagingSession,
+};
+use crate::projects::{self, ProjectManifest, ProjectSummary, ACTIVE_PROJECT_KEY};
+use crate::project_config::{autosave_trackvault_json, load_trackvault_json_if_present};
 use crate::replace_remote_upload::ReplaceRemoteUploadManager;
 use crate::scanner;
 
@@ -21,6 +27,14 @@ pub struct AppState {
     pub app_data_dir: PathBuf,
     pub audio_cache: AudioCacheWorker,
     pub replace_remote_upload: ReplaceRemoteUploadManager,
+    pub delivery_sessions: DeliverySessionStore,
+}
+
+fn try_autosave_project_config(state: &AppState) {
+    let db = state.db.lock();
+    if let Ok(Some(path)) = db.get_library_folder() {
+        let _ = autosave_trackvault_json(&db, Path::new(&path));
+    }
 }
 
 fn teardown_library(state: &AppState) -> Result<PlaybackState, String> {
@@ -360,11 +374,13 @@ pub fn delete_track(
 
 #[tauri::command]
 pub fn create_playlist(state: State<'_, AppState>, name: String) -> Result<i64, String> {
-    state
+    let id = state
         .db
         .lock()
         .create_playlist(&name)
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+    try_autosave_project_config(&state);
+    Ok(id)
 }
 
 #[tauri::command]
@@ -373,7 +389,9 @@ pub fn delete_playlist(state: State<'_, AppState>, id: i64) -> Result<(), String
         .db
         .lock()
         .delete_playlist(id)
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+    try_autosave_project_config(&state);
+    Ok(())
 }
 
 #[tauri::command]
@@ -405,7 +423,10 @@ pub fn add_track_to_playlist(
         return Err("Collection tracks cannot be added to playlists".to_string());
     }
     db.add_track_to_playlist(playlist_id, track_id)
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+    drop(db);
+    try_autosave_project_config(&state);
+    Ok(())
 }
 
 #[tauri::command]
@@ -418,7 +439,9 @@ pub fn remove_track_from_playlist(
         .db
         .lock()
         .remove_track_from_playlist(playlist_id, track_id)
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+    try_autosave_project_config(&state);
+    Ok(())
 }
 
 #[tauri::command]
@@ -431,7 +454,9 @@ pub fn reorder_playlist_tracks(
         .db
         .lock()
         .reorder_playlist_tracks(playlist_id, &track_ids)
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+    try_autosave_project_config(&state);
+    Ok(())
 }
 
 #[tauri::command]
@@ -450,6 +475,7 @@ pub fn rename_playlist(
         .lock()
         .rename_playlist(id, name)
         .map_err(|e| e.to_string())?;
+    try_autosave_project_config(&state);
     let _ = app.emit("library-updated", ());
     Ok(())
 }
@@ -1288,6 +1314,401 @@ pub fn save_collection_playback_state(
         .map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+pub fn list_projects(state: State<'_, AppState>) -> Result<Vec<ProjectSummary>, String> {
+    projects::list_projects(&state.app_data_dir)
+}
+
+#[tauri::command]
+pub fn get_active_project(state: State<'_, AppState>) -> Result<Option<ProjectSummary>, String> {
+    let db = state.db.lock();
+    let Some(json) = db.get_app_setting(ACTIVE_PROJECT_KEY).map_err(|e| e.to_string())? else {
+        return Ok(None);
+    };
+    let project_id: String = serde_json::from_str(&json).map_err(|e| e.to_string())?;
+    if project_id.is_empty() || project_id == "null" {
+        return Ok(None);
+    }
+    drop(db);
+    let list = projects::list_projects(&state.app_data_dir)?;
+    Ok(list.into_iter().find(|p| p.id == project_id))
+}
+
+#[tauri::command]
+pub fn create_project(
+    state: State<'_, AppState>,
+    name: String,
+    application_id: String,
+) -> Result<ProjectSummary, String> {
+    let name = name.trim();
+    if name.is_empty() {
+        return Err("Project name is required".to_string());
+    }
+    let id = uuid::Uuid::new_v4().to_string();
+    let manifest = ProjectManifest::new(id.clone(), name.to_string(), application_id);
+    projects::create_project_dirs(&state.app_data_dir, &manifest)?;
+    Ok(ProjectSummary {
+        id,
+        name: manifest.name,
+        created_at: manifest.created_at,
+        application_id: manifest.application_id,
+        track_count: 0,
+        last_modified: manifest.created_at,
+    })
+}
+
+#[tauri::command]
+pub fn open_project(app: AppHandle, state: State<'_, AppState>, project_id: String) -> Result<(), String> {
+    open_project_internal(&app, &state, &project_id)
+}
+
+#[tauri::command]
+pub fn update_project_application(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    project_id: String,
+    application_id: String,
+) -> Result<ProjectSummary, String> {
+    let project_root = projects::project_dir(&state.app_data_dir, &project_id);
+    if !project_root.is_dir() {
+        return Err("Project not found".to_string());
+    }
+    let normalized = crate::application::normalize_application_id(&application_id);
+    let mut manifest = projects::load_manifest(&project_root)?;
+    manifest.application_id = normalized.as_str().to_string();
+    projects::save_manifest(&project_root, &manifest)?;
+
+    let is_active = {
+        let db = state.db.lock();
+        match db.get_app_setting(ACTIVE_PROJECT_KEY).map_err(|e| e.to_string())? {
+            Some(json) => serde_json::from_str::<String>(&json)
+                .map(|active_id| active_id == project_id)
+                .unwrap_or(false),
+            None => false,
+        }
+    };
+
+    if is_active {
+        reapply_project_application(&app, &state, &project_root, &manifest)?;
+    }
+
+    projects::list_projects(&state.app_data_dir)?
+        .into_iter()
+        .find(|p| p.id == project_id)
+        .ok_or_else(|| "Project not found".to_string())
+}
+
+fn reapply_project_application(
+    app: &AppHandle,
+    state: &AppState,
+    project_root: &Path,
+    manifest: &ProjectManifest,
+) -> Result<(), String> {
+    let library_root = projects::library_dir(project_root);
+    {
+        let db = state.db.lock();
+        let app_settings = crate::application::ApplicationSettings {
+            application_id: manifest.application_id.clone(),
+        };
+        crate::application::set_application(&db, app_settings)?;
+        let application = crate::application::normalize_application_id(&manifest.application_id);
+        let schedule = projects::schedule_path(project_root, manifest);
+        let schedule_ref = if schedule.is_file() {
+            Some(schedule.as_path())
+        } else {
+            None
+        };
+        crate::library_setup::apply_application_library_setup_with_schedule(
+            &db,
+            &library_root,
+            application,
+            schedule_ref,
+        )?;
+        autosave_trackvault_json(&db, &library_root)?;
+    }
+    let _ = app.emit("library-updated", ());
+    state.audio_cache.kick();
+    Ok(())
+}
+
+#[tauri::command]
+pub fn delete_project(app: AppHandle, state: State<'_, AppState>, project_id: String) -> Result<(), String> {
+    {
+        let db = state.db.lock();
+        if let Ok(Some(json)) = db.get_app_setting(ACTIVE_PROJECT_KEY) {
+            if let Ok(active) = serde_json::from_str::<String>(&json) {
+                if active == project_id {
+                    drop(db);
+                    teardown_library(&state)?;
+                    state
+                        .db
+                        .lock()
+                        .set_app_setting(ACTIVE_PROJECT_KEY, "null")
+                        .map_err(|e| e.to_string())?;
+                }
+            }
+        }
+    }
+    projects::delete_project_dir(&state.app_data_dir, &project_id)?;
+    let _ = app.emit("library-updated", ());
+    Ok(())
+}
+
+#[tauri::command]
+pub fn stage_delivery(
+    state: State<'_, AppState>,
+    source_paths: Vec<String>,
+    project_id: Option<String>,
+) -> Result<DeliveryPreview, String> {
+    if source_paths.is_empty() {
+        return Err("Select at least one folder or archive".to_string());
+    }
+    let session_id = uuid::Uuid::new_v4().to_string();
+    let staging_root = stage_delivery_sources(
+        state.delivery_sessions.sessions_dir(),
+        &session_id,
+        &source_paths,
+    )?;
+    state.delivery_sessions.insert(StagingSession {
+        id: session_id.clone(),
+        staging_root: staging_root.clone(),
+        target_project_id: project_id.clone(),
+        created: std::time::Instant::now(),
+    });
+
+    let preview = if let Some(ref pid) = project_id {
+        let library = projects::library_dir(&projects::project_dir(&state.app_data_dir, pid));
+        build_preview(&session_id, &staging_root, &library, true)?
+    } else {
+        let empty = state.app_data_dir.join("_empty_preview");
+        std::fs::create_dir_all(&empty).ok();
+        build_preview(&session_id, &staging_root, &empty, false)?
+    };
+
+    Ok(preview)
+}
+
+#[tauri::command]
+pub fn preview_delivery_with_mode(
+    state: State<'_, AppState>,
+    staging_session_id: String,
+    apply_mode: String,
+) -> Result<DeliveryPreview, String> {
+    let session = state
+        .delivery_sessions
+        .get(&staging_session_id)
+        .ok_or_else(|| "Staging session expired".to_string())?;
+    let library = if let Some(ref pid) = session.target_project_id {
+        projects::library_dir(&projects::project_dir(&state.app_data_dir, pid))
+    } else {
+        state.app_data_dir.join("_empty_preview")
+    };
+    let for_update = session.target_project_id.is_some();
+    let mut preview = build_preview(
+        &staging_session_id,
+        &session.staging_root,
+        &library,
+        for_update,
+    )?;
+    if apply_mode == "full_replace" && for_update {
+        append_full_replace_removals(&mut preview, &session.staging_root, &library)?;
+    }
+    Ok(preview)
+}
+
+#[tauri::command]
+pub fn apply_staged_delivery(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    staging_session_id: String,
+    change_ids: Vec<String>,
+    apply_mode: String,
+    new_project_name: Option<String>,
+    application_id: Option<String>,
+) -> Result<ApplyDeliveryResult, String> {
+    let session = state
+        .delivery_sessions
+        .get(&staging_session_id)
+        .ok_or_else(|| "Staging session expired".to_string())?;
+
+    let mode = if apply_mode == "full_replace" {
+        ApplyMode::FullReplace
+    } else {
+        ApplyMode::Merge
+    };
+
+    let for_update = session.target_project_id.is_some();
+    let project_id = if let Some(pid) = session.target_project_id.clone() {
+        pid
+    } else {
+        let name = new_project_name
+            .filter(|n| !n.trim().is_empty())
+            .ok_or_else(|| "Project name is required".to_string())?;
+        let id = uuid::Uuid::new_v4().to_string();
+        let app_id = application_id
+            .filter(|s| !s.trim().is_empty())
+            .unwrap_or_else(|| "none".to_string());
+        let manifest = ProjectManifest::new(id.clone(), name.trim().to_string(), app_id);
+        projects::create_project_dirs(&state.app_data_dir, &manifest)?;
+        id
+    };
+
+    let project_root = projects::project_dir(&state.app_data_dir, &project_id);
+    let library_root = projects::library_dir(&project_root);
+    let empty_preview = state.app_data_dir.join("_empty_preview");
+    let preview_library = if for_update {
+        &library_root
+    } else {
+        &empty_preview
+    };
+
+    let mut preview = build_preview(
+        &staging_session_id,
+        &session.staging_root,
+        preview_library,
+        for_update || library_root.read_dir().map(|mut d| d.next().is_some()).unwrap_or(false),
+    )?;
+    if matches!(mode, ApplyMode::FullReplace) && for_update {
+        append_full_replace_removals(&mut preview, &session.staging_root, &library_root)?;
+    }
+
+    let selected: std::collections::HashSet<String> = change_ids.into_iter().collect();
+    let mut manifest = projects::load_manifest(&project_root)?;
+
+    let result = {
+        let db = state.db.lock();
+        apply_delivery(
+            &db,
+            &project_root,
+            &mut manifest,
+            &session.staging_root,
+            &preview.changes,
+            &selected,
+            mode,
+        )?
+    };
+
+    open_project_internal(&app, &state, &project_id)?;
+
+    {
+        let db = state.db.lock();
+        scanner::scan_library_folder(&db, &app)?;
+    }
+
+    state.delivery_sessions.remove(&staging_session_id);
+    try_autosave_project_config(&state);
+    let _ = app.emit("library-updated", ());
+    state.audio_cache.kick();
+    Ok(result)
+}
+
+#[tauri::command]
+pub fn refresh_project_schedule(app: AppHandle, state: State<'_, AppState>) -> Result<u32, String> {
+    let count = {
+        let db = state.db.lock();
+        let active = db
+            .get_app_setting(ACTIVE_PROJECT_KEY)
+            .map_err(|e| e.to_string())?
+            .ok_or_else(|| "No active project".to_string())?;
+        let project_id: String = serde_json::from_str(&active).map_err(|e| e.to_string())?;
+        let project_root = projects::project_dir(&state.app_data_dir, &project_id);
+        let mut manifest = projects::load_manifest(&project_root)?;
+        let schedule_path = projects::schedule_path(&project_root, &manifest);
+        if !schedule_path.is_file() {
+            return Err("No event schedule file in this project".to_string());
+        }
+        let library_root = projects::library_dir(&project_root);
+        let mappings = crate::title_map::parse_usfs_ems_schedule(&schedule_path)?;
+        let taglist = db
+            .get_taglist_by_name("Events")
+            .map_err(|e| e.to_string())?
+            .ok_or_else(|| "Events taglist not found".to_string())?;
+        let existing = db.get_taglist_value_titles(taglist.id).map_err(|e| e.to_string())?;
+        let mut merged = existing;
+        for (tag, title) in mappings {
+            merged.insert(tag, title);
+        }
+        let count = db
+            .import_taglist_titles(taglist.id, &merged)
+            .map_err(|e| e.to_string())?;
+        if let Ok(meta) = std::fs::metadata(&schedule_path) {
+            if let Ok(modified) = meta.modified() {
+                manifest.schedule_last_imported_mtime = modified
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .ok()
+                    .map(|d| d.as_secs() as i64);
+            }
+        }
+        projects::save_manifest(&project_root, &manifest)?;
+        autosave_trackvault_json(&db, &library_root)?;
+        count
+    };
+    let _ = app.emit("library-updated", ());
+    Ok(count)
+}
+
+#[tauri::command]
+pub fn get_schedule_stale(state: State<'_, AppState>) -> Result<bool, String> {
+    let db = state.db.lock();
+    let active = db
+        .get_app_setting(ACTIVE_PROJECT_KEY)
+        .map_err(|e| e.to_string())?;
+    let Some(json) = active else {
+        return Ok(false);
+    };
+    let project_id: String = serde_json::from_str(&json).map_err(|e| e.to_string())?;
+    let project_root = projects::project_dir(&state.app_data_dir, &project_id);
+    let manifest = projects::load_manifest(&project_root)?;
+    let schedule_path = projects::schedule_path(&project_root, &manifest);
+    if !schedule_path.is_file() {
+        return Ok(false);
+    }
+    let meta = std::fs::metadata(&schedule_path).map_err(|e| e.to_string())?;
+    let modified = meta
+        .modified()
+        .map_err(|e| e.to_string())?
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+    let last = manifest.schedule_last_imported_mtime.unwrap_or(0);
+    Ok(modified > last)
+}
+
+fn open_project_internal(app: &AppHandle, state: &AppState, project_id: &str) -> Result<(), String> {
+    let project_root = projects::project_dir(&state.app_data_dir, project_id);
+    if !project_root.is_dir() {
+        return Err("Project not found".to_string());
+    }
+    let manifest = projects::load_manifest(&project_root)?;
+    let library_root = projects::library_dir(&project_root);
+    std::fs::create_dir_all(&library_root).map_err(|e| e.to_string())?;
+    let library_str = library_root.to_string_lossy().to_string();
+
+    teardown_library(state)?;
+
+    {
+        let db = state.db.lock();
+        db.set_library_folder(&library_str).map_err(|e| e.to_string())?;
+        let app_settings = crate::application::ApplicationSettings {
+            application_id: manifest.application_id.clone(),
+        };
+        crate::application::set_application(&db, app_settings)?;
+        let id_json = serde_json::to_string(project_id).map_err(|e| e.to_string())?;
+        db.set_app_setting(ACTIVE_PROJECT_KEY, &id_json)
+            .map_err(|e| e.to_string())?;
+    }
+
+    scanner::scan_library_folder(&state.db.lock(), app)?;
+
+    {
+        let db = state.db.lock();
+        let _ = load_trackvault_json_if_present(&db, &library_root);
+    }
+
+    reapply_project_application(app, state, &project_root, &manifest)?;
+    Ok(())
+}
+
 pub fn init_state(app: &AppHandle) -> Result<AppState, String> {
     let data_dir = app
         .path()
@@ -1298,12 +1719,24 @@ pub fn init_state(app: &AppHandle) -> Result<AppState, String> {
     let player = Arc::new(AudioPlayer::new()?);
     player.start_position_emitter(app.clone());
     let audio_cache = AudioCacheWorker::start(app.clone(), Arc::clone(&db), Arc::clone(&player));
+    let delivery_sessions = DeliverySessionStore::new(&data_dir);
 
-    Ok(AppState {
+    let state = AppState {
         db,
         player,
         app_data_dir: data_dir,
         audio_cache,
         replace_remote_upload: ReplaceRemoteUploadManager::new(),
-    })
+        delivery_sessions,
+    };
+
+    if let Ok(Some(json)) = state.db.lock().get_app_setting(ACTIVE_PROJECT_KEY) {
+        if let Ok(project_id) = serde_json::from_str::<String>(&json) {
+            if !project_id.is_empty() && project_id != "null" {
+                let _ = open_project_internal(app, &state, &project_id);
+            }
+        }
+    }
+
+    Ok(state)
 }

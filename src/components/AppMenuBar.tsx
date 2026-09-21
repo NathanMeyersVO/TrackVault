@@ -6,23 +6,18 @@ import { AboutDialog } from "./AboutDialog";
 import { KeyboardShortcutsModal } from "./KeyboardShortcutsModal";
 import { MenuBarStatus, MenuDropdown, type MenuEntry } from "./MenuDropdown";
 import { useLibraryMenuActions } from "../hooks/useLibraryMenuActions";
-import { useApplication } from "../hooks/useApplication";
-import { APPLICATION_OPTIONS } from "../lib/applicationLabels";
 
 export function AppMenuBar() {
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [appearanceOpen, setAppearanceOpen] = useState(false);
   const {
-    libraryFolder,
     collectionId,
     collectionName,
     scanning,
     libraryUploading,
     collectionUploading,
     savingConfig,
-    loadingConfig,
-    closingLibrary,
     importingCollection,
     uploadMessage,
     uploadError,
@@ -31,10 +26,13 @@ export function AppMenuBar() {
     dismissStatusFeedback,
     libraryUploadConfirmDialog,
     collectionUploadConfirmDialog,
-    loadConfigConfirmDialog,
-    closeLibraryConfirmDialog,
-    changeLibraryConfirmDialog,
-    chooseLibraryFolder,
+    activeProject,
+    openProjectHub,
+    applyDeliveryUpdate,
+    refreshProjectSchedule,
+    refreshingSchedule,
+    projectHubModal,
+    deliveryUpdateModal,
     uploadToLibrary,
     uploadToCollection,
     openLibraryRemoteUpload,
@@ -42,16 +40,12 @@ export function AppMenuBar() {
     remoteImportModal,
     scanLibrary,
     saveConfiguration,
-    requestLoadConfiguration,
-    requestCloseLibrary,
     importCollection,
     actionsDisabled,
     libraryActionsDisabled,
     libraryUploadDisabled,
     collectionUploadDisabled,
   } = useLibraryMenuActions();
-  const { applicationId, selectApplication } = useApplication();
-
   const collectionUploadLabel =
     collectionName != null
       ? `Upload to stored collection (${collectionName})…`
@@ -59,11 +53,22 @@ export function AppMenuBar() {
 
   const libraryItems: MenuEntry[] = [
     {
-      label: "Choose Library Folder",
-      title:
-        "Select the folder to scan for audio files and index in the library.",
-      onClick: () => void chooseLibraryFolder(),
+      label: "Projects…",
+      title: "Create, open, or delete projects.",
+      onClick: () => openProjectHub(),
       disabled: actionsDisabled,
+    },
+    {
+      label: scanning ? "Staging delivery…" : "Apply Delivery Update…",
+      title: "Import a vendor delivery into the active project (preview before apply).",
+      onClick: () => void applyDeliveryUpdate(),
+      disabled: libraryActionsDisabled,
+    },
+    {
+      label: refreshingSchedule ? "Refreshing schedule…" : "Refresh Event Schedule",
+      title: "Re-read event-schedule.xlsx and merge event titles.",
+      onClick: () => void refreshProjectSchedule(),
+      disabled: libraryActionsDisabled || refreshingSchedule,
     },
     {
       label: libraryUploading ? "Uploading to library…" : "Upload to Library",
@@ -93,25 +98,10 @@ export function AppMenuBar() {
       disabled: libraryActionsDisabled,
     },
     {
-      label: savingConfig ? "Saving…" : "Save Library Configuration",
-      title:
-        "Write library playlists and taglists to trackvault.json in the library folder.",
+      label: savingConfig ? "Exporting…" : "Export Library Configuration",
+      title: "Write trackvault.json now (normally kept up to date automatically).",
       onClick: () => void saveConfiguration(),
       disabled: libraryActionsDisabled || savingConfig,
-    },
-    {
-      label: loadingConfig ? "Loading…" : "Load Library Configuration",
-      title:
-        "Replace library playlists and taglists from trackvault.json (indexed tracks unchanged).",
-      onClick: () => void requestLoadConfiguration(),
-      disabled: libraryActionsDisabled || loadingConfig,
-    },
-    {
-      label: closingLibrary ? "Closing library…" : "Close Library",
-      title:
-        "Disconnect the library folder and clear indexed tracks, playlists, and taglists from the app.",
-      onClick: () => void requestCloseLibrary(),
-      disabled: actionsDisabled,
     },
   ];
 
@@ -154,17 +144,6 @@ export function AppMenuBar() {
     },
   ];
 
-  const applicationItems: MenuEntry[] = APPLICATION_OPTIONS.map((option) => ({
-    label: option.label,
-    title: option.title,
-    checked: applicationId === option.id,
-    onClick: () => {
-      if (applicationId !== option.id) {
-        void selectApplication(option.id);
-      }
-    },
-  }));
-
   const viewItems: MenuEntry[] = [
     {
       label: "Appearance…",
@@ -198,7 +177,9 @@ export function AppMenuBar() {
   const statusLabel =
     collectionId != null && collectionName != null
       ? `Stored collection: ${collectionName}`
-      : libraryFolder ?? "No library folder chosen";
+      : activeProject != null
+        ? `Project: ${activeProject.name}`
+        : "No project open";
 
   return (
     <>
@@ -210,7 +191,6 @@ export function AppMenuBar() {
           <MenuDropdown label="File" items={fileItems} />
           <MenuDropdown label="Library" items={libraryItems} />
           <MenuDropdown label="Stored Collections" items={storedCollectionItems} />
-          <MenuDropdown label="Application" items={applicationItems} />
           <MenuDropdown label="View" items={viewItems} />
           <MenuDropdown label="Help" items={helpItems} />
         </nav>
@@ -234,9 +214,8 @@ export function AppMenuBar() {
       {libraryUploadConfirmDialog}
       {collectionUploadConfirmDialog}
       {remoteImportModal}
-      {loadConfigConfirmDialog}
-      {closeLibraryConfirmDialog}
-      {changeLibraryConfirmDialog}
+      {projectHubModal}
+      {deliveryUpdateModal}
       {shortcutsOpen ? (
         <KeyboardShortcutsModal onClose={() => setShortcutsOpen(false)} />
       ) : null}

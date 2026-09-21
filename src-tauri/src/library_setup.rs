@@ -14,16 +14,43 @@ pub fn apply_application_library_setup(
     library_root: &Path,
     application: ApplicationId,
 ) -> Result<(), String> {
+    apply_application_library_setup_with_schedule(db, library_root, application, None)
+}
+
+pub fn apply_application_library_setup_with_schedule(
+    db: &Database,
+    library_root: &Path,
+    application: ApplicationId,
+    schedule_path: Option<&Path>,
+) -> Result<(), String> {
     match application {
         ApplicationId::None => Ok(()),
-        ApplicationId::UsFigureSkatingEms => setup_usfs_ems(db, library_root),
+        ApplicationId::UsFigureSkatingEms => {
+            setup_usfs_ems(db, library_root, schedule_path)
+        }
     }
 }
 
-fn setup_usfs_ems(db: &Database, library_root: &Path) -> Result<(), String> {
+fn setup_usfs_ems(
+    db: &Database,
+    library_root: &Path,
+    schedule_path: Option<&Path>,
+) -> Result<(), String> {
     let taglist_id = ensure_events_taglist(db)?;
 
-    if let Some((_path, mappings)) = title_map::find_top_level_event_schedule(library_root)? {
+    let mappings = if let Some(path) = schedule_path {
+        if path.is_file() {
+            Some(crate::title_map::parse_usfs_ems_schedule(path)?)
+        } else {
+            None
+        }
+    } else if let Some((_path, mappings)) = title_map::find_top_level_event_schedule(library_root)? {
+        Some(mappings)
+    } else {
+        None
+    };
+
+    if let Some(mappings) = mappings {
         db.import_taglist_titles(taglist_id, &mappings)
             .map_err(|e| e.to_string())?;
     }

@@ -176,6 +176,48 @@ export interface ApplicationSettings {
   application_id: ApplicationId;
 }
 
+export interface ProjectSummary {
+  id: string;
+  name: string;
+  created_at: number;
+  application_id: string;
+  track_count: number;
+  last_modified: number;
+}
+
+export type DeliveryChangeKind =
+  | "audio_add"
+  | "audio_update"
+  | "audio_replace"
+  | "audio_move"
+  | "audio_remove"
+  | "schedule_event_add"
+  | "schedule_event_update"
+  | "schedule_event_remove";
+
+export interface DeliveryChange {
+  change_id: string;
+  kind: DeliveryChangeKind;
+  summary: string;
+  details: string;
+  default_selected: boolean;
+}
+
+export type DeliveryApplyModeHint = "merge" | "likely_full_set";
+
+export interface DeliveryPreview {
+  staging_session_id: string;
+  changes: DeliveryChange[];
+  apply_mode_hint: DeliveryApplyModeHint;
+  staged_audio_count: number;
+  library_audio_count: number;
+}
+
+export interface ApplyDeliveryResult {
+  applied: number;
+  skipped: number;
+}
+
 export const api = {
   listTracks: () => invoke<Track[]>("list_tracks"),
   getTrack: (trackId: number) => invoke<Track>("get_track", { trackId }),
@@ -369,10 +411,37 @@ export const api = {
   getAppSettings: () => invoke<ThemeSettings>("get_app_settings"),
   setAppSettings: (settings: ThemeSettings) =>
     invoke<ThemeSettings>("set_app_settings", { settings }),
-  getApplicationSettings: () =>
-    invoke<ApplicationSettings>("get_application_settings"),
-  setApplicationSettings: (settings: ApplicationSettings) =>
-    invoke<ApplicationSettings>("set_application_settings", { settings }),
+  listProjects: () => invoke<ProjectSummary[]>("list_projects"),
+  getActiveProject: () => invoke<ProjectSummary | null>("get_active_project"),
+  createProject: (name: string, applicationId: string) =>
+    invoke<ProjectSummary>("create_project", { name, applicationId }),
+  openProject: (projectId: string) => invoke<void>("open_project", { projectId }),
+  updateProjectApplication: (projectId: string, applicationId: string) =>
+    invoke<ProjectSummary>("update_project_application", { projectId, applicationId }),
+  deleteProject: (projectId: string) => invoke<void>("delete_project", { projectId }),
+  stageDelivery: (sourcePaths: string[], projectId: string | null) =>
+    invoke<DeliveryPreview>("stage_delivery", { sourcePaths, projectId }),
+  previewDeliveryWithMode: (stagingSessionId: string, applyMode: string) =>
+    invoke<DeliveryPreview>("preview_delivery_with_mode", {
+      stagingSessionId,
+      applyMode,
+    }),
+  applyStagedDelivery: (
+    stagingSessionId: string,
+    changeIds: string[],
+    applyMode: string,
+    newProjectName: string | null,
+    applicationId: string | null,
+  ) =>
+    invoke<ApplyDeliveryResult>("apply_staged_delivery", {
+      stagingSessionId,
+      changeIds,
+      applyMode,
+      newProjectName,
+      applicationId,
+    }),
+  refreshProjectSchedule: () => invoke<number>("refresh_project_schedule"),
+  getScheduleStale: () => invoke<boolean>("get_schedule_stale"),
 };
 
 export function formatDuration(ms: number): string {

@@ -5197,6 +5197,7 @@ dependencies = [
  "rustls",
  "serde",
  "serde_json",
+ "sha2",
  "symphonia",
  "tar",
  "tauri",
@@ -5206,6 +5207,7 @@ dependencies = [
  "thiserror 2.0.20",
  "tokio",
  "tower-http",
+ "uuid",
  "walkdir",
 ]
 
