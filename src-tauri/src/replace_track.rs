@@ -496,6 +496,15 @@ fn resolve_library_dest_path(db: &Database, track_id: i64) -> Result<String, Str
 
 
 
+pub fn validate_replacement_source(
+    db: &Database,
+    track_id: i64,
+    source_path: &Path,
+) -> Result<(), String> {
+    let dest_path = resolve_library_dest_path(db, track_id)?;
+    validate_source_for_replace(&dest_path, source_path)
+}
+
 fn validate_source_for_replace(dest_path: &str, source_path: &Path) -> Result<(), String> {
 
     if !source_path.is_file() {

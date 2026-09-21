@@ -12,6 +12,7 @@ use crate::models::{
     WaveformPeaks,
 };
 use crate::player::AudioPlayer;
+use crate::replace_remote_upload::ReplaceRemoteUploadManager;
 use crate::scanner;
 
 pub struct AppState {
@@ -19,6 +20,7 @@ pub struct AppState {
     pub player: Arc<AudioPlayer>,
     pub app_data_dir: PathBuf,
     pub audio_cache: AudioCacheWorker,
+    pub replace_remote_upload: ReplaceRemoteUploadManager,
 }
 
 fn teardown_library(state: &AppState) -> Result<PlaybackState, String> {
@@ -237,6 +239,57 @@ pub fn replace_library_track_file(
     let _ = app.emit("library-updated", ());
     state.audio_cache.kick();
     Ok(track)
+}
+
+#[tauri::command]
+pub fn start_replace_remote_upload(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    track_id: i64,
+) -> Result<crate::replace_remote_upload::ReplaceRemoteUploadStartInfo, String> {
+    state.replace_remote_upload.start(
+        app,
+        Arc::clone(&state.db),
+        &state.app_data_dir,
+        track_id,
+    )
+}
+
+#[tauri::command]
+pub fn stop_replace_remote_upload(state: State<'_, AppState>) -> Result<(), String> {
+    state
+        .replace_remote_upload
+        .stop(&state.app_data_dir);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn get_replace_remote_upload_status(
+    state: State<'_, AppState>,
+) -> Result<crate::replace_remote_upload::ReplaceRemoteUploadStatus, String> {
+    Ok(state.replace_remote_upload.status())
+}
+
+#[tauri::command]
+pub fn get_replace_remote_upload_log_path(
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    Ok(crate::replace_remote_upload::ReplaceRemoteUploadManager::log_file_path(
+        &state.app_data_dir,
+    ))
+}
+
+#[tauri::command]
+pub fn get_replace_remote_upload_logs_dir(
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    Ok(
+        crate::replace_remote_upload::ReplaceRemoteUploadManager::logs_dir_path(
+            &state.app_data_dir,
+        )
+        .to_string_lossy()
+        .into_owned(),
+    )
 }
 
 #[tauri::command]
@@ -1225,5 +1278,6 @@ pub fn init_state(app: &AppHandle) -> Result<AppState, String> {
         player,
         app_data_dir: data_dir,
         audio_cache,
+        replace_remote_upload: ReplaceRemoteUploadManager::new(),
     })
 }

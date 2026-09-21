@@ -1,5 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
+import { openPath } from "@tauri-apps/plugin-opener";
+import { QRCodeSVG } from "qrcode.react";
 
 import {
   api,
@@ -41,6 +44,18 @@ export function ReplaceTrackFileModal({ track, onClose }: ReplaceTrackFileModalP
   const [loading, setLoading] = useState(false);
   const [committing, setCommitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [remoteUploadUrl, setRemoteUploadUrl] = useState<string | null>(null);
+  const [remoteAlternateUrls, setRemoteAlternateUrls] = useState<string[]>([]);
+  const [remoteLocalhostUrl, setRemoteLocalhostUrl] = useState<string | null>(null);
+  const [remoteWaiting, setRemoteWaiting] = useState(false);
+  const [remoteStarting, setRemoteStarting] = useState(false);
+  const [remoteLogPath, setRemoteLogPath] = useState<string | null>(null);
+  const remoteStartInFlight = useRef(false);
+
+  const handleClose = useCallback(() => {
+    void api.stopReplaceRemoteUpload();
+    onClose();
+  }, [onClose]);
 
   const tagKeys = useMemo(() => {
     if (!preview) return [];
@@ -61,14 +76,87 @@ export function ReplaceTrackFileModal({ track, onClose }: ReplaceTrackFileModalP
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !committing) onClose();
+      if (event.key === "Escape" && !committing) handleClose();
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [committing, onClose]);
+  }, [committing, handleClose]);
+
+  useEffect(() => {
+    void api.getReplaceRemoteUploadLogPath().then(setRemoteLogPath).catch(() => {});
+  }, []);
+
+  const openLogsFolder = useCallback(async () => {
+    try {
+      const dir = await api.getReplaceRemoteUploadLogsDir();
+      await openPath(dir);
+    } catch {
+      setError("Could not open the diagnostics log folder.");
+    }
+  }, []);
+
+  const applySourcePath = useCallback(
+    async (selected: string) => {
+      setError(null);
+      setLoading(true);
+      setSourcePath(selected);
+      try {
+        const result = await api.previewReplaceLibraryTrackFile(track.id, selected);
+        setPreview(result);
+        setRemoteWaiting(false);
+        setRemoteUploadUrl(null);
+        setRemoteAlternateUrls([]);
+        setRemoteLocalhostUrl(null);
+      } catch (err) {
+        setSourcePath(null);
+        setPreview(null);
+        setError(String(err));
+      } finally {
+        setLoading(false);
+      }
+    },
+    [track.id],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    const unlistenPromise = listen<{ trackId: number; sourcePath: string }>(
+      "replace-remote-upload-ready",
+      (event) => {
+        if (cancelled || event.payload.trackId !== track.id) return;
+        void applySourcePath(event.payload.sourcePath);
+      },
+    );
+    return () => {
+      cancelled = true;
+      void unlistenPromise.then((unlisten) => unlisten());
+    };
+  }, [applySourcePath, track.id]);
+
+  useEffect(() => {
+    if (!remoteWaiting || preview) return;
+
+    const interval = window.setInterval(() => {
+      void api.getReplaceRemoteUploadStatus().then((status) => {
+        if (status.status === "failed" && status.error) {
+          setError(status.error);
+          setRemoteWaiting(false);
+          setRemoteUploadUrl(null);
+          setRemoteAlternateUrls([]);
+          setRemoteLocalhostUrl(null);
+        }
+      });
+    }, 2000);
+
+    return () => window.clearInterval(interval);
+  }, [preview, remoteWaiting]);
 
   const chooseFile = useCallback(async () => {
     setError(null);
+    setRemoteUploadUrl(null);
+    setRemoteAlternateUrls([]);
+    setRemoteLocalhostUrl(null);
+    setRemoteWaiting(false);
     const selected = await open({
       multiple: false,
       title: "Choose replacement audio file",
@@ -76,19 +164,42 @@ export function ReplaceTrackFileModal({ track, onClose }: ReplaceTrackFileModalP
     });
     if (selected == null || Array.isArray(selected)) return;
 
-    setLoading(true);
-    setSourcePath(selected);
+    await applySourcePath(selected);
+  }, [applySourcePath]);
+
+  const startRemoteUpload = useCallback(async () => {
+    if (remoteStartInFlight.current) return;
+    remoteStartInFlight.current = true;
+    setError(null);
+    setRemoteStarting(true);
     try {
-      const result = await api.previewReplaceLibraryTrackFile(track.id, selected);
-      setPreview(result);
+      const info = await api.startReplaceRemoteUpload(track.id);
+      setRemoteUploadUrl(info.uploadUrl);
+      setRemoteAlternateUrls(info.alternateUrls);
+      setRemoteLocalhostUrl(info.localhostTestUrl);
+      setRemoteLogPath(info.logFilePath);
+      setRemoteWaiting(true);
     } catch (err) {
-      setSourcePath(null);
-      setPreview(null);
+      setRemoteUploadUrl(null);
+      setRemoteAlternateUrls([]);
+      setRemoteLocalhostUrl(null);
+      setRemoteLogPath(null);
+      setRemoteWaiting(false);
       setError(String(err));
     } finally {
-      setLoading(false);
+      remoteStartInFlight.current = false;
+      setRemoteStarting(false);
     }
   }, [track.id]);
+
+  const copyUploadUrl = useCallback(async () => {
+    if (!remoteUploadUrl) return;
+    try {
+      await navigator.clipboard.writeText(remoteUploadUrl);
+    } catch {
+      setError("Could not copy URL to clipboard.");
+    }
+  }, [remoteUploadUrl]);
 
   const handleConfirm = useCallback(async () => {
     if (!sourcePath) return;
@@ -99,15 +210,15 @@ export function ReplaceTrackFileModal({ track, onClose }: ReplaceTrackFileModalP
       patchTrack(updated);
       invalidateTrackTags(track.id);
       await refresh();
-      onClose();
+      handleClose();
     } catch (err) {
       setError(String(err));
     } finally {
       setCommitting(false);
     }
-  }, [onClose, patchTrack, refresh, sourcePath, track.id]);
+  }, [handleClose, patchTrack, refresh, sourcePath, track.id]);
 
-  const busy = loading || committing;
+  const busy = loading || committing || remoteStarting;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
@@ -123,7 +234,7 @@ export function ReplaceTrackFileModal({ track, onClose }: ReplaceTrackFileModalP
           </h2>
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleClose}
             disabled={busy}
             className="rounded-md px-2 py-1 text-muted hover:bg-surface-hover hover:text-foreground disabled:opacity-40"
             aria-label="Close"
@@ -145,8 +256,78 @@ export function ReplaceTrackFileModal({ track, onClose }: ReplaceTrackFileModalP
                 choose stays where it is on your computer—only a copy in the library folder
                 will be updated.
               </p>
+              {remoteLogPath && (
+                <p className="text-xs text-muted">
+                  Diagnostics log:{" "}
+                  <span className="break-all text-foreground">{remoteLogPath}</span>{" "}
+                  <button
+                    type="button"
+                    onClick={() => void openLogsFolder()}
+                    className="text-accent hover:underline"
+                  >
+                    Open log folder
+                  </button>
+                </p>
+              )}
               {sourcePath && loading && (
                 <p className="text-muted">Verifying selected file…</p>
+              )}
+              {remoteUploadUrl && (
+                <div className="space-y-3 rounded-md border border-border bg-background/40 p-3">
+                  <p className="font-medium text-foreground">Upload from your phone</p>
+                  <p className="text-muted">
+                    Connect the phone to the same Wi‑Fi as this computer. Scan the code or open
+                    the link, accept the certificate warning, then upload one audio file. Windows
+                    may ask to allow TrackVault on private networks the first time. When running{" "}
+                    <span className="text-foreground">npm run tauri dev</span>, allow{" "}
+                    <span className="break-all text-foreground">
+                      src-tauri/target/debug/trackvault.exe
+                    </span>{" "}
+                    — not a different install path.
+                  </p>
+                  {remoteLocalhostUrl && (
+                    <p className="text-xs text-muted">
+                      Test on this PC:{" "}
+                      <a
+                        href={remoteLocalhostUrl}
+                        className="break-all text-accent hover:underline"
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        {remoteLocalhostUrl}
+                      </a>
+                    </p>
+                  )}
+                  <div className="flex flex-col items-center gap-3 sm:flex-row sm:items-start">
+                    <QRCodeSVG value={remoteUploadUrl} size={160} aria-label="Upload URL QR code" />
+                    <div className="min-w-0 flex-1 space-y-2">
+                      <p className="break-all text-xs text-foreground">{remoteUploadUrl}</p>
+                      <button
+                        type="button"
+                        onClick={() => void copyUploadUrl()}
+                        disabled={busy}
+                        className="rounded-md border border-border px-2 py-1 text-xs text-foreground hover:bg-surface-hover disabled:opacity-40"
+                      >
+                        Copy link
+                      </button>
+                      {remoteAlternateUrls.length > 0 && (
+                        <div className="space-y-1 pt-1">
+                          <p className="text-xs text-muted">If the QR does not connect, try:</p>
+                          <ul className="list-inside list-disc text-xs text-foreground">
+                            {remoteAlternateUrls.map((url) => (
+                              <li key={url} className="break-all">
+                                {url}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  {remoteWaiting && !loading && (
+                    <p className="text-muted">Server is ready. Waiting for upload…</p>
+                  )}
+                </div>
               )}
             </div>
           ) : (
@@ -252,21 +433,31 @@ export function ReplaceTrackFileModal({ track, onClose }: ReplaceTrackFileModalP
         <div className="flex flex-wrap justify-end gap-2 border-t border-border px-4 py-3">
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleClose}
             disabled={busy}
             className="rounded-md px-3 py-1.5 text-sm text-foreground hover:bg-surface-hover disabled:opacity-40"
           >
             Cancel
           </button>
           {!preview ? (
-            <button
-              type="button"
-              onClick={() => void chooseFile()}
-              disabled={busy}
-              className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-40"
-            >
-              Choose file…
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => void startRemoteUpload()}
+                disabled={busy || remoteWaiting}
+                className="rounded-md border border-border px-3 py-1.5 text-sm text-foreground hover:bg-surface-hover disabled:opacity-40"
+              >
+                {remoteStarting ? "Starting server…" : remoteWaiting ? "Waiting for phone…" : "Upload from phone…"}
+              </button>
+              <button
+                type="button"
+                onClick={() => void chooseFile()}
+                disabled={busy}
+                className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-40"
+              >
+                Choose file…
+              </button>
+            </>
           ) : (
             <button
               type="button"

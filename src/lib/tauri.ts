@@ -113,6 +113,24 @@ export interface ReplaceTrackFilePreview {
   collision_message: string | null;
 }
 
+export interface ReplaceRemoteUploadStartInfo {
+  uploadUrl: string;
+  lanIp: string;
+  port: number;
+  expiresAtMs: number;
+  alternateUrls: string[];
+  localhostTestUrl: string;
+  logFilePath: string;
+}
+
+export interface ReplaceRemoteUploadStatus {
+  active: boolean;
+  status: string;
+  sourcePath: string | null;
+  error: string | null;
+  trackId: number | null;
+}
+
 export interface TagField {
   key: string;
   value: string;
@@ -173,6 +191,15 @@ export const api = {
     }),
   replaceLibraryTrackFile: (trackId: number, sourcePath: string) =>
     invoke<Track>("replace_library_track_file", { trackId, sourcePath }),
+  startReplaceRemoteUpload: (trackId: number) =>
+    invoke<ReplaceRemoteUploadStartInfo>("start_replace_remote_upload", { trackId }),
+  stopReplaceRemoteUpload: () => invoke<void>("stop_replace_remote_upload"),
+  getReplaceRemoteUploadStatus: () =>
+    invoke<ReplaceRemoteUploadStatus>("get_replace_remote_upload_status"),
+  getReplaceRemoteUploadLogPath: () =>
+    invoke<string>("get_replace_remote_upload_log_path"),
+  getReplaceRemoteUploadLogsDir: () =>
+    invoke<string>("get_replace_remote_upload_logs_dir"),
   deleteTrack: (trackId: number) =>
     invoke<PlaybackState>("delete_track", { trackId }),
   saveLibraryConfig: () => invoke<string>("save_library_config"),
