@@ -2,8 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import { openPath } from "@tauri-apps/plugin-opener";
-import { QRCodeSVG } from "qrcode.react";
-
 import {
   api,
   formatDuration,
@@ -13,6 +11,7 @@ import {
 import { invalidateTrackTags } from "../lib/trackTagsCache";
 import { useLibrary } from "../hooks/usePlayer";
 import { usePlayerStore } from "../store/playerStore";
+import { RemoteUploadPanel } from "./RemoteUploadPanel";
 
 const AUDIO_EXTENSIONS = ["mp3", "flac", "wav", "ogg", "m4a", "aac", "mp4", "aiff"];
 
@@ -272,63 +271,14 @@ export function ReplaceTrackFileModal({ track, onClose }: ReplaceTrackFileModalP
               {sourcePath && loading && (
                 <p className="text-muted">Verifying selected file…</p>
               )}
-              {remoteUploadUrl && (
-                <div className="space-y-3 rounded-md border border-border bg-background/40 p-3">
-                  <p className="font-medium text-foreground">Upload from your phone</p>
-                  <p className="text-muted">
-                    Connect the phone to the same Wi‑Fi as this computer. Scan the code or open
-                    the link, accept the certificate warning, then upload one audio file. Windows
-                    may ask to allow TrackVault on private networks the first time. When running{" "}
-                    <span className="text-foreground">npm run tauri dev</span>, allow{" "}
-                    <span className="break-all text-foreground">
-                      src-tauri/target/debug/trackvault.exe
-                    </span>{" "}
-                    — not a different install path.
-                  </p>
-                  {remoteLocalhostUrl && (
-                    <p className="text-xs text-muted">
-                      Test on this PC:{" "}
-                      <a
-                        href={remoteLocalhostUrl}
-                        className="break-all text-accent hover:underline"
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        {remoteLocalhostUrl}
-                      </a>
-                    </p>
-                  )}
-                  <div className="flex flex-col items-center gap-3 sm:flex-row sm:items-start">
-                    <QRCodeSVG value={remoteUploadUrl} size={160} aria-label="Upload URL QR code" />
-                    <div className="min-w-0 flex-1 space-y-2">
-                      <p className="break-all text-xs text-foreground">{remoteUploadUrl}</p>
-                      <button
-                        type="button"
-                        onClick={() => void copyUploadUrl()}
-                        disabled={busy}
-                        className="rounded-md border border-border px-2 py-1 text-xs text-foreground hover:bg-surface-hover disabled:opacity-40"
-                      >
-                        Copy link
-                      </button>
-                      {remoteAlternateUrls.length > 0 && (
-                        <div className="space-y-1 pt-1">
-                          <p className="text-xs text-muted">If the QR does not connect, try:</p>
-                          <ul className="list-inside list-disc text-xs text-foreground">
-                            {remoteAlternateUrls.map((url) => (
-                              <li key={url} className="break-all">
-                                {url}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  {remoteWaiting && !loading && (
-                    <p className="text-muted">Server is ready. Waiting for upload…</p>
-                  )}
-                </div>
-              )}
+              <RemoteUploadPanel
+                uploadUrl={remoteUploadUrl}
+                alternateUrls={remoteAlternateUrls}
+                localhostTestUrl={remoteLocalhostUrl}
+                waiting={remoteWaiting && !loading}
+                busy={busy}
+                onCopyUrl={() => void copyUploadUrl()}
+              />
             </div>
           ) : (
             <div className="space-y-3 text-sm text-foreground">

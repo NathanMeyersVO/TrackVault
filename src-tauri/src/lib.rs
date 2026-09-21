@@ -40,7 +40,8 @@ use commands::{
     set_app_settings, set_application_settings, set_collection_continuous_volume, set_collection_playback_mode,
     set_library_folder, set_taglist_value_title, set_volume, stop_playback, update_track_tags, upload_collection_tracks, upload_tracks,
     preview_replace_library_track_file, replace_library_track_file,
-    start_replace_remote_upload, stop_replace_remote_upload, get_replace_remote_upload_status,
+    start_replace_remote_upload, start_library_remote_upload, start_collection_remote_upload,
+    stop_replace_remote_upload, get_replace_remote_upload_status,
     get_replace_remote_upload_log_path, get_replace_remote_upload_logs_dir,
 };
 use tauri::Manager;
@@ -69,6 +70,8 @@ pub fn run() {
             preview_replace_library_track_file,
             replace_library_track_file,
             start_replace_remote_upload,
+            start_library_remote_upload,
+            start_collection_remote_upload,
             stop_replace_remote_upload,
             get_replace_remote_upload_status,
             get_replace_remote_upload_log_path,

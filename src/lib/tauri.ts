@@ -126,9 +126,12 @@ export interface ReplaceRemoteUploadStartInfo {
 export interface ReplaceRemoteUploadStatus {
   active: boolean;
   status: string;
+  mode: string;
   sourcePath: string | null;
+  sourcePaths: string[];
   error: string | null;
   trackId: number | null;
+  collectionId: number | null;
 }
 
 export interface TagField {
@@ -193,6 +196,12 @@ export const api = {
     invoke<Track>("replace_library_track_file", { trackId, sourcePath }),
   startReplaceRemoteUpload: (trackId: number) =>
     invoke<ReplaceRemoteUploadStartInfo>("start_replace_remote_upload", { trackId }),
+  startLibraryRemoteUpload: () =>
+    invoke<ReplaceRemoteUploadStartInfo>("start_library_remote_upload"),
+  startCollectionRemoteUpload: (collectionId: number) =>
+    invoke<ReplaceRemoteUploadStartInfo>("start_collection_remote_upload", {
+      collectionId,
+    }),
   stopReplaceRemoteUpload: () => invoke<void>("stop_replace_remote_upload"),
   getReplaceRemoteUploadStatus: () =>
     invoke<ReplaceRemoteUploadStatus>("get_replace_remote_upload_status"),

@@ -24,6 +24,7 @@ use tokio::net::TcpListener;
 use crate::db::Database;
 use crate::replace_track;
 use crate::replace_upload_log::{self, ReplaceUploadLog};
+use crate::scanner::is_audio_file;
 
 const SESSION_TTL_SECS: u64 = 30 * 60;
 const MAX_UPLOAD_BYTES: usize = 500 * 1024 * 1024;
@@ -110,9 +111,12 @@ fn ensure_rustls_crypto_provider() {
 pub struct ReplaceRemoteUploadStatus {
     pub active: bool,
     pub status: String,
+    pub mode: String,
     pub source_path: Option<String>,
+    pub source_paths: Vec<String>,
     pub error: Option<String>,
     pub track_id: Option<i64>,
+    pub collection_id: Option<i64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -122,8 +126,39 @@ enum SessionPhase {
     Failed,
 }
 
+#[derive(Debug, Clone)]
+enum SessionKind {
+    Replace { track_id: i64 },
+    LibraryImport,
+    CollectionImport { collection_id: i64 },
+}
+
+impl SessionKind {
+    fn mode_str(&self) -> &'static str {
+        match self {
+            SessionKind::Replace { .. } => "replace",
+            SessionKind::LibraryImport => "library",
+            SessionKind::CollectionImport { .. } => "collection",
+        }
+    }
+
+    fn track_id(&self) -> Option<i64> {
+        match self {
+            SessionKind::Replace { track_id } => Some(*track_id),
+            _ => None,
+        }
+    }
+
+    fn collection_id(&self) -> Option<i64> {
+        match self {
+            SessionKind::CollectionImport { collection_id } => Some(*collection_id),
+            _ => None,
+        }
+    }
+}
+
 struct SessionRecord {
-    track_id: i64,
+    kind: SessionKind,
     token: String,
     upload_url: String,
     lan_ip: String,
@@ -131,6 +166,7 @@ struct SessionRecord {
     expires_at_ms: i64,
     phase: SessionPhase,
     source_path: Option<PathBuf>,
+    received_paths: Vec<PathBuf>,
     error: Option<String>,
     temp_dir: PathBuf,
 }
@@ -206,6 +242,68 @@ impl ReplaceRemoteUploadManager {
         app_data_dir: &Path,
         track_id: i64,
     ) -> Result<ReplaceRemoteUploadStartInfo, String> {
+        if !db.lock().is_library_track(track_id).map_err(|e| e.to_string())? {
+            return Err("Only library tracks can be replaced".to_string());
+        }
+        self.start_with_kind(
+            app,
+            db,
+            app_data_dir,
+            SessionKind::Replace { track_id },
+        )
+    }
+
+    pub fn start_library_import(
+        &self,
+        app: AppHandle,
+        db: Arc<Mutex<Database>>,
+        app_data_dir: &Path,
+    ) -> Result<ReplaceRemoteUploadStartInfo, String> {
+        {
+            let db_guard = db.lock();
+            if db_guard
+                .get_library_folder()
+                .map_err(|e| e.to_string())?
+                .is_none()
+            {
+                return Err("No library folder configured".to_string());
+            }
+        }
+        self.start_with_kind(app, db, app_data_dir, SessionKind::LibraryImport)
+    }
+
+    pub fn start_collection_import(
+        &self,
+        app: AppHandle,
+        db: Arc<Mutex<Database>>,
+        app_data_dir: &Path,
+        collection_id: i64,
+    ) -> Result<ReplaceRemoteUploadStartInfo, String> {
+        {
+            let db_guard = db.lock();
+            if db_guard
+                .get_collection(collection_id)
+                .map_err(|e| e.to_string())?
+                .is_none()
+            {
+                return Err("Collection not found".to_string());
+            }
+        }
+        self.start_with_kind(
+            app,
+            db,
+            app_data_dir,
+            SessionKind::CollectionImport { collection_id },
+        )
+    }
+
+    fn start_with_kind(
+        &self,
+        app: AppHandle,
+        db: Arc<Mutex<Database>>,
+        app_data_dir: &Path,
+        kind: SessionKind,
+    ) -> Result<ReplaceRemoteUploadStartInfo, String> {
         let handshake = self
             .start_handshake
             .try_lock()
@@ -233,9 +331,7 @@ impl ReplaceRemoteUploadManager {
 
         self.stop_with_reason(app_data_dir, StopReason::NewSession, None);
 
-        if !db.lock().is_library_track(track_id).map_err(|e| e.to_string())? {
-            return Err("Only library tracks can be replaced".to_string());
-        }
+        let track_id = kind.track_id().unwrap_or(-1);
 
         let lan_ips = enumerate_private_ipv4s()?;
         let primary_ip = pick_primary_ipv4(&lan_ips);
@@ -253,7 +349,8 @@ impl ReplaceRemoteUploadManager {
             "INFO",
             "start",
             &format!(
-                "track_id={track_id} primary_ip={primary_ip} lan_ips={lan_ips_str} debug={} token_prefix={}",
+                "mode={} track_id={track_id} primary_ip={primary_ip} lan_ips={lan_ips_str} debug={} token_prefix={}",
+                kind.mode_str(),
                 cfg!(debug_assertions),
                 replace_upload_log::token_prefix(&token)
             ),
@@ -411,7 +508,7 @@ impl ReplaceRemoteUploadManager {
         {
             let mut session = self.session.lock();
             *session = Some(SessionRecord {
-                track_id,
+                kind,
                 token,
                 upload_url: upload_url.clone(),
                 lan_ip: primary_ip.to_string(),
@@ -419,6 +516,7 @@ impl ReplaceRemoteUploadManager {
                 expires_at_ms,
                 phase: SessionPhase::Waiting,
                 source_path: None,
+                received_paths: Vec::new(),
                 error: None,
                 temp_dir,
             });
@@ -475,19 +573,31 @@ impl ReplaceRemoteUploadManager {
             return ReplaceRemoteUploadStatus {
                 active: false,
                 status: "idle".to_string(),
+                mode: "idle".to_string(),
                 source_path: None,
+                source_paths: Vec::new(),
                 error: None,
                 track_id: None,
+                collection_id: None,
             };
         };
+
+        let source_paths: Vec<String> = record
+            .received_paths
+            .iter()
+            .map(|path| path.to_string_lossy().into_owned())
+            .collect();
 
         if now_ms() > record.expires_at_ms && record.phase == SessionPhase::Waiting {
             return ReplaceRemoteUploadStatus {
                 active: true,
                 status: "expired".to_string(),
+                mode: record.kind.mode_str().to_string(),
                 source_path: None,
+                source_paths,
                 error: Some("Upload session expired.".to_string()),
-                track_id: Some(record.track_id),
+                track_id: record.kind.track_id(),
+                collection_id: record.kind.collection_id(),
             };
         }
 
@@ -500,12 +610,15 @@ impl ReplaceRemoteUploadManager {
         ReplaceRemoteUploadStatus {
             active: true,
             status: status.to_string(),
+            mode: record.kind.mode_str().to_string(),
             source_path: record
                 .source_path
                 .as_ref()
                 .map(|path| path.to_string_lossy().into_owned()),
+            source_paths,
             error: record.error.clone(),
-            track_id: Some(record.track_id),
+            track_id: record.kind.track_id(),
+            collection_id: record.kind.collection_id(),
         }
     }
 }
@@ -751,7 +864,17 @@ async fn upload_page(
         return StatusCode::NOT_FOUND.into_response();
     }
 
-    Html(UPLOAD_PAGE_HTML).into_response()
+    let html = {
+        let session = ctx.session.lock();
+        match session.as_ref().map(|r| &r.kind) {
+            Some(SessionKind::Replace { .. }) => UPLOAD_PAGE_REPLACE_HTML,
+            Some(SessionKind::LibraryImport) | Some(SessionKind::CollectionImport { .. }) => {
+                UPLOAD_PAGE_IMPORT_HTML
+            }
+            None => UPLOAD_PAGE_REPLACE_HTML,
+        }
+    };
+    Html(html).into_response()
 }
 
 async fn receive_upload(
@@ -763,7 +886,7 @@ async fn receive_upload(
         return StatusCode::NOT_FOUND.into_response();
     }
 
-    let (track_id, temp_dir) = {
+    let (session_kind, temp_dir) = {
         let session = ctx.session.lock();
         let Some(record) = session.as_ref() else {
             return html_message(
@@ -772,11 +895,20 @@ async fn receive_upload(
                 "Return to TrackVault and start upload again.",
             );
         };
-        if record.phase != SessionPhase::Waiting {
+        if matches!(record.kind, SessionKind::Replace { .. })
+            && record.phase != SessionPhase::Waiting
+        {
             return html_message(
                 StatusCode::CONFLICT,
                 "Upload already received",
                 "This link can only be used once.",
+            );
+        }
+        if record.phase == SessionPhase::Failed {
+            return html_message(
+                StatusCode::GONE,
+                "Upload session failed",
+                "Return to TrackVault and start upload again.",
             );
         }
         if now_ms() > record.expires_at_ms {
@@ -786,11 +918,14 @@ async fn receive_upload(
                 "Return to TrackVault and start upload again.",
             );
         }
-        (record.track_id, record.temp_dir.clone())
+        (record.kind.clone(), record.temp_dir.clone())
     };
 
-    let mut file_name: Option<String> = None;
-    let mut bytes: Option<Vec<u8>> = None;
+    let allow_multiple = matches!(
+        session_kind,
+        SessionKind::LibraryImport | SessionKind::CollectionImport { .. }
+    );
+    let mut uploads: Vec<(String, Vec<u8>)> = Vec::new();
 
     loop {
         match multipart.next_field().await {
@@ -798,9 +933,23 @@ async fn receive_upload(
                 if field.name() != Some("file") {
                     continue;
                 }
-                file_name = field.file_name().map(|name| name.to_string());
+                let Some(raw_name) = field
+                    .file_name()
+                    .filter(|name| !name.is_empty())
+                    .map(|name| name.to_string())
+                else {
+                    continue;
+                };
                 match field.bytes().await {
-                    Ok(data) => bytes = Some(data.to_vec()),
+                    Ok(data) => {
+                        if data.is_empty() {
+                            continue;
+                        }
+                        uploads.push((raw_name, data.to_vec()));
+                        if !allow_multiple {
+                            break;
+                        }
+                    }
                     Err(error) => {
                         let detail = user_facing_upload_read_error(&error);
                         if let Some(log) = &ctx.log {
@@ -814,7 +963,6 @@ async fn receive_upload(
                         return html_message(StatusCode::BAD_REQUEST, "Upload failed", &detail);
                     }
                 }
-                break;
             }
             Ok(None) => break,
             Err(error) => {
@@ -832,104 +980,178 @@ async fn receive_upload(
         }
     }
 
-    let Some(raw_name) = file_name.filter(|name| !name.is_empty()) else {
+    if uploads.is_empty() {
         return html_message(
             StatusCode::BAD_REQUEST,
             "No file selected",
             "Choose an audio file and try again.",
         );
-    };
-    let Some(data) = bytes else {
+    }
+
+    if matches!(session_kind, SessionKind::Replace { .. }) && uploads.len() > 1 {
         return html_message(
             StatusCode::BAD_REQUEST,
-            "No file uploaded",
-            "Choose an audio file and try again.",
-        );
-    };
-    if data.is_empty() {
-        return html_message(
-            StatusCode::BAD_REQUEST,
-            "Empty file",
-            "The selected file has no data.",
+            "One file only",
+            "Select a single audio file for replacement.",
         );
     }
 
-    let safe_name = sanitize_file_name(&raw_name);
-    let byte_len = data.len();
-    if let Some(log) = &ctx.log {
-        log.event(
-            &ctx.session_log_id,
-            "INFO",
-            "upload_received",
-            &format!("file=\"{safe_name}\" bytes={byte_len}"),
-        );
-    }
+    let mut last_response = html_message(
+        StatusCode::BAD_REQUEST,
+        "Upload failed",
+        "No files were saved.",
+    );
 
-    let temp_path = temp_dir.join(&safe_name);
-    if let Err(error) = std::fs::write(&temp_path, &data) {
-        return html_message(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "Save failed",
-            &format!("Could not save upload: {error}"),
-        );
-    }
-
-    let validation_error = {
-        let db = ctx.db.lock();
-        replace_track::validate_replacement_source(&db, track_id, &temp_path)
-            .err()
-    };
-    if let Some(message) = validation_error {
-        let _ = std::fs::remove_file(&temp_path);
+    for (raw_name, data) in uploads {
+        let safe_name = sanitize_file_name(&raw_name);
+        let byte_len = data.len();
         if let Some(log) = &ctx.log {
             log.event(
                 &ctx.session_log_id,
-                "WARN",
-                "upload_rejected",
-                &format!("err=\"{message}\""),
+                "INFO",
+                "upload_received",
+                &format!("file=\"{safe_name}\" bytes={byte_len}"),
             );
         }
-        return html_message(StatusCode::BAD_REQUEST, "Invalid audio file", &message);
-    }
 
-    let source_path = temp_path.to_string_lossy().into_owned();
-    {
-        let mut session = ctx.session.lock();
-        let Some(record) = session.as_mut() else {
-            let _ = std::fs::remove_file(&temp_path);
+        let temp_path = unique_temp_path(&temp_dir, &safe_name);
+        if let Err(error) = std::fs::write(&temp_path, &data) {
             return html_message(
-                StatusCode::GONE,
-                "Upload session ended",
-                "Return to TrackVault and start upload again.",
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Save failed",
+                &format!("Could not save upload: {error}"),
             );
+        }
+
+        last_response = match &session_kind {
+        SessionKind::Replace { track_id } => {
+            let validation_error = {
+                let db = ctx.db.lock();
+                replace_track::validate_replacement_source(&db, *track_id, &temp_path)
+                    .err()
+            };
+            if let Some(message) = validation_error {
+                let _ = std::fs::remove_file(&temp_path);
+                if let Some(log) = &ctx.log {
+                    log.event(
+                        &ctx.session_log_id,
+                        "WARN",
+                        "upload_rejected",
+                        &format!("err=\"{message}\""),
+                    );
+                }
+                return html_message(StatusCode::BAD_REQUEST, "Invalid audio file", &message);
+            }
+
+            let source_path = temp_path.to_string_lossy().into_owned();
+            {
+                let mut session = ctx.session.lock();
+                let Some(record) = session.as_mut() else {
+                    let _ = std::fs::remove_file(&temp_path);
+                    return html_message(
+                        StatusCode::GONE,
+                        "Upload session ended",
+                        "Return to TrackVault and start upload again.",
+                    );
+                };
+                record.phase = SessionPhase::Ready;
+                record.source_path = Some(temp_path);
+                record.error = None;
+            }
+
+            if let Some(log) = &ctx.log {
+                log.event(
+                    &ctx.session_log_id,
+                    "INFO",
+                    "upload_ready_emit",
+                    &format!("track_id={track_id}"),
+                );
+            }
+
+            let _ = ctx.app.emit(
+                "replace-remote-upload-ready",
+                serde_json::json!({
+                    "trackId": track_id,
+                    "sourcePath": source_path,
+                }),
+            );
+
+            html_message(
+                StatusCode::OK,
+                "Upload received",
+                "You can close this page and confirm the replacement in TrackVault.",
+            )
+        }
+        SessionKind::LibraryImport | SessionKind::CollectionImport { .. } => {
+            if !is_audio_file(&temp_path) {
+                let _ = std::fs::remove_file(&temp_path);
+                if let Some(log) = &ctx.log {
+                    log.event(
+                        &ctx.session_log_id,
+                        "WARN",
+                        "upload_rejected",
+                        &format!("file=\"{safe_name}\" err=\"unsupported file type\""),
+                    );
+                }
+                return html_message(
+                    StatusCode::BAD_REQUEST,
+                    "Invalid audio file",
+                    "Choose a supported audio format (MP3, FLAC, WAV, and similar).",
+                );
+            }
+
+            let (mode, collection_id, all_paths) = {
+                let mut session = ctx.session.lock();
+                let Some(record) = session.as_mut() else {
+                    let _ = std::fs::remove_file(&temp_path);
+                    return html_message(
+                        StatusCode::GONE,
+                        "Upload session ended",
+                        "Return to TrackVault and start upload again.",
+                    );
+                };
+                record.received_paths.push(temp_path);
+                record.error = None;
+                let paths: Vec<String> = record
+                    .received_paths
+                    .iter()
+                    .map(|p| p.to_string_lossy().into_owned())
+                    .collect();
+                (
+                    record.kind.mode_str().to_string(),
+                    record.kind.collection_id(),
+                    paths,
+                )
+            };
+
+            if let Some(log) = &ctx.log {
+                log.event(
+                    &ctx.session_log_id,
+                    "INFO",
+                    "import_file_received",
+                    &format!("file=\"{safe_name}\" total={}", all_paths.len()),
+                );
+            }
+
+            let _ = ctx.app.emit(
+                "remote-import-upload-updated",
+                serde_json::json!({
+                    "mode": mode,
+                    "collectionId": collection_id,
+                    "sourcePaths": all_paths,
+                }),
+            );
+
+            html_message(
+                StatusCode::OK,
+                "Upload received",
+                "You can upload more files or return to TrackVault and tap Upload.",
+            )
+        }
         };
-        record.phase = SessionPhase::Ready;
-        record.source_path = Some(temp_path);
-        record.error = None;
     }
 
-    if let Some(log) = &ctx.log {
-        log.event(
-            &ctx.session_log_id,
-            "INFO",
-            "upload_ready_emit",
-            &format!("track_id={track_id}"),
-        );
-    }
-
-    let _ = ctx.app.emit(
-        "replace-remote-upload-ready",
-        serde_json::json!({
-            "trackId": track_id,
-            "sourcePath": source_path,
-        }),
-    );
-
-    html_message(
-        StatusCode::OK,
-        "Upload received",
-        "You can close this page and confirm the replacement in TrackVault.",
-    )
+    last_response
 }
 
 fn token_matches(ctx: &ServerContext, token: &str) -> bool {
@@ -1030,7 +1252,34 @@ fn now_ms() -> i64 {
         .unwrap_or(0)
 }
 
-const UPLOAD_PAGE_HTML: &str = r#"<!DOCTYPE html>
+fn unique_temp_path(temp_dir: &Path, file_name: &str) -> PathBuf {
+    let mut destination = temp_dir.join(file_name);
+    if !destination.exists() {
+        return destination;
+    }
+
+    let path = Path::new(file_name);
+    let stem = path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("track");
+    let extension = path
+        .extension()
+        .and_then(|s| s.to_str())
+        .map(|ext| format!(".{ext}"))
+        .unwrap_or_default();
+
+    for index in 1..10_000 {
+        destination = temp_dir.join(format!("{stem} ({index}){extension}"));
+        if !destination.exists() {
+            return destination;
+        }
+    }
+
+    temp_dir.join(format!("{stem}-dup{extension}"))
+}
+
+const UPLOAD_PAGE_REPLACE_HTML: &str = r#"<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8"/>
@@ -1050,6 +1299,32 @@ const UPLOAD_PAGE_HTML: &str = r#"<!DOCTYPE html>
   <p>Select one audio file to send to TrackVault on this Wi‑Fi network (maximum 500 MB).</p>
   <form method="post" enctype="multipart/form-data">
     <input type="file" name="file" accept="audio/*,.mp3,.flac,.wav,.ogg,.m4a,.aac,.mp4,.aiff" required />
+    <button type="submit">Upload</button>
+  </form>
+  <p class="note">If your browser warned about the certificate, choose to proceed — this server is temporary and runs only on your local network.</p>
+</body>
+</html>"#;
+
+const UPLOAD_PAGE_IMPORT_HTML: &str = r#"<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>TrackVault — Upload tracks</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 1.5rem; line-height: 1.5; max-width: 28rem; }
+    h1 { font-size: 1.25rem; margin-bottom: 0.5rem; }
+    p { color: #444; }
+    input[type=file] { width: 100%; margin: 1rem 0; }
+    button { font: inherit; padding: 0.6rem 1rem; border: 0; border-radius: 0.375rem; background: #2563eb; color: #fff; }
+    .note { font-size: 0.875rem; margin-top: 1rem; }
+  </style>
+</head>
+<body>
+  <h1>Upload audio to TrackVault</h1>
+  <p>Select one or more audio files (maximum 500 MB each). You can submit again to add more files.</p>
+  <form method="post" enctype="multipart/form-data">
+    <input type="file" name="file" accept="audio/*,.mp3,.flac,.wav,.ogg,.m4a,.aac,.mp4,.aiff" multiple required />
     <button type="submit">Upload</button>
   </form>
   <p class="note">If your browser warned about the certificate, choose to proceed — this server is temporary and runs only on your local network.</p>

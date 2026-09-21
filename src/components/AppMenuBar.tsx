@@ -37,6 +37,9 @@ export function AppMenuBar() {
     chooseLibraryFolder,
     uploadToLibrary,
     uploadToCollection,
+    openLibraryRemoteUpload,
+    openCollectionRemoteUpload,
+    remoteImportModal,
     scanLibrary,
     saveConfiguration,
     requestLoadConfiguration,
@@ -65,8 +68,22 @@ export function AppMenuBar() {
     {
       label: libraryUploading ? "Uploading to library…" : "Upload to Library",
       title: "Copy audio files into the library folder and add them to the index.",
-      onClick: () => void uploadToLibrary(),
       disabled: libraryUploadDisabled,
+      children: [
+        {
+          label: libraryUploading ? "Uploading…" : "Upload locally…",
+          title: "Choose audio files on this computer to copy into the library.",
+          onClick: () => void uploadToLibrary(),
+          disabled: libraryUploadDisabled,
+        },
+        {
+          label: "Upload from phone…",
+          title:
+            "Receive audio over Wi‑Fi from your phone, then add them to the library.",
+          onClick: () => openLibraryRemoteUpload(),
+          disabled: libraryUploadDisabled,
+        },
+      ],
     },
     {
       label: scanning ? "Scanning…" : "Rescan Library",
@@ -110,8 +127,22 @@ export function AppMenuBar() {
         ? "Uploading to stored collection…"
         : collectionUploadLabel,
       title: "Copy audio files into the active stored collection.",
-      onClick: () => void uploadToCollection(),
       disabled: collectionUploadDisabled,
+      children: [
+        {
+          label: collectionUploading ? "Uploading…" : "Upload locally…",
+          title: "Choose audio files on this computer to copy into the collection.",
+          onClick: () => void uploadToCollection(),
+          disabled: collectionUploadDisabled,
+        },
+        {
+          label: "Upload from phone…",
+          title:
+            "Receive audio over Wi‑Fi from your phone, then add them to the active collection.",
+          onClick: () => openCollectionRemoteUpload(),
+          disabled: collectionUploadDisabled,
+        },
+      ],
     },
   ];
 
@@ -202,6 +233,7 @@ export function AppMenuBar() {
       </header>
       {libraryUploadConfirmDialog}
       {collectionUploadConfirmDialog}
+      {remoteImportModal}
       {loadConfigConfirmDialog}
       {closeLibraryConfirmDialog}
       {changeLibraryConfirmDialog}

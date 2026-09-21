@@ -2,40 +2,15 @@ import { useCallback, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 
 import { ConfirmDialog } from "../components/ConfirmDialog";
-import { api, type UploadResult } from "../lib/tauri";
+import { api } from "../lib/tauri";
+import {
+  formatLibraryConflictMessage,
+  formatUploadResult,
+} from "../lib/uploadFeedback";
 import { useLibrary } from "./usePlayer";
 import { usePlayerStore } from "../store/playerStore";
 
 const AUDIO_EXTENSIONS = ["mp3", "flac", "wav", "ogg", "m4a", "aac", "mp4", "aiff"];
-
-function formatUploadResult(result: UploadResult): string {
-  if (result.uploaded === 0 && result.errors.length === 0) {
-    return "No tracks were uploaded.";
-  }
-
-  const parts: string[] = [];
-  if (result.uploaded > 0) {
-    parts.push(
-      `Uploaded ${result.uploaded} track${result.uploaded === 1 ? "" : "s"}`,
-    );
-  }
-  if (result.skipped > 0) {
-    parts.push(
-      `Skipped ${result.skipped} file${result.skipped === 1 ? "" : "s"}`,
-    );
-  }
-  if (result.errors.length > 0) {
-    parts.push(result.errors[0]);
-  }
-  return parts.join(". ");
-}
-
-function formatConflictMessage(conflicts: string[]): string {
-  const preview = conflicts.slice(0, 5).join("\n");
-  const remaining = conflicts.length - 5;
-  const suffix = remaining > 0 ? `\n…and ${remaining} more.` : "";
-  return `These files already exist in UPLOADED:\n${preview}${suffix}\n\nOverwrite the existing files, or keep both copies?`;
-}
 
 export function useUploadTracks() {
   const { refresh } = useLibrary();
@@ -125,7 +100,7 @@ export function useUploadTracks() {
   const uploadConfirmDialog = pendingUpload ? (
     <ConfirmDialog
       title="Replace existing files?"
-      message={formatConflictMessage(pendingUpload.conflicts)}
+      message={formatLibraryConflictMessage(pendingUpload.conflicts)}
       confirmLabel="Overwrite"
       secondaryLabel="Keep both"
       cancelLabel="Cancel"
@@ -146,6 +121,14 @@ export function useUploadTracks() {
     clearUploadFeedback: useCallback(() => {
       setUploadMessage(null);
       setUploadError(null);
+    }, []),
+    showUploadMessage: useCallback((message: string) => {
+      setUploadMessage(message);
+      setUploadError(null);
+    }, []),
+    showUploadError: useCallback((message: string) => {
+      setUploadError(message);
+      setUploadMessage(null);
     }, []),
   };
 }

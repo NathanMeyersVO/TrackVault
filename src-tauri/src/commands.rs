@@ -256,6 +256,32 @@ pub fn start_replace_remote_upload(
 }
 
 #[tauri::command]
+pub fn start_library_remote_upload(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<crate::replace_remote_upload::ReplaceRemoteUploadStartInfo, String> {
+    state.replace_remote_upload.start_library_import(
+        app,
+        Arc::clone(&state.db),
+        &state.app_data_dir,
+    )
+}
+
+#[tauri::command]
+pub fn start_collection_remote_upload(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    collection_id: i64,
+) -> Result<crate::replace_remote_upload::ReplaceRemoteUploadStartInfo, String> {
+    state.replace_remote_upload.start_collection_import(
+        app,
+        Arc::clone(&state.db),
+        &state.app_data_dir,
+        collection_id,
+    )
+}
+
+#[tauri::command]
 pub fn stop_replace_remote_upload(state: State<'_, AppState>) -> Result<(), String> {
     state
         .replace_remote_upload

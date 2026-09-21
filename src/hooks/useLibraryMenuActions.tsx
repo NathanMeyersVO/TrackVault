@@ -9,6 +9,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { importCollectionFromDialog } from "../components/CollectionView";
+import { RemoteImportFromPhoneModal } from "../components/RemoteImportFromPhoneModal";
 import { api, type PlaybackState } from "../lib/tauri";
 import { clearTrackTagsCache } from "../lib/trackTagsCache";
 import { useLibrary } from "./usePlayer";
@@ -59,6 +60,8 @@ export function useLibraryMenuActions() {
     uploadError: libraryUploadError,
     uploadConfirmDialog: libraryUploadConfirmDialog,
     clearUploadFeedback: clearLibraryUploadFeedback,
+    showUploadMessage: showLibraryUploadMessage,
+    showUploadError: showLibraryUploadError,
   } = libraryUpload;
   const {
     uploadTracks: uploadToCollection,
@@ -67,6 +70,8 @@ export function useLibraryMenuActions() {
     uploadError: collectionUploadError,
     uploadConfirmDialog: collectionUploadConfirmDialog,
     clearUploadFeedback: clearCollectionUploadFeedback,
+    showUploadMessage: showCollectionUploadMessage,
+    showUploadError: showCollectionUploadError,
   } = collectionUpload;
   const uploading = libraryUploading || collectionUploading;
   const uploadMessage = libraryUploadMessage ?? collectionUploadMessage;
@@ -101,6 +106,9 @@ export function useLibraryMenuActions() {
   const [changeLibraryConfirmOpen, setChangeLibraryConfirmOpen] = useState(false);
   const [pendingLibraryFolder, setPendingLibraryFolder] = useState<string | null>(null);
   const [importingCollection, setImportingCollection] = useState(false);
+  const [remoteImportMode, setRemoteImportMode] = useState<
+    "library" | "collection" | null
+  >(null);
 
   const resetLibraryFrontend = useCallback(
     (playback: PlaybackState) => {
@@ -286,6 +294,46 @@ export function useLibraryMenuActions() {
     }
   }, [applyLibraryFolder, pendingLibraryFolder, saveConfiguration]);
 
+  const openLibraryRemoteUpload = useCallback(() => {
+    if (!libraryFolder) {
+      showLibraryUploadError("Choose a library folder before uploading tracks.");
+      return;
+    }
+    clearUploadFeedback();
+    setRemoteImportMode("library");
+  }, [clearUploadFeedback, libraryFolder, showLibraryUploadError]);
+
+  const openCollectionRemoteUpload = useCallback(() => {
+    if (collectionId == null) {
+      showCollectionUploadError("Open a stored collection before uploading tracks.");
+      return;
+    }
+    clearUploadFeedback();
+    setRemoteImportMode("collection");
+  }, [clearUploadFeedback, collectionId, showCollectionUploadError]);
+
+  const closeRemoteImport = useCallback(() => {
+    setRemoteImportMode(null);
+  }, []);
+
+  const handleRemoteImportUploaded = useCallback(
+    (message: string) => {
+      clearUploadFeedback();
+      if (remoteImportMode === "collection") {
+        showCollectionUploadMessage(message);
+      } else {
+        showLibraryUploadMessage(message);
+      }
+      setRemoteImportMode(null);
+    },
+    [
+      clearUploadFeedback,
+      remoteImportMode,
+      showCollectionUploadMessage,
+      showLibraryUploadMessage,
+    ],
+  );
+
   const importCollection = useCallback(async () => {
     setImportingCollection(true);
     setConfigMessage(null);
@@ -347,13 +395,33 @@ export function useLibraryMenuActions() {
     />
   ) : null;
 
+  const remoteImportOpen = remoteImportMode != null;
+
+  const remoteImportModal =
+    remoteImportMode === "library" ? (
+      <RemoteImportFromPhoneModal
+        mode="library"
+        onClose={closeRemoteImport}
+        onUploaded={handleRemoteImportUploaded}
+      />
+    ) : remoteImportMode === "collection" && collectionId != null ? (
+      <RemoteImportFromPhoneModal
+        mode="collection"
+        collectionId={collectionId}
+        collectionName={collectionName}
+        onClose={closeRemoteImport}
+        onUploaded={handleRemoteImportUploaded}
+      />
+    ) : null;
+
   const fileOperationBusy =
     scanning ||
     uploading ||
     savingConfig ||
     loadingConfig ||
     closingLibrary ||
-    importingCollection;
+    importingCollection ||
+    remoteImportOpen;
   const actionsDisabled = fileOperationBusy;
   const libraryActionsDisabled = fileOperationBusy || !libraryFolder;
   const libraryUploadDisabled = fileOperationBusy || !libraryFolder;
@@ -383,6 +451,9 @@ export function useLibraryMenuActions() {
     chooseLibraryFolder,
     uploadToLibrary,
     uploadToCollection,
+    openLibraryRemoteUpload,
+    openCollectionRemoteUpload,
+    remoteImportModal,
     scanLibrary,
     saveConfiguration,
     requestLoadConfiguration,
