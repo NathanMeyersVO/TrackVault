@@ -10,6 +10,7 @@ import {
   groupDeliveryChanges,
   groupSelectionState,
 } from "../lib/deliveryPreviewGroups";
+import { getDeliveryCopy } from "../lib/applicationConfig";
 import { DeliveryBusyOverlay } from "./DeliveryBusyOverlay";
 
 export interface DeliveryPreviewModalProps {
@@ -38,6 +39,7 @@ export function DeliveryPreviewModal({
   const [busy, setBusy] = useState(false);
   const [previewRefreshing, setPreviewRefreshing] = useState(mode === "update");
   const [error, setError] = useState<string | null>(null);
+  const deliveryCopy = getDeliveryCopy(applicationId);
 
   const groups = useMemo(() => groupDeliveryChanges(preview.changes), [preview.changes]);
 
@@ -153,19 +155,17 @@ export function DeliveryPreviewModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
       {busy ? (
         <DeliveryBusyOverlay
-          title={
-            mode === "create" ? "Creating project…" : "Applying delivery update…"
-          }
+          title={mode === "create" ? "Creating project…" : deliveryCopy.applyingBusyTitle}
           detail="Copying files and updating the project library."
         />
       ) : null}
       <div className="flex max-h-[90vh] w-full max-w-2xl flex-col rounded-lg border border-border bg-surface shadow-xl">
         <div className="border-b border-border px-4 py-3">
           <h2 className="text-sm font-semibold text-foreground">
-            {mode === "create" ? "Create project from delivery" : "Apply delivery update"}
+            {mode === "create" ? deliveryCopy.previewCreateTitle : deliveryCopy.previewApplyTitle}
           </h2>
           <p className="mt-1 text-xs text-muted">
-            {preview.staged_audio_count} files in delivery
+            {preview.staged_audio_count} files in {deliveryCopy.deliverySingular}
             {mode === "update"
               ? ` · ${preview.library_audio_count} in project library`
               : ""}
@@ -191,7 +191,7 @@ export function DeliveryPreviewModal({
                 checked={applyMode === "merge"}
                 onChange={() => setApplyMode("merge")}
               />
-              Merge (keep tracks not in delivery)
+              Merge (keep tracks not in {deliveryCopy.deliverySingular})
             </label>
             <label className="flex items-center gap-1.5">
               <input
@@ -224,7 +224,8 @@ export function DeliveryPreviewModal({
             <p className="mb-3 rounded-md border border-border/80 bg-surface-hover/40 px-3 py-2 text-xs text-muted">
               <span className="font-medium text-foreground">Audio: </span>
               {preview.unchanged_audio_count} track
-              {preview.unchanged_audio_count === 1 ? "" : "s"} in this delivery already match the
+              {preview.unchanged_audio_count === 1 ? "" : "s"} in this{" "}
+              {deliveryCopy.deliverySingular} already match the
               project library (same files and metadata). No audio updates to apply.
             </p>
           ) : null}

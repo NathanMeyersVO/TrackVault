@@ -1,6 +1,8 @@
 import type { DeliveryBrowseEntry, DeliveryEntryKind, DeliveryFolderBrowseResult } from "../lib/tauri";
 
 export interface DeliveryFolderConfirmModalProps {
+  title: string;
+  supportsScheduleDelivery: boolean;
   browse: DeliveryFolderBrowseResult | null;
   loading: boolean;
   error: string | null;
@@ -33,6 +35,8 @@ function EntryRow({ entry }: { entry: DeliveryBrowseEntry }) {
 }
 
 export function DeliveryFolderConfirmModal({
+  title,
+  supportsScheduleDelivery,
   browse,
   loading,
   error,
@@ -45,13 +49,16 @@ export function DeliveryFolderConfirmModal({
     summary &&
     (summary.archives.length > 0 ||
       summary.audio_files.length > 0 ||
-      summary.schedules.length > 0);
+      (supportsScheduleDelivery && summary.schedules.length > 0));
+  const nothingRecognizedMessage = supportsScheduleDelivery
+    ? "Nothing recognized to import here. Pick a folder that contains archives, audio, or a schedule spreadsheet."
+    : "Nothing recognized to import here. Pick a folder that contains audio archives or loose audio files.";
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4">
       <div className="flex max-h-[90vh] w-full max-w-2xl flex-col rounded-lg border border-border bg-surface shadow-xl">
         <div className="border-b border-border px-4 py-3">
-          <h2 className="text-sm font-semibold text-foreground">Confirm delivery folder</h2>
+          <h2 className="text-sm font-semibold text-foreground">{title}</h2>
           <p className="mt-1 truncate font-mono text-xs text-muted" title={browse?.path}>
             {browse?.path ?? "…"}
           </p>
@@ -84,10 +91,7 @@ export function DeliveryFolderConfirmModal({
                     ? `${summary.audio_files.length} loose audio file(s)`
                     : "no loose audio"}
                   {!canImport ? (
-                    <span className="mt-1 block text-red-400">
-                      Nothing recognized to import here. Pick a folder that contains archives, audio,
-                      or a schedule spreadsheet.
-                    </span>
+                    <span className="mt-1 block text-red-400">{nothingRecognizedMessage}</span>
                   ) : null}
                 </p>
               ) : null}

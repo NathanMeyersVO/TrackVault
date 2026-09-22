@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 
+import { getDeliveryCopy } from "../lib/applicationConfig";
 import { api } from "../lib/tauri";
 import { useLibrary, usePlayer } from "../hooks/usePlayer";
 import { useDeleteTrack } from "../hooks/useDeleteTrack";
@@ -40,7 +41,7 @@ export function LibraryView() {
     ? "No tracks match your search."
     : !hasOpenProject
       ? "Open or create a project: Library → Projects…"
-      : "No tracks yet. Library → Projects… (or Apply Delivery Update…) and choose your vendor folder.";
+      : getDeliveryCopy(activeProject?.application_id).libraryEmptyWithProject;
 
   const handleAddToPlaylist = useCallback(
     async (trackId: number, playlistId: number) => {

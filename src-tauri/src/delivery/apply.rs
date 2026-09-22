@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use super::staging::{collect_audio_relative, find_schedule_xlsx};
 use super::{DeliveryChange, DeliveryChangeKind};
+use crate::application::{self, ApplicationId};
 use crate::config;
 use crate::project_config::autosave_trackvault_json;
 use crate::projects::{self, ProjectManifest};
@@ -31,6 +32,7 @@ pub fn apply_delivery(
     changes: &[DeliveryChange],
     selected_ids: &HashSet<String>,
     apply_mode: ApplyMode,
+    application: ApplicationId,
 ) -> Result<ApplyDeliveryResult, String> {
     let library_root = projects::library_dir(project_root);
     fs::create_dir_all(&library_root).map_err(|e| e.to_string())?;
@@ -91,7 +93,7 @@ pub fn apply_delivery(
         )
     });
 
-    if schedule_selected {
+    if application::supports_schedule_delivery(application) && schedule_selected {
         if let Some(staged_schedule) = find_schedule_xlsx(staging_root)? {
             let old_dest = projects::schedule_path(project_root, manifest);
             manifest.schedule_relative_path =
@@ -104,7 +106,7 @@ pub fn apply_delivery(
                 fs::create_dir_all(parent).map_err(|e| e.to_string())?;
             }
             fs::copy(&staged_schedule, &dest).map_err(|e| e.to_string())?;
-            import_schedule_merge(db, &dest, selected.iter().copied())?;
+            import_schedule_merge(db, application, &dest, selected.iter().copied())?;
             if let Ok(meta) = fs::metadata(&dest) {
                 if let Ok(modified) = meta.modified() {
                     manifest.schedule_last_imported_mtime = modified
@@ -189,10 +191,11 @@ fn migrate_path_in_config(
 
 fn import_schedule_merge<'a>(
     db: &crate::db::Database,
+    application: ApplicationId,
     schedule_path: &Path,
     selected: impl Iterator<Item = &'a DeliveryChange>,
 ) -> Result<(), String> {
-    let mappings = crate::title_map::parse_usfs_ems_schedule(schedule_path)?;
+    let mappings = application::parse_title_map_for_application(application, schedule_path)?;
     let taglist = db
         .get_taglist_by_name("Events")
         .map_err(|e| e.to_string())?;
@@ -291,6 +294,7 @@ mod tests {
             &changes,
             &selected,
             ApplyMode::Merge,
+            crate::application::ApplicationId::None,
         )
         .unwrap();
 

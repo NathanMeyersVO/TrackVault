@@ -342,6 +342,12 @@ impl Database {
         Ok(())
     }
 
+    pub fn delete_app_setting(&self, key: &str) -> Result<(), DbError> {
+        self.conn
+            .execute("DELETE FROM app_settings WHERE key = ?1", params![key])?;
+        Ok(())
+    }
+
     pub fn upsert_track(
         &self,
         path: &str,

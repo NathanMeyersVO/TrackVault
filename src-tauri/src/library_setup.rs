@@ -40,7 +40,10 @@ fn setup_usfs_ems(
 
     let mappings = if let Some(path) = schedule_path {
         if path.is_file() {
-            Some(crate::title_map::parse_usfs_ems_schedule(path)?)
+            Some(crate::application::parse_title_map_for_application(
+                ApplicationId::UsFigureSkatingEms,
+                path,
+            )?)
         } else {
             None
         }

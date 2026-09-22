@@ -13,6 +13,7 @@ import { DeliveryPreviewModal } from "../components/DeliveryPreviewModal";
 import { useDeliveryFolderConfirm } from "./useDeliveryFolderConfirm";
 import { ProjectHubModal } from "../components/ProjectHubModal";
 import { RemoteImportFromPhoneModal } from "../components/RemoteImportFromPhoneModal";
+import { getDeliveryCopy, normalizeApplicationId } from "../lib/applicationConfig";
 import { api, type DeliveryPreview } from "../lib/tauri";
 import { useLibrary } from "./usePlayer";
 import { useLibraryUiReset } from "./useLibraryUiReset";
@@ -111,7 +112,6 @@ export function useLibraryMenuActions() {
   >(null);
   const [projectHubOpen, setProjectHubOpen] = useState(false);
   const [deliveryPreview, setDeliveryPreview] = useState<DeliveryPreview | null>(null);
-  const [refreshingSchedule, setRefreshingSchedule] = useState(false);
   const [exportingProject, setExportingProject] = useState(false);
 
   const applyLibraryFolder = useCallback(
@@ -155,7 +155,11 @@ export function useLibraryMenuActions() {
       setDeliveryStaging(true);
       setConfigError(null);
       try {
-        const preview = await api.stageDelivery([folder], activeProject.id);
+        const preview = await api.stageDelivery(
+          [folder],
+          activeProject.id,
+          normalizeApplicationId(activeProject.application_id),
+        );
         setDeliveryPreview(preview);
       } catch (err) {
         setConfigError(String(err));
@@ -166,10 +170,16 @@ export function useLibraryMenuActions() {
     [activeProject, setConfigError, setDeliveryStaging],
   );
 
+  const deliveryApplicationId = normalizeApplicationId(activeProject?.application_id);
+  const deliveryCopy = getDeliveryCopy(deliveryApplicationId);
+
   const {
     pickAndShow: pickDeliveryFolderForUpdate,
     modal: deliveryFolderConfirmModal,
-  } = useDeliveryFolderConfirm({ onConfirm: stageDeliveryFromFolder });
+  } = useDeliveryFolderConfirm({
+    applicationId: deliveryApplicationId,
+    onConfirm: stageDeliveryFromFolder,
+  });
 
   const applyDeliveryUpdate = useCallback(() => {
     if (!activeProject) {
@@ -206,20 +216,6 @@ export function useLibraryMenuActions() {
       setExportingProject(false);
     }
   }, [activeProject, clearUploadFeedback]);
-
-  const refreshProjectSchedule = useCallback(async () => {
-    setRefreshingSchedule(true);
-    setConfigError(null);
-    try {
-      const count = await api.refreshProjectSchedule();
-      await refresh();
-      setConfigMessage(`Refreshed ${count} event titles from schedule`);
-    } catch (err) {
-      setConfigError(String(err));
-    } finally {
-      setRefreshingSchedule(false);
-    }
-  }, [refresh]);
 
   const chooseLibraryFolder = useCallback(async () => {
     const selected = await open({
@@ -469,7 +465,7 @@ export function useLibraryMenuActions() {
         onApplied={async () => {
           setDeliveryPreview(null);
           await refresh();
-          setConfigMessage("Delivery update applied");
+          setConfigMessage(getDeliveryCopy(activeProject.application_id).appliedSuccessMessage);
         }}
       />
     ) : null;
@@ -513,6 +509,7 @@ export function useLibraryMenuActions() {
     collectionName,
     scanning,
     deliveryStaging,
+    deliveryCopy,
     libraryUploading,
     collectionUploading,
     savingConfig,
@@ -532,8 +529,6 @@ export function useLibraryMenuActions() {
     chooseLibraryFolder,
     openProjectHub,
     applyDeliveryUpdate,
-    refreshProjectSchedule,
-    refreshingSchedule,
     projectHubModal,
     deliveryFolderConfirmModal,
     deliveryUpdateModal,

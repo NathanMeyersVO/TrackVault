@@ -1,6 +1,8 @@
 import { create } from "zustand";
 
+import { normalizeApplicationId } from "../lib/applicationConfig";
 import type {
+  ApplicationId,
   Collection,
   PlaybackState,
   Playlist,
@@ -110,6 +112,7 @@ interface PlayerStore {
   playback: PlaybackState;
   scanning: boolean;
   deliveryStaging: boolean;
+  deliveryStagingApplicationId: ApplicationId | null;
   libraryFolder: string | null;
   activeProject: ProjectSummary | null;
   audioCacheProgress: AudioCacheProgress;
@@ -138,7 +141,7 @@ interface PlayerStore {
   setActiveTrackIds: (ids: number[]) => void;
   setPlayback: (playback: PlaybackState) => void;
   setScanning: (scanning: boolean) => void;
-  setDeliveryStaging: (deliveryStaging: boolean) => void;
+  setDeliveryStaging: (deliveryStaging: boolean, applicationId?: ApplicationId | null) => void;
   setLibraryFolder: (libraryFolder: string | null) => void;
   setActiveProject: (activeProject: ProjectSummary | null) => void;
   setAudioCacheProgress: (progress: AudioCacheProgress) => void;
@@ -197,6 +200,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   },
   scanning: false,
   deliveryStaging: false,
+  deliveryStagingApplicationId: null,
   libraryFolder: null,
   activeProject: null,
   audioCacheProgress: { done: 0, total: 0, finished: true },
@@ -230,7 +234,15 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   setActiveTrackIds: (activeTrackIds) => set({ activeTrackIds }),
   setPlayback: (playback) => set({ playback }),
   setScanning: (scanning) => set({ scanning }),
-  setDeliveryStaging: (deliveryStaging) => set({ deliveryStaging }),
+  setDeliveryStaging: (deliveryStaging, applicationId) =>
+    set((state) => ({
+      deliveryStaging,
+      deliveryStagingApplicationId: deliveryStaging
+        ? normalizeApplicationId(
+            applicationId ?? state.activeProject?.application_id,
+          )
+        : null,
+    })),
   setLibraryFolder: (libraryFolder) => set({ libraryFolder }),
   setActiveProject: (activeProject) => set({ activeProject }),
   setAudioCacheProgress: (audioCacheProgress) => set({ audioCacheProgress }),

@@ -272,6 +272,8 @@ fn unix_now() -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
+
     fn temp_root(label: &str) -> PathBuf {
         std::env::temp_dir().join(format!(
             "trackvault-project-archive-test-{}-{}-{}",

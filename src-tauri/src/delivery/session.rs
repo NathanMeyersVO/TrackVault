@@ -12,6 +12,7 @@ pub struct StagingSession {
     pub id: String,
     pub staging_root: PathBuf,
     pub target_project_id: Option<String>,
+    pub application_id: String,
     pub preview: DeliveryPreview,
     pub created: Instant,
 }
@@ -83,6 +84,7 @@ impl Clone for StagingSession {
             id: self.id.clone(),
             staging_root: self.staging_root.clone(),
             target_project_id: self.target_project_id.clone(),
+            application_id: self.application_id.clone(),
             preview: self.preview.clone(),
             created: self.created,
         }

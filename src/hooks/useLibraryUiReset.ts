@@ -13,11 +13,15 @@ export function useLibraryUiReset() {
   const setCursorTaglistFooter = usePlayerStore((s) => s.setCursorTaglistFooter);
   const clearPendingPlayIntent = usePlayerStore((s) => s.clearPendingPlayIntent);
   const clearPendingPausedLoad = usePlayerStore((s) => s.clearPendingPausedLoad);
+  const setLibraryFolder = usePlayerStore((s) => s.setLibraryFolder);
+  const setActiveProject = usePlayerStore((s) => s.setActiveProject);
 
   const resetLibraryUi = useCallback(
     (playback: PlaybackState) => {
       const currentView = usePlayerStore.getState().view;
       setPlayback(playback);
+      setLibraryFolder(null);
+      setActiveProject(null);
       if (isLibrarySourcedView(currentView)) {
         setView("library");
         setCursorTrackId(null);
@@ -32,9 +36,11 @@ export function useLibraryUiReset() {
     [
       clearPendingPausedLoad,
       clearPendingPlayIntent,
+      setActiveProject,
       setActiveTrackIds,
       setCursorTaglistFooter,
       setCursorTrackId,
+      setLibraryFolder,
       setPlayback,
       setTaglistNav,
       setView,

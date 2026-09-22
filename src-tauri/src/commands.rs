@@ -18,7 +18,7 @@ use crate::delivery::{
     default_delivery_browse_root, stage_delivery_sources, ApplyDeliveryResult, ApplyMode,
     DeliveryFolderBrowseResult, DeliveryPreview, DeliverySessionStore, StagingSession,
 };
-use crate::projects::{self, ProjectManifest, ProjectSummary, ACTIVE_PROJECT_KEY};
+use crate::projects::{self, ProjectManifest, ProjectSummary};
 use crate::project_config::{autosave_trackvault_json, load_trackvault_json_if_present};
 use crate::replace_remote_upload::ReplaceRemoteUploadManager;
 use crate::scanner;
@@ -1312,24 +1312,18 @@ pub fn list_projects(state: State<'_, AppState>) -> Result<Vec<ProjectSummary>, 
 
 #[tauri::command]
 pub fn get_active_project(state: State<'_, AppState>) -> Result<Option<ProjectSummary>, String> {
-    let db = state.db.lock();
-    let Some(json) = db.get_app_setting(ACTIVE_PROJECT_KEY).map_err(|e| e.to_string())? else {
+    let project_id = {
+        let db = state.db.lock();
+        projects::get_active_project_id(&db)?
+    };
+    let Some(project_id) = project_id else {
         return Ok(None);
     };
-    let project_id: String = serde_json::from_str(&json).map_err(|e| e.to_string())?;
-    if project_id.is_empty() || project_id == "null" {
-        return Ok(None);
-    }
-    drop(db);
     let list = projects::list_projects(&state.app_data_dir)?;
     if let Some(summary) = list.iter().find(|p| p.id == project_id) {
         return Ok(Some(summary.clone()));
     }
-    state
-        .db
-        .lock()
-        .set_app_setting(ACTIVE_PROJECT_KEY, "null")
-        .map_err(|e| e.to_string())?;
+    projects::clear_active_project_id(&state.db.lock())?;
     Ok(None)
 }
 
@@ -1369,12 +1363,8 @@ pub fn export_project(
 ) -> Result<(), String> {
     let is_active = {
         let db = state.db.lock();
-        match db.get_app_setting(ACTIVE_PROJECT_KEY).map_err(|e| e.to_string())? {
-            Some(json) => serde_json::from_str::<String>(&json)
-                .map(|active_id| active_id == project_id)
-                .unwrap_or(false),
-            None => false,
-        }
+        projects::get_active_project_id(&db)?
+            .is_some_and(|active_id| active_id == project_id)
     };
     if is_active {
         try_autosave_project_config(&state);
@@ -1412,12 +1402,8 @@ pub fn update_project_application(
 
     let is_active = {
         let db = state.db.lock();
-        match db.get_app_setting(ACTIVE_PROJECT_KEY).map_err(|e| e.to_string())? {
-            Some(json) => serde_json::from_str::<String>(&json)
-                .map(|active_id| active_id == project_id)
-                .unwrap_or(false),
-            None => false,
-        }
+        projects::get_active_project_id(&db)?
+            .is_some_and(|active_id| active_id == project_id)
     };
 
     if is_active {
@@ -1472,18 +1458,10 @@ pub fn delete_project(
     let mut playback = state.player.state();
     {
         let db = state.db.lock();
-        if let Ok(Some(json)) = db.get_app_setting(ACTIVE_PROJECT_KEY) {
-            if let Ok(active) = serde_json::from_str::<String>(&json) {
-                if active == project_id {
-                    drop(db);
-                    playback = teardown_library(&state)?;
-                    state
-                        .db
-                        .lock()
-                        .set_app_setting(ACTIVE_PROJECT_KEY, "null")
-                        .map_err(|e| e.to_string())?;
-                }
-            }
+        if projects::get_active_project_id(&db)? == Some(project_id.clone()) {
+            drop(db);
+            playback = teardown_library(&state)?;
+            projects::clear_active_project_id(&state.db.lock())?;
         }
     }
     projects::delete_project_dir(&state.app_data_dir, &project_id)?;
@@ -1536,11 +1514,23 @@ fn existing_library_schedule_path(app_data: &Path, project_id: &str) -> Option<P
     path.is_file().then_some(path)
 }
 
+fn session_delivery_application(
+    app_data: &Path,
+    session: &StagingSession,
+) -> Result<crate::application::ApplicationId, String> {
+    crate::application::resolve_delivery_application(
+        app_data,
+        session.target_project_id.as_deref(),
+        Some(session.application_id.as_str()),
+    )
+}
+
 #[tauri::command]
 pub fn stage_delivery(
     state: State<'_, AppState>,
     source_paths: Vec<String>,
     project_id: Option<String>,
+    application_id: Option<String>,
 ) -> Result<DeliveryPreview, String> {
     if source_paths.is_empty() {
         return Err("Select a delivery folder".to_string());
@@ -1558,6 +1548,13 @@ pub fn stage_delivery(
         &source_paths,
     )?;
 
+    let delivery_application = crate::application::resolve_delivery_application(
+        &state.app_data_dir,
+        project_id.as_deref(),
+        application_id.as_deref(),
+    )?;
+    let stored_application_id = delivery_application.as_str().to_string();
+
     let preview = if let Some(ref pid) = project_id {
         let library = projects::library_dir(&projects::project_dir(&state.app_data_dir, pid));
         let existing_schedule = existing_library_schedule_path(&state.app_data_dir, pid);
@@ -1567,11 +1564,19 @@ pub fn stage_delivery(
             &library,
             true,
             existing_schedule.as_deref(),
+            delivery_application,
         )?
     } else {
         let empty = state.app_data_dir.join("_empty_preview");
         std::fs::create_dir_all(&empty).ok();
-        build_preview(&session_id, &staging_root, &empty, false, None)?
+        build_preview(
+            &session_id,
+            &staging_root,
+            &empty,
+            false,
+            None,
+            delivery_application,
+        )?
     };
 
     if preview.staged_audio_count == 0 {
@@ -1586,6 +1591,7 @@ pub fn stage_delivery(
         id: session_id.clone(),
         staging_root: staging_root.clone(),
         target_project_id: project_id.clone(),
+        application_id: stored_application_id,
         preview: preview.clone(),
         created: std::time::Instant::now(),
     });
@@ -1613,12 +1619,14 @@ pub fn preview_delivery_with_mode(
         .target_project_id
         .as_ref()
         .and_then(|pid| existing_library_schedule_path(&state.app_data_dir, pid));
+    let delivery_application = session_delivery_application(&state.app_data_dir, &session)?;
     let mut preview = build_preview(
         &staging_session_id,
         &session.staging_root,
         &library,
         for_update,
         existing_schedule.as_deref(),
+        delivery_application,
     )?;
     if apply_mode == "full_replace" && for_update {
         append_full_replace_removals(&mut preview, &session.staging_root, &library)?;
@@ -1675,12 +1683,17 @@ pub fn apply_staged_delivery(
     } else {
         None
     };
+    let delivery_application = {
+        let manifest = projects::load_manifest(&project_root)?;
+        crate::application::normalize_application_id(&manifest.application_id)
+    };
     let mut preview = build_preview(
         &staging_session_id,
         &session.staging_root,
         &library_root,
         for_update,
         existing_schedule.as_deref(),
+        delivery_application,
     )?;
     if matches!(mode, ApplyMode::FullReplace) && for_update {
         append_full_replace_removals(&mut preview, &session.staging_root, &library_root)?;
@@ -1733,6 +1746,7 @@ pub fn apply_staged_delivery(
             &preview.changes,
             &selected,
             mode,
+            delivery_application,
         )?
     };
 
@@ -1756,78 +1770,6 @@ pub fn apply_staged_delivery(
     Ok(result)
 }
 
-#[tauri::command]
-pub fn refresh_project_schedule(app: AppHandle, state: State<'_, AppState>) -> Result<u32, String> {
-    let count = {
-        let db = state.db.lock();
-        let active = db
-            .get_app_setting(ACTIVE_PROJECT_KEY)
-            .map_err(|e| e.to_string())?
-            .ok_or_else(|| "No active project".to_string())?;
-        let project_id: String = serde_json::from_str(&active).map_err(|e| e.to_string())?;
-        let project_root = projects::project_dir(&state.app_data_dir, &project_id);
-        let mut manifest = projects::load_manifest(&project_root)?;
-        let schedule_path = projects::schedule_path(&project_root, &manifest);
-        if !schedule_path.is_file() {
-            return Err("No event schedule file in this project".to_string());
-        }
-        let library_root = projects::library_dir(&project_root);
-        let mappings = crate::title_map::parse_usfs_ems_schedule(&schedule_path)?;
-        let taglist = db
-            .get_taglist_by_name("Events")
-            .map_err(|e| e.to_string())?
-            .ok_or_else(|| "Events taglist not found".to_string())?;
-        let existing = db.get_taglist_value_titles(taglist.id).map_err(|e| e.to_string())?;
-        let mut merged = existing;
-        for (tag, title) in mappings {
-            merged.insert(tag, title);
-        }
-        let count = db
-            .import_taglist_titles(taglist.id, &merged)
-            .map_err(|e| e.to_string())?;
-        if let Ok(meta) = std::fs::metadata(&schedule_path) {
-            if let Ok(modified) = meta.modified() {
-                manifest.schedule_last_imported_mtime = modified
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .ok()
-                    .map(|d| d.as_secs() as i64);
-            }
-        }
-        projects::save_manifest(&project_root, &manifest)?;
-        autosave_trackvault_json(&db, &library_root)?;
-        count
-    };
-    let _ = app.emit("library-updated", ());
-    Ok(count)
-}
-
-#[tauri::command]
-pub fn get_schedule_stale(state: State<'_, AppState>) -> Result<bool, String> {
-    let db = state.db.lock();
-    let active = db
-        .get_app_setting(ACTIVE_PROJECT_KEY)
-        .map_err(|e| e.to_string())?;
-    let Some(json) = active else {
-        return Ok(false);
-    };
-    let project_id: String = serde_json::from_str(&json).map_err(|e| e.to_string())?;
-    let project_root = projects::project_dir(&state.app_data_dir, &project_id);
-    let manifest = projects::load_manifest(&project_root)?;
-    let schedule_path = projects::schedule_path(&project_root, &manifest);
-    if !schedule_path.is_file() {
-        return Ok(false);
-    }
-    let meta = std::fs::metadata(&schedule_path).map_err(|e| e.to_string())?;
-    let modified = meta
-        .modified()
-        .map_err(|e| e.to_string())?
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0);
-    let last = manifest.schedule_last_imported_mtime.unwrap_or(0);
-    Ok(modified > last)
-}
-
 fn open_project_internal(app: &AppHandle, state: &AppState, project_id: &str) -> Result<(), String> {
     let project_root = projects::project_dir(&state.app_data_dir, project_id);
     if !project_root.is_dir() {
@@ -1847,9 +1789,7 @@ fn open_project_internal(app: &AppHandle, state: &AppState, project_id: &str) ->
             application_id: manifest.application_id.clone(),
         };
         crate::application::set_application(&db, app_settings)?;
-        let id_json = serde_json::to_string(project_id).map_err(|e| e.to_string())?;
-        db.set_app_setting(ACTIVE_PROJECT_KEY, &id_json)
-            .map_err(|e| e.to_string())?;
+        projects::set_active_project_id(&db, project_id)?;
     }
 
     scanner::scan_library_folder(&state.db.lock(), app)?;
@@ -1861,15 +1801,6 @@ fn open_project_internal(app: &AppHandle, state: &AppState, project_id: &str) ->
 
     reapply_project_application(app, state, &project_root, &manifest)?;
     Ok(())
-}
-
-fn active_project_id_to_restore(db: &Database) -> Option<String> {
-    let json = db.get_app_setting(ACTIVE_PROJECT_KEY).ok()??;
-    let project_id: String = serde_json::from_str(&json).ok()?;
-    if project_id.is_empty() || project_id == "null" {
-        return None;
-    }
-    Some(project_id)
 }
 
 pub fn init_state(app: &AppHandle) -> Result<(AppState, Option<String>), String> {
@@ -1884,7 +1815,7 @@ pub fn init_state(app: &AppHandle) -> Result<(AppState, Option<String>), String>
     let audio_cache = AudioCacheWorker::start(app.clone(), Arc::clone(&db), Arc::clone(&player));
     let delivery_sessions = DeliverySessionStore::new(&data_dir);
 
-    let restore_project_id = active_project_id_to_restore(&db.lock());
+    let restore_project_id = projects::get_active_project_id(&db.lock()).ok().flatten();
 
     let state = AppState {
         db,

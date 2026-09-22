@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 
 use super::staging::{collect_audio_relative, find_schedule_xlsx};
 use super::{DeliveryChange, DeliveryChangeKind};
+use crate::application::{self, ApplicationId};
 use crate::file_hash::sha256_file;
 use crate::scanner;
 
@@ -35,6 +36,7 @@ pub fn build_preview(
     library_root: &Path,
     for_update: bool,
     existing_library_schedule: Option<&Path>,
+    application: ApplicationId,
 ) -> Result<DeliveryPreview, String> {
     let staged = collect_audio_relative(staging_root)?;
     let library = collect_library_audio(library_root)?;
@@ -105,16 +107,18 @@ pub fn build_preview(
         ));
     }
 
-    if let Some(schedule) = find_schedule_xlsx(staging_root)? {
-        if for_update {
-            diff_schedule(
-                &mut changes,
-                &schedule,
-                library_root,
-                existing_library_schedule,
-            )?;
-        } else {
-            if let Ok(mappings) = crate::title_map::parse_usfs_ems_schedule(&schedule) {
+    if application::supports_schedule_delivery(application) {
+        if let Some(schedule) = find_schedule_xlsx(staging_root)? {
+            if for_update {
+                diff_schedule(
+                    application,
+                    &mut changes,
+                    &schedule,
+                    library_root,
+                    existing_library_schedule,
+                )?;
+            } else if let Ok(mappings) = application::parse_title_map_for_application(application, &schedule)
+            {
                 for (tag, title) in mappings {
                     changes.push(change(
                         DeliveryChangeKind::ScheduleEventAdd,
@@ -240,18 +244,19 @@ fn tags_differ(staged: &Path, library: &Path) -> Result<bool, String> {
 }
 
 fn diff_schedule(
+    application: ApplicationId,
     changes: &mut Vec<DeliveryChange>,
     staged_schedule: &Path,
     library_root: &Path,
     existing_library_schedule: Option<&Path>,
 ) -> Result<(), String> {
-    let new_map = crate::title_map::parse_usfs_ems_schedule(staged_schedule)?;
+    let new_map = application::parse_title_map_for_application(application, staged_schedule)?;
     let canonical = existing_library_schedule
         .filter(|p| p.is_file())
         .map(|p| p.to_path_buf())
         .unwrap_or_else(|| library_root.join(crate::projects::DEFAULT_SCHEDULE_REL));
     let old_map = if canonical.is_file() {
-        crate::title_map::parse_usfs_ems_schedule(&canonical).unwrap_or_default()
+        application::parse_title_map_for_application(application, &canonical).unwrap_or_default()
     } else {
         HashMap::new()
     };
@@ -309,7 +314,8 @@ mod tests {
         fs::write(staging.join("tracks/01.mp3"), bytes).expect("write staged");
         fs::write(library.join("tracks/01.mp3"), bytes).expect("write library");
 
-        let preview = build_preview("sess", &staging, &library, true, None).expect("preview");
+        let preview =
+            build_preview("sess", &staging, &library, true, None, ApplicationId::None).expect("preview");
         assert_eq!(preview.staged_audio_count, 1);
         assert_eq!(preview.library_audio_count, 1);
         assert_eq!(preview.unchanged_audio_count, 1);
@@ -341,13 +347,87 @@ mod tests {
         fs::create_dir_all(&library).expect("mkdir library");
         fs::write(staging.join("new.mp3"), b"new").expect("write");
 
-        let a = build_preview("sess", &staging, &library, true, None).expect("preview a");
-        let b = build_preview("sess", &staging, &library, true, None).expect("preview b");
+        let a =
+            build_preview("sess", &staging, &library, true, None, ApplicationId::None).expect("preview a");
+        let b =
+            build_preview("sess", &staging, &library, true, None, ApplicationId::None).expect("preview b");
         assert_eq!(a.changes.len(), 1);
         assert_eq!(a.changes[0].change_id, b.changes[0].change_id);
         assert_eq!(
             a.changes[0].change_id,
             stable_change_id(DeliveryChangeKind::AudioAdd, "new.mp3")
+        );
+
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    fn write_minimal_schedule_xlsx(path: &Path) {
+        use rust_xlsxwriter::{Workbook, Worksheet};
+        let mut workbook = Workbook::new();
+        let mut worksheet = Worksheet::new();
+        worksheet.set_name("Event Schedule").unwrap();
+        worksheet.write_string(0, 0, "#").unwrap();
+        worksheet.write_string(0, 1, "Title").unwrap();
+        worksheet.write_string(1, 0, "01").unwrap();
+        worksheet.write_string(1, 1, "Test Event").unwrap();
+        workbook.push_worksheet(worksheet);
+        workbook.save(path).unwrap();
+    }
+
+    #[test]
+    fn preview_ignores_schedule_for_none_application() {
+        let base = std::env::temp_dir().join(format!("tv-diff-no-sched-{}", uuid::Uuid::new_v4()));
+        let staging = base.join("staging");
+        fs::create_dir_all(&staging).expect("mkdir staging");
+        fs::write(staging.join("track.mp3"), b"audio").expect("audio");
+        write_minimal_schedule_xlsx(&staging.join("event-schedule.xlsx"));
+
+        let preview = build_preview(
+            "sess",
+            &staging,
+            &base.join("library"),
+            false,
+            None,
+            ApplicationId::None,
+        )
+        .expect("preview");
+        assert!(
+            preview
+                .changes
+                .iter()
+                .all(|c| !matches!(
+                    c.kind,
+                    DeliveryChangeKind::ScheduleEventAdd
+                        | DeliveryChangeKind::ScheduleEventUpdate
+                        | DeliveryChangeKind::ScheduleEventRemove
+                ))
+        );
+
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn preview_includes_schedule_for_ems_application() {
+        let base = std::env::temp_dir().join(format!("tv-diff-ems-sched-{}", uuid::Uuid::new_v4()));
+        let staging = base.join("staging");
+        fs::create_dir_all(&staging).expect("mkdir staging");
+        fs::write(staging.join("track.mp3"), b"audio").expect("audio");
+        write_minimal_schedule_xlsx(&staging.join("event-schedule.xlsx"));
+
+        let preview = build_preview(
+            "sess",
+            &staging,
+            &base.join("library"),
+            false,
+            None,
+            ApplicationId::UsFigureSkatingEms,
+        )
+        .expect("preview");
+        assert!(
+            preview.changes.iter().any(|c| matches!(
+                c.kind,
+                DeliveryChangeKind::ScheduleEventAdd
+            ))
         );
 
         let _ = fs::remove_dir_all(&base);

@@ -456,8 +456,16 @@ export const api = {
     invoke<string | null>("get_last_delivery_folder"),
   setLastDeliveryFolder: (path: string) =>
     invoke<void>("set_last_delivery_folder", { path }),
-  stageDelivery: (sourcePaths: string[], projectId: string | null) =>
-    invoke<DeliveryPreview>("stage_delivery", { sourcePaths, projectId }),
+  stageDelivery: (
+    sourcePaths: string[],
+    projectId: string | null,
+    applicationId: ApplicationId | null,
+  ) =>
+    invoke<DeliveryPreview>("stage_delivery", {
+      sourcePaths,
+      projectId,
+      applicationId,
+    }),
   previewDeliveryWithMode: (stagingSessionId: string, applyMode: string) =>
     invoke<DeliveryPreview>("preview_delivery_with_mode", {
       stagingSessionId,
@@ -477,8 +485,6 @@ export const api = {
       newProjectName,
       applicationId,
     }),
-  refreshProjectSchedule: () => invoke<number>("refresh_project_schedule"),
-  getScheduleStale: () => invoke<boolean>("get_schedule_stale"),
 };
 
 export function formatDuration(ms: number): string {

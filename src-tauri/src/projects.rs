@@ -3,6 +3,8 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+use crate::db::Database;
+
 pub const PROJECT_MANIFEST: &str = "project.json";
 pub const LIBRARY_SUBDIR: &str = "library";
 pub const DEFAULT_SCHEDULE_REL: &str = "event-schedule.xlsx";
@@ -99,6 +101,41 @@ pub fn create_project_dirs(app_data: &Path, manifest: &ProjectManifest) -> Resul
     Ok(root)
 }
 
+pub fn parse_active_project_id_setting(value_json: &str) -> Option<String> {
+    let trimmed = value_json.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    if let Ok(id) = serde_json::from_str::<String>(trimmed) {
+        return (!id.is_empty()).then_some(id);
+    }
+    serde_json::from_str::<Option<String>>(trimmed)
+        .ok()
+        .flatten()
+        .filter(|id| !id.is_empty())
+}
+
+pub fn get_active_project_id(db: &Database) -> Result<Option<String>, String> {
+    let Some(json) = db
+        .get_app_setting(ACTIVE_PROJECT_KEY)
+        .map_err(|e| e.to_string())?
+    else {
+        return Ok(None);
+    };
+    Ok(parse_active_project_id_setting(&json))
+}
+
+pub fn set_active_project_id(db: &Database, project_id: &str) -> Result<(), String> {
+    let id_json = serde_json::to_string(project_id).map_err(|e| e.to_string())?;
+    db.set_app_setting(ACTIVE_PROJECT_KEY, &id_json)
+        .map_err(|e| e.to_string())
+}
+
+pub fn clear_active_project_id(db: &Database) -> Result<(), String> {
+    db.delete_app_setting(ACTIVE_PROJECT_KEY)
+        .map_err(|e| e.to_string())
+}
+
 pub fn delete_project_dir(app_data: &Path, project_id: &str) -> Result<(), String> {
     let root = project_dir(app_data, project_id);
     if root.exists() {
@@ -177,6 +214,26 @@ fn unix_now() -> i64 {
 mod tests {
     use super::*;
     use std::path::Path;
+
+    #[test]
+    fn parse_active_project_id_from_json_string() {
+        let id = "550e8400-e29b-41d4-a716-446655440000";
+        let json = serde_json::to_string(id).unwrap();
+        assert_eq!(
+            parse_active_project_id_setting(&json),
+            Some(id.to_string())
+        );
+    }
+
+    #[test]
+    fn parse_active_project_id_from_json_null() {
+        assert_eq!(parse_active_project_id_setting("null"), None);
+    }
+
+    #[test]
+    fn parse_active_project_id_empty_string() {
+        assert_eq!(parse_active_project_id_setting(""), None);
+    }
 
     #[test]
     fn canonical_schedule_relative_path_preserves_extension() {

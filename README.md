@@ -1,6 +1,6 @@
 # TrackVault
 
-A cross-platform desktop music player (Windows and macOS) with an iTunes-like layout. Manage **projects** (each with its own library folder under app data), browse tracks, manage playlists and taglists, apply vendor **delivery updates**, and play audio with a waveform view powered by [wavesurfer.js](https://wavesurfer.xyz/).
+A cross-platform desktop music player (Windows and macOS) with an iTunes-like layout. Manage **projects** (each with its own library folder under app data), browse tracks, manage playlists and taglists, apply **EMS download** updates (for US Figure Skating EMS projects), and play audio with a waveform view powered by [wavesurfer.js](https://wavesurfer.xyz/).
 
 ## Stack
 
@@ -51,10 +51,10 @@ npm run tauri build
 
 ## Usage
 
-1. Open **Library → Projects…** and create a project (name + application), or **Import delivery…** from a vendor folder (ZIP archives and/or event schedule spreadsheet).
+1. Open **Library → Projects…** and create a project (name + application), or **Import EMS download…** from a folder of EMS downloads (ZIP archives and/or event schedule spreadsheet).
 2. Open a project. TrackVault scans the project library for MP3, FLAC, WAV, OGG, and M4A files and reads tags. Playlists and taglists load from `library/trackvault.json` (kept up to date automatically).
 3. Double-click a track (or select and press play) to start playback.
-4. Use **Library → Apply Delivery Update…** to stage a vendor folder, preview changes, and apply updates to the open project.
+4. Use **Library → Apply EMS Download…** to stage a folder of EMS downloads, preview changes, and apply updates to the open project.
 5. **Library → Export Project…** saves the open project to a `.tgz` archive. In the Projects hub, **Import project archive…** restores a copy as a **new** project (new ID).
 6. Create stored collections from the sidebar; import/export `.tgz` stored collections separately from full projects.
 

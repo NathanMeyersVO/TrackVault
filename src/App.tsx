@@ -1,5 +1,4 @@
-import { useEffect, useState } from "react";
-import { api } from "./lib/tauri";
+import { useEffect } from "react";
 import { AppMenuBar } from "./components/AppMenuBar";
 import { Sidebar } from "./components/Sidebar";
 import { SidebarResizeHandle } from "./components/SidebarResizeHandle";
@@ -14,6 +13,7 @@ import { useLibrary, usePlayer } from "./hooks/usePlayer";
 import { initPlayerController } from "./playerController";
 import { useSidebarWidth } from "./hooks/useSidebarWidth";
 import { useTrackCursor } from "./hooks/useTrackCursor";
+import { getDeliveryCopy } from "./lib/applicationConfig";
 import { usePlayerStore, type View } from "./store/playerStore";
 
 function isPlaylistView(view: View): view is { playlistId: number } {
@@ -30,8 +30,9 @@ function isCollectionView(view: View): view is { collectionId: number } {
   return typeof view === "object" && "collectionId" in view;
 }
 
-function MainContent({ scheduleStale }: { scheduleStale: boolean }) {
-  const { view, tracks } = usePlayerStore();
+function MainContent() {
+  const { view, tracks, activeProject } = usePlayerStore();
+  const deliveryCopy = getDeliveryCopy(activeProject?.application_id);
   useLibrary();
 
   return (
@@ -49,15 +50,9 @@ function MainContent({ scheduleStale }: { scheduleStale: boolean }) {
         ) : null}
       </div>
 
-      {scheduleStale && (
-        <div className="border-t border-border bg-surface px-4 py-2 text-xs text-foreground">
-          Event schedule file changed.{" "}
-          <span className="text-muted">Use Library → Refresh Event Schedule.</span>
-        </div>
-      )}
       {view === "library" && tracks.length === 0 && (
         <div className="border-t border-border px-4 py-2 text-xs text-muted">
-          Use Library → Projects to import a vendor delivery and open a project.
+          {deliveryCopy.appEmptyTracksFooter}
         </div>
       )}
     </main>
@@ -65,19 +60,17 @@ function MainContent({ scheduleStale }: { scheduleStale: boolean }) {
 }
 
 export default function App() {
-  const [scheduleStale, setScheduleStale] = useState(false);
   const deliveryStaging = usePlayerStore((state) => state.deliveryStaging);
+  const deliveryStagingApplicationId = usePlayerStore(
+    (state) => state.deliveryStagingApplicationId,
+  );
+  const activeProject = usePlayerStore((state) => state.activeProject);
+  const stagingTitle = getDeliveryCopy(
+    deliveryStagingApplicationId ?? activeProject?.application_id,
+  ).stagingBusyTitle;
 
   useEffect(() => {
     initPlayerController();
-  }, []);
-
-  useEffect(() => {
-    void api.getScheduleStale().then(setScheduleStale).catch(() => setScheduleStale(false));
-    const id = window.setInterval(() => {
-      void api.getScheduleStale().then(setScheduleStale).catch(() => setScheduleStale(false));
-    }, 60_000);
-    return () => window.clearInterval(id);
   }, []);
 
   const { selectTrack, playTrack, togglePlayPause, adjustVolume, seekToStart, seekToEnd } = usePlayer();
@@ -104,7 +97,7 @@ export default function App() {
     <div className="flex h-full flex-col">
       {deliveryStaging ? (
         <DeliveryBusyOverlay
-          title="Staging delivery…"
+          title={stagingTitle}
           detail="Extracting archives and preparing preview."
         />
       ) : null}
@@ -112,7 +105,7 @@ export default function App() {
       <div className="flex min-h-0 flex-1">
         <Sidebar width={sidebarWidth} />
         <SidebarResizeHandle width={sidebarWidth} onResizeStart={onResizeStart} />
-        <MainContent scheduleStale={scheduleStale} />
+        <MainContent />
       </div>
       <NowPlayingBar />
     </div>

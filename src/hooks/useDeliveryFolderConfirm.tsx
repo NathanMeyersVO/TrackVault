@@ -1,13 +1,18 @@
 import { useCallback, useState } from "react";
 
 import { DeliveryFolderConfirmModal } from "../components/DeliveryFolderConfirmModal";
+import { getApplicationConfig, getDeliveryCopy } from "../lib/applicationConfig";
 import { pickDeliveryFolder } from "../lib/pickDeliveryFolder";
-import { api, type DeliveryFolderBrowseResult } from "../lib/tauri";
+import { api, type ApplicationId, type DeliveryFolderBrowseResult } from "../lib/tauri";
 
 export function useDeliveryFolderConfirm(options: {
+  applicationId: ApplicationId;
   onConfirm: (folderPath: string) => void | Promise<void>;
 }) {
-  const { onConfirm } = options;
+  const { applicationId, onConfirm } = options;
+  const deliveryCopy = getDeliveryCopy(applicationId);
+  const supportsScheduleDelivery =
+    getApplicationConfig(applicationId).supportsScheduleDelivery;
   const [open, setOpen] = useState(false);
   const [browse, setBrowse] = useState<DeliveryFolderBrowseResult | null>(null);
   const [loading, setLoading] = useState(false);
@@ -35,15 +40,15 @@ export function useDeliveryFolderConfirm(options: {
   }, []);
 
   const pickAndShow = useCallback(async () => {
-    const folder = await pickDeliveryFolder();
+    const folder = await pickDeliveryFolder(deliveryCopy.pickFolderDialogTitle);
     if (!folder) return;
     await loadFolder(folder);
-  }, [loadFolder]);
+  }, [deliveryCopy.pickFolderDialogTitle, loadFolder]);
 
   const chooseDifferent = useCallback(async () => {
-    const folder = await pickDeliveryFolder();
+    const folder = await pickDeliveryFolder(deliveryCopy.pickFolderDialogTitle);
     if (folder) await loadFolder(folder);
-  }, [loadFolder]);
+  }, [deliveryCopy.pickFolderDialogTitle, loadFolder]);
 
   const confirm = useCallback(
     (path: string) => {
@@ -55,6 +60,8 @@ export function useDeliveryFolderConfirm(options: {
 
   const modal = open ? (
     <DeliveryFolderConfirmModal
+      title={deliveryCopy.confirmFolderModalTitle}
+      supportsScheduleDelivery={supportsScheduleDelivery}
       browse={browse}
       loading={loading}
       error={error}

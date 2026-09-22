@@ -51,6 +51,23 @@ pub fn normalize_application_id(application_id: &str) -> ApplicationId {
     }
 }
 
+pub fn supports_schedule_delivery(application: ApplicationId) -> bool {
+    matches!(application, ApplicationId::UsFigureSkatingEms)
+}
+
+pub fn resolve_delivery_application(
+    app_data: &Path,
+    project_id: Option<&str>,
+    create_application_id: Option<&str>,
+) -> Result<ApplicationId, String> {
+    if let Some(pid) = project_id {
+        let project_root = crate::projects::project_dir(app_data, pid);
+        let manifest = crate::projects::load_manifest(&project_root)?;
+        return Ok(normalize_application_id(&manifest.application_id));
+    }
+    Ok(normalize_application_id(create_application_id.unwrap_or("none")))
+}
+
 pub fn get_application(db: &Database) -> Result<ApplicationId, String> {
     let stored = db
         .get_app_setting(SETTINGS_KEY)

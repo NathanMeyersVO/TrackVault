@@ -6,6 +6,7 @@ import { useDeliveryFolderConfirm } from "../hooks/useDeliveryFolderConfirm";
 import { useLibraryUiReset } from "../hooks/useLibraryUiReset";
 import { useLibrary } from "../hooks/usePlayer";
 import { usePlayerStore } from "../store/playerStore";
+import { getDeliveryCopy } from "../lib/applicationConfig";
 import { APPLICATION_OPTIONS, getApplicationLabel } from "../lib/applicationLabels";
 import { api, type ApplicationId, type DeliveryPreview, type ProjectSummary } from "../lib/tauri";
 export interface ProjectHubModalProps {
@@ -45,10 +46,10 @@ export function ProjectHubModal({ onClose }: ProjectHubModalProps) {
 
   const stageFromFolder = useCallback(
     async (folder: string) => {
-      setDeliveryStaging(true);
+      setDeliveryStaging(true, applicationId);
       setError(null);
       try {
-        const preview = await api.stageDelivery([folder], null);
+        const preview = await api.stageDelivery([folder], null, applicationId);
         setDeliveryPreview(preview);
       } catch (e) {
         setError(String(e));
@@ -56,11 +57,13 @@ export function ProjectHubModal({ onClose }: ProjectHubModalProps) {
         setDeliveryStaging(false);
       }
     },
-    [setDeliveryStaging],
+    [applicationId, setDeliveryStaging],
   );
 
+  const deliveryCopy = getDeliveryCopy(applicationId);
+
   const { pickAndShow: pickDeliveryFolderForCreate, modal: deliveryFolderConfirmModal } =
-    useDeliveryFolderConfirm({ onConfirm: stageFromFolder });
+    useDeliveryFolderConfirm({ applicationId, onConfirm: stageFromFolder });
 
   const importProjectArchive = async () => {
     const source = await open({
@@ -160,9 +163,7 @@ export function ProjectHubModal({ onClose }: ProjectHubModalProps) {
         <div className="flex max-h-[90vh] w-full max-w-lg flex-col rounded-lg border border-border bg-surface shadow-xl">
           <div className="border-b border-border px-4 py-3">
             <h2 className="text-sm font-semibold text-foreground">Projects</h2>
-            <p className="mt-1 text-xs text-muted">
-              Choose a vendor folder with audio archives and/or an event schedule spreadsheet (.xls, .xlsx).
-            </p>
+            <p className="mt-1 text-xs text-muted">{deliveryCopy.createProjectHint}</p>
           </div>
 
           <div className="space-y-3 border-b border-border px-4 py-3">
@@ -196,7 +197,7 @@ export function ProjectHubModal({ onClose }: ProjectHubModalProps) {
               onClick={() => void startCreateFromDelivery()}
               className="w-full rounded-md bg-accent px-3 py-2 text-sm text-accent-foreground disabled:opacity-40"
             >
-              Import delivery…
+              {deliveryCopy.importButton}
             </button>
             <button
               type="button"

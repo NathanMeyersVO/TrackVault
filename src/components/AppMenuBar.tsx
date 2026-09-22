@@ -15,6 +15,7 @@ export function AppMenuBar() {
     collectionId,
     collectionName,
     deliveryStaging,
+    deliveryCopy,
     exportingProject,
     libraryUploading,
     collectionUploading,
@@ -29,8 +30,6 @@ export function AppMenuBar() {
     activeProject,
     openProjectHub,
     applyDeliveryUpdate,
-    refreshProjectSchedule,
-    refreshingSchedule,
     projectHubModal,
     deliveryFolderConfirmModal,
     deliveryUpdateModal,
@@ -59,16 +58,12 @@ export function AppMenuBar() {
       disabled: actionsDisabled,
     },
     {
-      label: deliveryStaging ? "Staging delivery…" : "Apply Delivery Update…",
-      title: "Choose a vendor folder (archives and/or event schedule) to preview and apply.",
+      label: deliveryStaging
+        ? deliveryCopy.applyUpdateMenuLabelStaging
+        : deliveryCopy.applyUpdateMenuLabel,
+      title: deliveryCopy.applyUpdateMenuTitle,
       onClick: () => void applyDeliveryUpdate(),
       disabled: libraryActionsDisabled || deliveryStaging,
-    },
-    {
-      label: refreshingSchedule ? "Refreshing schedule…" : "Refresh Event Schedule",
-      title: "Re-read event-schedule.xlsx and merge event titles.",
-      onClick: () => void refreshProjectSchedule(),
-      disabled: libraryActionsDisabled || refreshingSchedule,
     },
     {
       label: libraryUploading ? "Uploading to library…" : "Upload to Library",
