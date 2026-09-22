@@ -34,7 +34,8 @@ use commands::{
     get_app_settings, get_application_settings, get_collection_playback_state, get_collection_tracks,
     apply_staged_delivery, create_project, delete_project, get_active_project, get_library_folder,
     get_schedule_stale, list_projects, open_project, preview_delivery_with_mode,
-    refresh_project_schedule, stage_delivery, update_project_application,
+    refresh_project_schedule, restore_active_project_in_background, stage_delivery,
+    update_project_application,
     get_playback_state, get_playlist_tracks, get_taglist_tracks, get_track, get_track_peaks,
     get_track_tags, get_volume, import_collection, import_taglist_titles, init_state,
     list_collections, list_playlists, list_taglist_values, list_taglists, list_tracks,
@@ -58,8 +59,11 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
-            let state = init_state(app.handle())?;
+            let (state, restore_project_id) = init_state(app.handle())?;
             app.manage(state);
+            if let Some(project_id) = restore_project_id {
+                restore_active_project_in_background(app.handle().clone(), project_id);
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

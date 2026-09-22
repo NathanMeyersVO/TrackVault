@@ -232,3 +232,63 @@ fn import_schedule_merge<'a>(
         .map_err(|e| e.to_string())?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::delivery::{DeliveryChange, DeliveryChangeKind};
+    use crate::projects::ProjectManifest;
+    use std::io::Write;
+
+    #[test]
+    fn apply_delivery_honors_stable_change_ids() {
+        let base = std::env::temp_dir().join(format!("tv-apply-{}", uuid::Uuid::new_v4()));
+        let project_root = base.join("project");
+        let library = project_root.join("library");
+        let staging = base.join("staging");
+        std::fs::create_dir_all(&library).unwrap();
+        std::fs::create_dir_all(&staging).unwrap();
+
+        let track_rel = "tracks/one.mp3";
+        let staged_path = staging.join(track_rel);
+        std::fs::create_dir_all(staged_path.parent().unwrap()).unwrap();
+        let mut f = std::fs::File::create(&staged_path).unwrap();
+        f.write_all(b"fake-mp3").unwrap();
+
+        let change_id = "stable-change-id".to_string();
+        let changes = vec![DeliveryChange {
+            change_id: change_id.clone(),
+            kind: DeliveryChangeKind::AudioAdd,
+            summary: "Add: tracks/one.mp3".to_string(),
+            details: track_rel.to_string(),
+            default_selected: true,
+        }];
+
+        let db = crate::db::Database::open(std::path::Path::new(":memory:")).unwrap();
+        db.set_library_folder(&library.to_string_lossy()).unwrap();
+
+        let mut manifest = ProjectManifest::new(
+            "proj".to_string(),
+            "Test".to_string(),
+            "none".to_string(),
+        );
+        projects::save_manifest(&project_root, &manifest).unwrap();
+
+        let selected = HashSet::from([change_id]);
+        let result = apply_delivery(
+            &db,
+            &project_root,
+            &mut manifest,
+            &staging,
+            &changes,
+            &selected,
+            ApplyMode::Merge,
+        )
+        .unwrap();
+
+        assert_eq!(result.applied, 1);
+        assert!(library.join(track_rel).is_file());
+
+        let _ = std::fs::remove_dir_all(&base);
+    }
+}

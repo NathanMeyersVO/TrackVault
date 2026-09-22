@@ -26,6 +26,8 @@ pub fn stage_delivery_sources(
             copy_tree_into(&path, &staging_root)?;
         } else if is_tar_archive(&path) {
             extract_tar_into(&path, &staging_root)?;
+        } else if is_zip_archive(&path) {
+            extract_zip_into(&path, &staging_root)?;
         } else if path.is_file() {
             let name = path
                 .file_name()
@@ -36,6 +38,12 @@ pub fn stage_delivery_sources(
         }
     }
     Ok(staging_root)
+}
+
+fn is_zip_archive(path: &Path) -> bool {
+    path.extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|e| e.eq_ignore_ascii_case("zip"))
 }
 
 fn is_tar_archive(path: &Path) -> bool {
@@ -74,6 +82,34 @@ fn extract_tar_into(archive_path: &Path, dest: &Path) -> Result<(), String> {
         };
     let mut archive = Archive::new(reader);
     archive.unpack(dest).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+fn extract_zip_into(archive_path: &Path, dest: &Path) -> Result<(), String> {
+    let file = fs::File::open(archive_path).map_err(|e| e.to_string())?;
+    let mut archive =
+        zip::ZipArchive::new(BufReader::new(file)).map_err(|e| format!("Invalid zip: {e}"))?;
+    for i in 0..archive.len() {
+        let mut entry = archive
+            .by_index(i)
+            .map_err(|e| format!("Zip entry {i}: {e}"))?;
+        let Some(rel) = entry.enclosed_name() else {
+            return Err(format!(
+                "Zip entry has an unsafe path: {}",
+                entry.name()
+            ));
+        };
+        let target = dest.join(rel);
+        if entry.is_dir() || entry.name().ends_with('/') {
+            fs::create_dir_all(&target).map_err(|e| e.to_string())?;
+            continue;
+        }
+        if let Some(parent) = target.parent() {
+            fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        }
+        let mut out = fs::File::create(&target).map_err(|e| e.to_string())?;
+        copy(&mut entry, &mut out).map_err(|e| e.to_string())?;
+    }
     Ok(())
 }
 
@@ -147,4 +183,40 @@ pub fn collect_audio_relative(staging_root: &Path) -> Result<Vec<(String, PathBu
     }
     files.sort_by(|a, b| a.0.cmp(&b.0));
     Ok(files)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+    use zip::write::SimpleFileOptions;
+    use zip::ZipWriter;
+
+    fn write_test_zip(path: &Path, inner_path: &str, contents: &[u8]) {
+        let file = fs::File::create(path).expect("create zip");
+        let mut zip = ZipWriter::new(file);
+        zip.start_file(inner_path, SimpleFileOptions::default())
+            .expect("start_file");
+        zip.write_all(contents).expect("write");
+        zip.finish().expect("finish");
+    }
+
+    #[test]
+    fn zip_archive_yields_staged_audio() {
+        let base = std::env::temp_dir().join(format!("tv-staging-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&base).expect("mkdir");
+        let zip_path = base.join("delivery.zip");
+        write_test_zip(&zip_path, "tracks/01.mp3", b"fake-mp3");
+
+        let sessions = base.join("sessions");
+        let staging_root =
+            stage_delivery_sources(&sessions, "test-session", &[zip_path.to_string_lossy().into()])
+                .expect("stage");
+
+        let audio = collect_audio_relative(&staging_root).expect("collect");
+        assert_eq!(audio.len(), 1);
+        assert_eq!(audio[0].0, "tracks/01.mp3");
+
+        let _ = fs::remove_dir_all(&base);
+    }
 }

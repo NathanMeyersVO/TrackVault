@@ -1469,12 +1469,6 @@ pub fn stage_delivery(
         &session_id,
         &source_paths,
     )?;
-    state.delivery_sessions.insert(StagingSession {
-        id: session_id.clone(),
-        staging_root: staging_root.clone(),
-        target_project_id: project_id.clone(),
-        created: std::time::Instant::now(),
-    });
 
     let preview = if let Some(ref pid) = project_id {
         let library = projects::library_dir(&projects::project_dir(&state.app_data_dir, pid));
@@ -1484,6 +1478,22 @@ pub fn stage_delivery(
         std::fs::create_dir_all(&empty).ok();
         build_preview(&session_id, &staging_root, &empty, false)?
     };
+
+    if preview.staged_audio_count == 0 {
+        return Err(
+            "No audio files found in delivery. Supported archives: .zip, .tar, .tar.gz, .tgz. \
+             Audio must use extensions such as mp3, flac, wav, m4a, aac, ogg, aiff, or mp4."
+                .to_string(),
+        );
+    }
+
+    state.delivery_sessions.insert(StagingSession {
+        id: session_id.clone(),
+        staging_root: staging_root.clone(),
+        target_project_id: project_id.clone(),
+        preview: preview.clone(),
+        created: std::time::Instant::now(),
+    });
 
     Ok(preview)
 }
@@ -1513,6 +1523,9 @@ pub fn preview_delivery_with_mode(
     if apply_mode == "full_replace" && for_update {
         append_full_replace_removals(&mut preview, &session.staging_root, &library)?;
     }
+    state
+        .delivery_sessions
+        .update_preview(&staging_session_id, preview.clone())?;
     Ok(preview)
 }
 
@@ -1555,24 +1568,45 @@ pub fn apply_staged_delivery(
 
     let project_root = projects::project_dir(&state.app_data_dir, &project_id);
     let library_root = projects::library_dir(&project_root);
-    let empty_preview = state.app_data_dir.join("_empty_preview");
-    let preview_library = if for_update {
-        &library_root
-    } else {
-        &empty_preview
-    };
 
-    let mut preview = build_preview(
-        &staging_session_id,
-        &session.staging_root,
-        preview_library,
-        for_update || library_root.read_dir().map(|mut d| d.next().is_some()).unwrap_or(false),
-    )?;
+    let mut preview = session.preview.clone();
+    let mut selected: std::collections::HashSet<String> = change_ids.into_iter().collect();
+
     if matches!(mode, ApplyMode::FullReplace) && for_update {
-        append_full_replace_removals(&mut preview, &session.staging_root, &library_root)?;
+        let has_removals = preview
+            .changes
+            .iter()
+            .any(|c| matches!(c.kind, crate::delivery::DeliveryChangeKind::AudioRemove));
+        if !has_removals {
+            append_full_replace_removals(&mut preview, &session.staging_root, &library_root)?;
+            for change in &preview.changes {
+                if matches!(change.kind, crate::delivery::DeliveryChangeKind::AudioRemove) {
+                    selected.insert(change.change_id.clone());
+                }
+            }
+        }
     }
 
-    let selected: std::collections::HashSet<String> = change_ids.into_iter().collect();
+    let matching: Vec<_> = preview
+        .changes
+        .iter()
+        .filter(|c| selected.contains(&c.change_id))
+        .collect();
+    if matching.is_empty() {
+        return Err("No matching changes to apply".to_string());
+    }
+
+    let selected_audio = matching.iter().any(|c| {
+        matches!(
+            c.kind,
+            crate::delivery::DeliveryChangeKind::AudioAdd
+                | crate::delivery::DeliveryChangeKind::AudioUpdate
+                | crate::delivery::DeliveryChangeKind::AudioReplace
+                | crate::delivery::DeliveryChangeKind::AudioMove
+                | crate::delivery::DeliveryChangeKind::AudioRemove
+        )
+    });
+
     let mut manifest = projects::load_manifest(&project_root)?;
 
     let result = {
@@ -1587,6 +1621,12 @@ pub fn apply_staged_delivery(
             mode,
         )?
     };
+
+    if selected_audio && result.applied == 0 {
+        return Err(
+            "No audio changes were applied. Try staging the delivery again.".to_string(),
+        );
+    }
 
     open_project_internal(&app, &state, &project_id)?;
 
@@ -1709,7 +1749,16 @@ fn open_project_internal(app: &AppHandle, state: &AppState, project_id: &str) ->
     Ok(())
 }
 
-pub fn init_state(app: &AppHandle) -> Result<AppState, String> {
+fn active_project_id_to_restore(db: &Database) -> Option<String> {
+    let json = db.get_app_setting(ACTIVE_PROJECT_KEY).ok()??;
+    let project_id: String = serde_json::from_str(&json).ok()?;
+    if project_id.is_empty() || project_id == "null" {
+        return None;
+    }
+    Some(project_id)
+}
+
+pub fn init_state(app: &AppHandle) -> Result<(AppState, Option<String>), String> {
     let data_dir = app
         .path()
         .app_data_dir()
@@ -1721,6 +1770,8 @@ pub fn init_state(app: &AppHandle) -> Result<AppState, String> {
     let audio_cache = AudioCacheWorker::start(app.clone(), Arc::clone(&db), Arc::clone(&player));
     let delivery_sessions = DeliverySessionStore::new(&data_dir);
 
+    let restore_project_id = active_project_id_to_restore(&db.lock());
+
     let state = AppState {
         db,
         player,
@@ -1730,13 +1781,14 @@ pub fn init_state(app: &AppHandle) -> Result<AppState, String> {
         delivery_sessions,
     };
 
-    if let Ok(Some(json)) = state.db.lock().get_app_setting(ACTIVE_PROJECT_KEY) {
-        if let Ok(project_id) = serde_json::from_str::<String>(&json) {
-            if !project_id.is_empty() && project_id != "null" {
-                let _ = open_project_internal(app, &state, &project_id);
-            }
-        }
-    }
+    Ok((state, restore_project_id))
+}
 
-    Ok(state)
+pub fn restore_active_project_in_background(app: AppHandle, project_id: String) {
+    std::thread::spawn(move || {
+        let state = app.state::<AppState>();
+        if let Err(e) = open_project_internal(&app, &state, &project_id) {
+            eprintln!("Failed to restore active project on startup: {e}");
+        }
+    });
 }

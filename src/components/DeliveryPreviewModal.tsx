@@ -1,10 +1,15 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   api,
   type DeliveryChange,
   type DeliveryPreview,
 } from "../lib/tauri";
+import {
+  COLLAPSE_GROUP_THRESHOLD,
+  groupDeliveryChanges,
+  groupSelectionState,
+} from "../lib/deliveryPreviewGroups";
 
 export interface DeliveryPreviewModalProps {
   preview: DeliveryPreview;
@@ -27,9 +32,26 @@ export function DeliveryPreviewModal({
   const [selected, setSelected] = useState<Set<string>>(() =>
     new Set(initialPreview.changes.filter((c) => c.default_selected).map((c) => c.change_id)),
   );
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(() => new Set());
   const [applyMode, setApplyMode] = useState<"merge" | "full_replace">("merge");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const groups = useMemo(() => groupDeliveryChanges(preview.changes), [preview.changes]);
+
+  useEffect(() => {
+    setExpandedGroups((prev) => {
+      let changed = false;
+      const next = new Set(prev);
+      for (const { def, items } of groups) {
+        if (!next.has(def.key) && items.length <= COLLAPSE_GROUP_THRESHOLD) {
+          next.add(def.key);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [preview.staging_session_id, preview.changes.length, groups]);
 
   useEffect(() => {
     if (mode !== "update") return;
@@ -74,7 +96,33 @@ export function DeliveryPreviewModal({
     setSelected(new Set());
   }, []);
 
-  const grouped = useMemo(() => groupChanges(preview.changes), [preview.changes]);
+  const toggleGroupExpanded = useCallback((key: string) => {
+    setExpandedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }, []);
+
+  const setGroupSelected = useCallback((items: DeliveryChange[], select: boolean) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      for (const item of items) {
+        if (select) next.add(item.change_id);
+        else next.delete(item.change_id);
+      }
+      return next;
+    });
+  }, []);
+
+  const expandAll = useCallback(() => {
+    setExpandedGroups(new Set(groups.map((g) => g.def.key)));
+  }, [groups]);
+
+  const collapseAll = useCallback(() => {
+    setExpandedGroups(new Set());
+  }, []);
 
   const apply = async () => {
     setBusy(true);
@@ -133,38 +181,34 @@ export function DeliveryPreviewModal({
           </div>
         )}
 
-        <div className="flex gap-2 border-b border-border px-4 py-2 text-xs">
+        <div className="flex flex-wrap gap-x-3 gap-y-1 border-b border-border px-4 py-2 text-xs">
           <button type="button" className="text-accent hover:underline" onClick={selectAll}>
             Select all
           </button>
           <button type="button" className="text-accent hover:underline" onClick={selectNone}>
             Select none
           </button>
+          <button type="button" className="text-accent hover:underline" onClick={expandAll}>
+            Expand all
+          </button>
+          <button type="button" className="text-accent hover:underline" onClick={collapseAll}>
+            Collapse all
+          </button>
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-2">
-          {Object.entries(grouped).map(([label, items]) =>
-            items.length === 0 ? null : (
-              <section key={label} className="mb-4">
-                <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted">
-                  {label}
-                </h3>
-                <ul className="space-y-1">
-                  {items.map((change) => (
-                    <li key={change.change_id} className="flex gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={selected.has(change.change_id)}
-                        onChange={() => toggle(change.change_id)}
-                        className="mt-0.5"
-                      />
-                      <span className="text-foreground">{change.summary}</span>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            ),
-          )}
+          {groups.map(({ def, items }) => (
+            <DeliveryChangeGroupSection
+              key={def.key}
+              label={def.label}
+              items={items}
+              expanded={expandedGroups.has(def.key)}
+              selected={selected}
+              onToggleExpand={() => toggleGroupExpanded(def.key)}
+              onToggleItem={toggle}
+              onSetGroupSelected={(select) => setGroupSelected(items, select)}
+            />
+          ))}
         </div>
 
         {error && (
@@ -194,23 +238,73 @@ export function DeliveryPreviewModal({
   );
 }
 
-function groupChanges(changes: DeliveryChange[]): Record<string, DeliveryChange[]> {
-  const groups: Record<string, DeliveryChange[]> = {
-    Added: [],
-    Updated: [],
-    Replaced: [],
-    Moved: [],
-    Removed: [],
-    Schedule: [],
-  };
-  for (const c of changes) {
-    const kind = c.kind;
-    if (kind === "audio_add") groups.Added.push(c);
-    else if (kind === "audio_update") groups.Updated.push(c);
-    else if (kind === "audio_replace") groups.Replaced.push(c);
-    else if (kind === "audio_move") groups.Moved.push(c);
-    else if (kind === "audio_remove") groups.Removed.push(c);
-    else groups.Schedule.push(c);
-  }
-  return groups;
+interface DeliveryChangeGroupSectionProps {
+  label: string;
+  items: DeliveryChange[];
+  expanded: boolean;
+  selected: Set<string>;
+  onToggleExpand: () => void;
+  onToggleItem: (id: string) => void;
+  onSetGroupSelected: (select: boolean) => void;
+}
+
+function DeliveryChangeGroupSection({
+  label,
+  items,
+  expanded,
+  selected,
+  onToggleExpand,
+  onToggleItem,
+  onSetGroupSelected,
+}: DeliveryChangeGroupSectionProps) {
+  const { all, some } = groupSelectionState(items, selected);
+  const checkboxRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const el = checkboxRef.current;
+    if (el) el.indeterminate = some && !all;
+  }, [all, some]);
+
+  return (
+    <section className="mb-2 border-b border-border/60 pb-2 last:border-b-0">
+      <div className="flex items-center gap-2 py-1.5">
+        <input
+          ref={checkboxRef}
+          type="checkbox"
+          checked={all}
+          onChange={() => onSetGroupSelected(!all)}
+          className="shrink-0"
+          aria-label={`Select all ${label}`}
+        />
+        <button
+          type="button"
+          onClick={onToggleExpand}
+          className="flex min-w-0 flex-1 items-center gap-2 text-left text-sm font-medium text-foreground hover:text-accent"
+        >
+          <span className="shrink-0 text-xs text-muted" aria-hidden>
+            {expanded ? "▾" : "▸"}
+          </span>
+          <span className="truncate">
+            {label}
+            <span className="ml-1.5 font-normal text-muted">({items.length})</span>
+          </span>
+        </button>
+      </div>
+      {expanded && (
+        <ul className="ml-6 space-y-1 border-l border-border pl-3">
+          {items.map((change) => (
+            <li key={change.change_id} className="flex gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={selected.has(change.change_id)}
+                onChange={() => onToggleItem(change.change_id)}
+                className="mt-0.5 shrink-0"
+              />
+              <span className="min-w-0 text-foreground">{change.summary}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
 }

@@ -4,12 +4,15 @@ use std::time::{Duration, Instant};
 
 use parking_lot::Mutex;
 
+use super::DeliveryPreview;
+
 const SESSION_TTL: Duration = Duration::from_secs(3600);
 
 pub struct StagingSession {
     pub id: String,
     pub staging_root: PathBuf,
     pub target_project_id: Option<String>,
+    pub preview: DeliveryPreview,
     pub created: Instant,
 }
 
@@ -42,6 +45,16 @@ impl DeliverySessionStore {
         self.sessions.lock().get(id).cloned()
     }
 
+    pub fn update_preview(&self, id: &str, preview: DeliveryPreview) -> Result<(), String> {
+        self.purge_expired();
+        let mut guard = self.sessions.lock();
+        let session = guard
+            .get_mut(id)
+            .ok_or_else(|| "Staging session expired".to_string())?;
+        session.preview = preview;
+        Ok(())
+    }
+
     pub fn remove(&self, id: &str) {
         let mut guard = self.sessions.lock();
         if let Some(session) = guard.remove(id) {
@@ -70,6 +83,7 @@ impl Clone for StagingSession {
             id: self.id.clone(),
             staging_root: self.staging_root.clone(),
             target_project_id: self.target_project_id.clone(),
+            preview: self.preview.clone(),
             created: self.created,
         }
     }
