@@ -154,15 +154,6 @@ export function RemoteImportFromPhoneModal({
     return () => window.clearInterval(interval);
   }, [remoteWaiting]);
 
-  const copyUploadUrl = useCallback(async () => {
-    if (!remoteUploadUrl) return;
-    try {
-      await navigator.clipboard.writeText(remoteUploadUrl);
-    } catch {
-      setError("Could not copy URL to clipboard.");
-    }
-  }, [remoteUploadUrl]);
-
   const openLogsFolder = useCallback(async () => {
     try {
       const dir = await api.getReplaceRemoteUploadLogsDir();
@@ -278,7 +269,7 @@ export function RemoteImportFromPhoneModal({
               waiting={remoteWaiting && sourcePaths.length === 0}
               busy={busy}
               multipleFiles
-              onCopyUrl={() => void copyUploadUrl()}
+              onCopyError={setError}
             />
             {sourcePaths.length > 0 && (
               <div className="rounded-md border border-border bg-background/40 p-3">

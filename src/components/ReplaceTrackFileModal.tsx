@@ -191,15 +191,6 @@ export function ReplaceTrackFileModal({ track, onClose }: ReplaceTrackFileModalP
     }
   }, [track.id]);
 
-  const copyUploadUrl = useCallback(async () => {
-    if (!remoteUploadUrl) return;
-    try {
-      await navigator.clipboard.writeText(remoteUploadUrl);
-    } catch {
-      setError("Could not copy URL to clipboard.");
-    }
-  }, [remoteUploadUrl]);
-
   const handleConfirm = useCallback(async () => {
     if (!sourcePath) return;
     setCommitting(true);
@@ -277,7 +268,7 @@ export function ReplaceTrackFileModal({ track, onClose }: ReplaceTrackFileModalP
                 localhostTestUrl={remoteLocalhostUrl}
                 waiting={remoteWaiting && !loading}
                 busy={busy}
-                onCopyUrl={() => void copyUploadUrl()}
+                onCopyError={setError}
               />
             </div>
           ) : (
