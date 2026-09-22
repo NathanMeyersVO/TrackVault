@@ -180,17 +180,6 @@ pub fn close_library(app: AppHandle, state: State<'_, AppState>) -> Result<Playb
 }
 
 #[tauri::command]
-pub fn scan_library(app: AppHandle, state: State<'_, AppState>) -> Result<ScanProgress, String> {
-    let progress = {
-        let db = state.db.lock();
-        scanner::scan_library_folder(&db, &app)?
-    };
-    let _ = app.emit("library-updated", ());
-    state.audio_cache.kick();
-    Ok(progress)
-}
-
-#[tauri::command]
 pub fn check_upload_conflicts(
     state: State<'_, AppState>,
     source_paths: Vec<String>,
@@ -1370,6 +1359,39 @@ pub fn create_project(
 #[tauri::command]
 pub fn open_project(app: AppHandle, state: State<'_, AppState>, project_id: String) -> Result<(), String> {
     open_project_internal(&app, &state, &project_id)
+}
+
+#[tauri::command]
+pub fn export_project(
+    state: State<'_, AppState>,
+    project_id: String,
+    destination: String,
+) -> Result<(), String> {
+    let is_active = {
+        let db = state.db.lock();
+        match db.get_app_setting(ACTIVE_PROJECT_KEY).map_err(|e| e.to_string())? {
+            Some(json) => serde_json::from_str::<String>(&json)
+                .map(|active_id| active_id == project_id)
+                .unwrap_or(false),
+            None => false,
+        }
+    };
+    if is_active {
+        try_autosave_project_config(&state);
+    }
+    crate::project_archive::export_project(
+        &state.app_data_dir,
+        &project_id,
+        Path::new(&destination),
+    )
+}
+
+#[tauri::command]
+pub fn import_project_archive(
+    state: State<'_, AppState>,
+    source: String,
+) -> Result<ProjectSummary, String> {
+    crate::project_archive::import_project(&state.app_data_dir, Path::new(&source))
 }
 
 #[tauri::command]

@@ -14,11 +14,10 @@ export function AppMenuBar() {
   const {
     collectionId,
     collectionName,
-    scanning,
     deliveryStaging,
+    exportingProject,
     libraryUploading,
     collectionUploading,
-    savingConfig,
     importingCollection,
     uploadMessage,
     uploadError,
@@ -40,8 +39,7 @@ export function AppMenuBar() {
     openLibraryRemoteUpload,
     openCollectionRemoteUpload,
     remoteImportModal,
-    scanLibrary,
-    saveConfiguration,
+    exportProject,
     importCollection,
     actionsDisabled,
     libraryActionsDisabled,
@@ -93,17 +91,10 @@ export function AppMenuBar() {
       ],
     },
     {
-      label: scanning ? "Scanning…" : "Rescan Library",
-      title:
-        "Re-scan the library folder for new, changed, or removed files.",
-      onClick: () => void scanLibrary(),
-      disabled: libraryActionsDisabled,
-    },
-    {
-      label: savingConfig ? "Exporting…" : "Export Library Configuration",
-      title: "Write trackvault.json now (normally kept up to date automatically).",
-      onClick: () => void saveConfiguration(),
-      disabled: libraryActionsDisabled || savingConfig,
+      label: exportingProject ? "Exporting project…" : "Export Project…",
+      title: "Save the open project (library audio, schedule, and trackvault.json) to a .tgz archive.",
+      onClick: () => void exportProject(),
+      disabled: libraryActionsDisabled || exportingProject,
     },
   ];
 

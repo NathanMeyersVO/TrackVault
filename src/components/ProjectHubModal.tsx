@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { open } from "@tauri-apps/plugin-dialog";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { DeliveryPreviewModal } from "./DeliveryPreviewModal";
 import { useDeliveryFolderConfirm } from "../hooks/useDeliveryFolderConfirm";
@@ -19,7 +20,9 @@ export function ProjectHubModal({ onClose }: ProjectHubModalProps) {
   const [applicationId, setApplicationId] = useState<ApplicationId>("usfs_ems");
   const [deliveryPreview, setDeliveryPreview] = useState<DeliveryPreview | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ProjectSummary | null>(null);
+  const [importOpenTarget, setImportOpenTarget] = useState<ProjectSummary | null>(null);
   const [busy, setBusy] = useState(false);
+  const [importingArchive, setImportingArchive] = useState(false);
   const setDeliveryStaging = usePlayerStore((s) => s.setDeliveryStaging);
   const { refresh } = useLibrary();
   const { resetLibraryUi } = useLibraryUiReset();
@@ -58,6 +61,41 @@ export function ProjectHubModal({ onClose }: ProjectHubModalProps) {
 
   const { pickAndShow: pickDeliveryFolderForCreate, modal: deliveryFolderConfirmModal } =
     useDeliveryFolderConfirm({ onConfirm: stageFromFolder });
+
+  const importProjectArchive = async () => {
+    const source = await open({
+      title: "Import project archive",
+      multiple: false,
+      filters: [{ name: "TrackVault project archive", extensions: ["tgz"] }],
+    });
+    if (typeof source !== "string") return;
+
+    setImportingArchive(true);
+    setError(null);
+    try {
+      const imported = await api.importProjectArchive(source);
+      await reload();
+      setImportOpenTarget(imported);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setImportingArchive(false);
+    }
+  };
+
+  const openImportedProject = async (project: ProjectSummary) => {
+    setBusy(true);
+    try {
+      await api.openProject(project.id);
+      await refresh();
+      setImportOpenTarget(null);
+      onClose();
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const startCreateFromDelivery = () => {
     if (!newName.trim()) {
@@ -159,6 +197,14 @@ export function ProjectHubModal({ onClose }: ProjectHubModalProps) {
               className="w-full rounded-md bg-accent px-3 py-2 text-sm text-accent-foreground disabled:opacity-40"
             >
               Import delivery…
+            </button>
+            <button
+              type="button"
+              disabled={busy || importingArchive}
+              onClick={() => void importProjectArchive()}
+              className="w-full rounded-md border border-border px-3 py-2 text-sm text-foreground hover:bg-surface-hover disabled:opacity-40"
+            >
+              {importingArchive ? "Importing…" : "Import project archive…"}
             </button>
           </div>
 
@@ -270,6 +316,18 @@ export function ProjectHubModal({ onClose }: ProjectHubModalProps) {
           busy={busy}
           onConfirm={() => void confirmDelete()}
           onCancel={() => setDeleteTarget(null)}
+        />
+      )}
+
+      {importOpenTarget && (
+        <ConfirmDialog
+          title="Project imported"
+          message={`"${importOpenTarget.name}" was imported as a new project (${importOpenTarget.track_count} tracks). Open it now?`}
+          confirmLabel="Open project"
+          cancelLabel="Not now"
+          busy={busy}
+          onConfirm={() => void openImportedProject(importOpenTarget)}
+          onCancel={() => setImportOpenTarget(null)}
         />
       )}
     </>

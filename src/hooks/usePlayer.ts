@@ -21,7 +21,6 @@ export function useLibrary() {
     setCollections,
     setLibraryFolder,
     setActiveProject,
-    setScanning,
     setAudioCacheProgress,
     setLibraryScanProgress,
   } = usePlayerStore();
@@ -122,27 +121,7 @@ export function useLibrary() {
 
 
 
-  const scanLibrary = useCallback(async () => {
-
-    setScanning(true);
-
-    try {
-
-      await api.scanLibrary();
-
-      await refresh();
-
-    } finally {
-
-      setScanning(false);
-
-    }
-
-  }, [refresh, setScanning]);
-
-
-
-  return { refresh, scanLibrary };
+  return { refresh };
 
 }
 

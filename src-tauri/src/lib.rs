@@ -9,6 +9,7 @@ mod config;
 mod db;
 mod delivery;
 mod file_hash;
+mod project_archive;
 mod project_config;
 mod projects;
 mod models;
@@ -32,7 +33,8 @@ use commands::{
     close_library, create_collection, create_playlist, create_taglist, delete_collection,
     delete_collection_track, delete_playlist, delete_taglist, delete_track, export_collection,
     get_app_settings, get_application_settings, get_collection_playback_state, get_collection_tracks,
-    apply_staged_delivery, create_project, delete_project, get_active_project, get_library_folder,
+    apply_staged_delivery, create_project, delete_project, export_project, get_active_project,
+    get_library_folder, import_project_archive,
     get_schedule_stale, list_projects, open_project, preview_delivery_with_mode,
     browse_delivery_folder, get_last_delivery_folder, refresh_project_schedule,
     restore_active_project_in_background, set_last_delivery_folder, stage_delivery,
@@ -44,7 +46,7 @@ use commands::{
     reorder_collection_tracks, reorder_collections, reorder_playlist_tracks, reorder_playlists,
     reorder_taglist_tracks, reorder_taglist_values, resume_playback, load_library_config,
     list_taglist_swap_targets, swap_taglist_entries,
-    save_collection_playback_state, save_library_config, scan_library, seek_playback,
+    save_collection_playback_state, save_library_config, seek_playback,
     set_app_settings, set_application_settings, set_collection_continuous_volume, set_collection_playback_mode,
     set_library_folder, set_taglist_value_title, set_volume, stop_playback, update_track_tags, upload_collection_tracks, upload_tracks,
     preview_replace_library_track_file, replace_library_track_file,
@@ -78,6 +80,8 @@ pub fn run() {
             open_project,
             update_project_application,
             delete_project,
+            export_project,
+            import_project_archive,
             browse_delivery_folder,
             get_last_delivery_folder,
             set_last_delivery_folder,
@@ -89,7 +93,6 @@ pub fn run() {
             save_library_config,
             load_library_config,
             close_library,
-            scan_library,
             upload_tracks,
             check_upload_conflicts,
             preview_replace_library_track_file,

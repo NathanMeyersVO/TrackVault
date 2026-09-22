@@ -251,7 +251,6 @@ export const api = {
   getLibraryFolder: () => invoke<string | null>("get_library_folder"),
   setLibraryFolder: (path: string) =>
     invoke<ScanProgress>("set_library_folder", { path }),
-  scanLibrary: () => invoke<ScanProgress>("scan_library"),
   uploadTracks: (sourcePaths: string[], overwrite = false) =>
     invoke<UploadResult>("upload_tracks", { sourcePaths, overwrite }),
   checkUploadConflicts: (sourcePaths: string[]) =>
@@ -447,6 +446,10 @@ export const api = {
     invoke<ProjectSummary>("update_project_application", { projectId, applicationId }),
   deleteProject: (projectId: string) =>
     invoke<PlaybackState>("delete_project", { projectId }),
+  exportProject: (projectId: string, destination: string) =>
+    invoke<void>("export_project", { projectId, destination }),
+  importProjectArchive: (source: string) =>
+    invoke<ProjectSummary>("import_project_archive", { source }),
   browseDeliveryFolder: (current: string | null) =>
     invoke<DeliveryFolderBrowseResult>("browse_delivery_folder", { current }),
   getLastDeliveryFolder: () =>

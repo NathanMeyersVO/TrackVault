@@ -5,7 +5,7 @@ import {
   SUCCESS_DISMISS_MS,
   useAutoDismissFeedback,
 } from "./useAutoDismissFeedback";
-import { open } from "@tauri-apps/plugin-dialog";
+import { open, save } from "@tauri-apps/plugin-dialog";
 
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { importCollectionFromDialog } from "../components/CollectionView";
@@ -50,7 +50,7 @@ export function useLibraryMenuActions() {
     collectionId != null
       ? collections.find((collection) => collection.id === collectionId)?.name
       : null;
-  const { refresh, scanLibrary } = useLibrary();
+  const { refresh } = useLibrary();
   const libraryUpload = useUploadTracks();
   const collectionUpload = useCollectionUpload(collectionId);
   const {
@@ -112,6 +112,7 @@ export function useLibraryMenuActions() {
   const [projectHubOpen, setProjectHubOpen] = useState(false);
   const [deliveryPreview, setDeliveryPreview] = useState<DeliveryPreview | null>(null);
   const [refreshingSchedule, setRefreshingSchedule] = useState(false);
+  const [exportingProject, setExportingProject] = useState(false);
 
   const applyLibraryFolder = useCallback(
     async (path: string) => {
@@ -178,6 +179,33 @@ export function useLibraryMenuActions() {
     setConfigError(null);
     void pickDeliveryFolderForUpdate();
   }, [activeProject, pickDeliveryFolderForUpdate, setConfigError]);
+
+  const exportProject = useCallback(async () => {
+    if (!activeProject) {
+      setConfigError("Open a project first.");
+      return;
+    }
+    const safeName = activeProject.name.replace(/[^\w\s-]+/g, "").trim() || "project";
+    const destination = await save({
+      title: "Export project",
+      defaultPath: `${safeName}.tgz`,
+      filters: [{ name: "TrackVault project archive", extensions: ["tgz"] }],
+    });
+    if (destination == null) return;
+
+    setExportingProject(true);
+    setConfigMessage(null);
+    setConfigError(null);
+    clearUploadFeedback();
+    try {
+      await api.exportProject(activeProject.id, destination);
+      setConfigMessage(`Exported project to ${destination}`);
+    } catch (err) {
+      setConfigError(String(err));
+    } finally {
+      setExportingProject(false);
+    }
+  }, [activeProject, clearUploadFeedback]);
 
   const refreshProjectSchedule = useCallback(async () => {
     setRefreshingSchedule(true);
@@ -471,6 +499,7 @@ export function useLibraryMenuActions() {
     loadingConfig ||
     closingLibrary ||
     importingCollection ||
+    exportingProject ||
     remoteImportOpen;
   const actionsDisabled = fileOperationBusy;
   const libraryActionsDisabled = fileOperationBusy || !libraryFolder;
@@ -513,7 +542,8 @@ export function useLibraryMenuActions() {
     openLibraryRemoteUpload,
     openCollectionRemoteUpload,
     remoteImportModal,
-    scanLibrary,
+    exportProject,
+    exportingProject,
     saveConfiguration,
     requestLoadConfiguration,
     requestCloseLibrary,

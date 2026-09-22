@@ -1,6 +1,6 @@
 # TrackVault
 
-A cross-platform desktop music player (Windows and macOS) with an iTunes-like layout. Scan local folders, browse your library, manage playlists, and play tracks with a waveform view powered by [wavesurfer.js](https://wavesurfer.xyz/).
+A cross-platform desktop music player (Windows and macOS) with an iTunes-like layout. Manage **projects** (each with its own library folder under app data), browse tracks, manage playlists and taglists, apply vendor **delivery updates**, and play audio with a waveform view powered by [wavesurfer.js](https://wavesurfer.xyz/).
 
 ## Stack
 
@@ -51,12 +51,12 @@ npm run tauri build
 
 ## Usage
 
-1. Click **Choose library folder** in the sidebar and select your main music directory.
-2. TrackVault scans for MP3, FLAC, WAV, OGG, and M4A files and reads tags.
+1. Open **Library → Projects…** and create a project (name + application), or **Import delivery…** from a vendor folder (ZIP archives and/or event schedule spreadsheet).
+2. Open a project. TrackVault scans the project library for MP3, FLAC, WAV, OGG, and M4A files and reads tags. Playlists and taglists load from `library/trackvault.json` (kept up to date automatically).
 3. Double-click a track (or select and press play) to start playback.
-4. Create playlists from the sidebar and add tracks from the library.
-5. Click the waveform to seek within the current track.
-6. Click **Rescan library** in the sidebar to pick up files added, changed, or deleted outside the app.
+4. Use **Library → Apply Delivery Update…** to stage a vendor folder, preview changes, and apply updates to the open project.
+5. **Library → Export Project…** saves the open project to a `.tgz` archive. In the Projects hub, **Import project archive…** restores a copy as a **new** project (new ID).
+6. Create stored collections from the sidebar; import/export `.tgz` stored collections separately from full projects.
 
 ### Privacy / demo copies
 
@@ -78,17 +78,12 @@ src/                 React UI
 src-tauri/src/       Rust backend
   db.rs              SQLite library + playlists
   scanner.rs         Folder scan + tag reading
-  waveform.rs        Peak generation (cached in DB)
-  player.rs          Audio playback (rodio)
-  commands.rs        Tauri IPC commands
-  anonymize.rs       Library anonymization (CLI)
-  bin/anonymize_library.rs
+  projects.rs        Managed project folders + manifests
+  project_archive.rs Project .tgz export/import
+  delivery/          Vendor delivery staging, preview, apply
+  player.rs          Audio playback
 ```
-
-## Supported formats
-
-MP3, FLAC, WAV, OGG, M4A/AAC (via symphonia/lofty).
 
 ## License
 
-MIT
+See repository defaults; adjust as needed for your fork.
