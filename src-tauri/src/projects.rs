@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 pub const PROJECT_MANIFEST: &str = "project.json";
 pub const LIBRARY_SUBDIR: &str = "library";
 pub const DEFAULT_SCHEDULE_REL: &str = "event-schedule.xlsx";
+const SCHEDULE_BASENAME: &str = "event-schedule";
 pub const ACTIVE_PROJECT_KEY: &str = "active_project_id";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -62,6 +63,17 @@ pub fn manifest_path(project_root: &Path) -> PathBuf {
 
 pub fn schedule_path(project_root: &Path, manifest: &ProjectManifest) -> PathBuf {
     library_dir(project_root).join(&manifest.schedule_relative_path)
+}
+
+/// Canonical library-relative path for a staged vendor schedule (preserves `.xls` vs `.xlsx`).
+pub fn canonical_schedule_relative_path(staged: &Path) -> String {
+    let ext = staged
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_lowercase())
+        .filter(|e| e == "xls" || e == "xlsx")
+        .unwrap_or_else(|| "xlsx".to_string());
+    format!("{SCHEDULE_BASENAME}.{ext}")
 }
 
 pub fn load_manifest(project_root: &Path) -> Result<ProjectManifest, String> {
@@ -159,4 +171,22 @@ fn unix_now() -> i64 {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs() as i64)
         .unwrap_or(0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::Path;
+
+    #[test]
+    fn canonical_schedule_relative_path_preserves_extension() {
+        assert_eq!(
+            canonical_schedule_relative_path(Path::new("vendor/Event Schedule.xls")),
+            "event-schedule.xls"
+        );
+        assert_eq!(
+            canonical_schedule_relative_path(Path::new("event-schedule.xlsx")),
+            "event-schedule.xlsx"
+        );
+    }
 }

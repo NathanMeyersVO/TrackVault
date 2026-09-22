@@ -3,8 +3,171 @@ use std::io::{copy, BufReader};
 use std::path::{Path, PathBuf};
 
 use flate2::read::GzDecoder;
+use serde::{Deserialize, Serialize};
 use tar::Archive;
 use walkdir::WalkDir;
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum DeliveryEntryKind {
+    Folder,
+    Archive,
+    Schedule,
+    Audio,
+    Other,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeliveryFolderSummary {
+    pub archives: Vec<String>,
+    pub schedules: Vec<String>,
+    pub audio_files: Vec<String>,
+}
+
+impl DeliveryFolderSummary {
+    pub fn can_import(&self) -> bool {
+        !self.archives.is_empty() || !self.audio_files.is_empty() || !self.schedules.is_empty()
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeliveryBrowseEntry {
+    pub name: String,
+    pub path: String,
+    pub kind: DeliveryEntryKind,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeliveryFolderBrowseResult {
+    pub path: String,
+    pub parent_path: Option<String>,
+    pub entries: Vec<DeliveryBrowseEntry>,
+    pub summary: DeliveryFolderSummary,
+}
+
+pub fn classify_delivery_file(path: &Path) -> DeliveryEntryKind {
+    if is_tar_archive(path) || is_zip_archive(path) {
+        DeliveryEntryKind::Archive
+    } else if is_schedule_spreadsheet(path) {
+        DeliveryEntryKind::Schedule
+    } else if crate::scanner::is_audio_file(path) {
+        DeliveryEntryKind::Audio
+    } else {
+        DeliveryEntryKind::Other
+    }
+}
+
+pub fn summarize_delivery_folder(root: &Path) -> Result<DeliveryFolderSummary, String> {
+    let mut archives = Vec::new();
+    let mut schedules = Vec::new();
+    let mut audio_files = Vec::new();
+
+    for entry in WalkDir::new(root)
+        .follow_links(false)
+        .into_iter()
+        .filter_map(|e| e.ok())
+    {
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        let rel = path
+            .strip_prefix(root)
+            .map_err(|e| e.to_string())?
+            .to_string_lossy()
+            .replace('\\', "/");
+        match classify_delivery_file(path) {
+            DeliveryEntryKind::Archive => archives.push(rel),
+            DeliveryEntryKind::Schedule => schedules.push(rel),
+            DeliveryEntryKind::Audio => audio_files.push(rel),
+            _ => {}
+        }
+    }
+
+    archives.sort();
+    schedules.sort();
+    audio_files.sort();
+
+    Ok(DeliveryFolderSummary {
+        archives,
+        schedules,
+        audio_files,
+    })
+}
+
+pub fn browse_delivery_folder_at(dir: &Path) -> Result<DeliveryFolderBrowseResult, String> {
+    if !dir.is_dir() {
+        return Err(format!("Not a directory: {}", dir.display()));
+    }
+    let path = dir
+        .canonicalize()
+        .unwrap_or_else(|_| dir.to_path_buf());
+    let path_str = path.to_string_lossy().to_string();
+
+    let parent_path = path.parent().and_then(|p| {
+        if p == path {
+            None
+        } else {
+            Some(p.to_string_lossy().to_string())
+        }
+    });
+
+    let mut entries = Vec::new();
+    for entry in fs::read_dir(&path).map_err(|e| e.to_string())? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let entry_path = entry.path();
+        let name = entry
+            .file_name()
+            .to_string_lossy()
+            .to_string();
+        let kind = if entry_path.is_dir() {
+            DeliveryEntryKind::Folder
+        } else {
+            classify_delivery_file(&entry_path)
+        };
+        entries.push(DeliveryBrowseEntry {
+            name,
+            path: entry_path.to_string_lossy().to_string(),
+            kind,
+        });
+    }
+
+    entries.sort_by(|a, b| {
+        let ord = folder_first(a.kind).cmp(&folder_first(b.kind));
+        if ord == std::cmp::Ordering::Equal {
+            a.name.to_lowercase().cmp(&b.name.to_lowercase())
+        } else {
+            ord
+        }
+    });
+
+    let summary = summarize_delivery_folder(&path)?;
+
+    Ok(DeliveryFolderBrowseResult {
+        path: path_str,
+        parent_path,
+        entries,
+        summary,
+    })
+}
+
+fn folder_first(kind: DeliveryEntryKind) -> u8 {
+    if kind == DeliveryEntryKind::Folder {
+        0
+    } else {
+        1
+    }
+}
+
+pub fn default_delivery_browse_root() -> PathBuf {
+    if let Some(doc) = dirs::document_dir() {
+        return doc;
+    }
+    if let Some(home) = dirs::home_dir() {
+        return home;
+    }
+    PathBuf::from(".")
+}
 
 pub fn stage_delivery_sources(
     sessions_dir: &Path,
@@ -23,7 +186,7 @@ pub fn stage_delivery_sources(
             return Err(format!("Path not found: {}", path.display()));
         }
         if path.is_dir() {
-            copy_tree_into(&path, &staging_root)?;
+            ingest_delivery_folder(&path, &staging_root)?;
         } else if is_tar_archive(&path) {
             extract_tar_into(&path, &staging_root)?;
         } else if is_zip_archive(&path) {
@@ -113,24 +276,44 @@ fn extract_zip_into(archive_path: &Path, dest: &Path) -> Result<(), String> {
     Ok(())
 }
 
-fn copy_tree_into(from: &Path, dest: &Path) -> Result<(), String> {
-    for entry in WalkDir::new(from).follow_links(false).into_iter().filter_map(|e| e.ok()) {
-        let rel = entry
-            .path()
-            .strip_prefix(from)
-            .map_err(|e| e.to_string())?;
-        let target = dest.join(rel);
-        if entry.file_type().is_dir() {
-            fs::create_dir_all(&target).map_err(|e| e.to_string())?;
-        } else if entry.file_type().is_file() {
-            if let Some(parent) = target.parent() {
-                fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-            }
-            let mut src = fs::File::open(entry.path()).map_err(|e| e.to_string())?;
-            let mut dst = fs::File::create(&target).map_err(|e| e.to_string())?;
-            copy(&mut src, &mut dst).map_err(|e| e.to_string())?;
+fn is_schedule_spreadsheet(path: &Path) -> bool {
+    matches!(
+        path.extension()
+            .and_then(|e| e.to_str())
+            .map(|e| e.to_lowercase()),
+        Some(ext) if ext == "xls" || ext == "xlsx" || ext == "csv"
+    )
+}
+
+/// Vendor drop folder: extract archives, copy audio and schedule files; skip other files.
+pub fn ingest_delivery_folder(from: &Path, dest: &Path) -> Result<(), String> {
+    for entry in WalkDir::new(from)
+        .follow_links(false)
+        .into_iter()
+        .filter_map(|e| e.ok())
+    {
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        if is_tar_archive(path) {
+            extract_tar_into(path, dest)?;
+        } else if is_zip_archive(path) {
+            extract_zip_into(path, dest)?;
+        } else if is_schedule_spreadsheet(path) || crate::scanner::is_audio_file(path) {
+            let rel = path.strip_prefix(from).map_err(|e| e.to_string())?;
+            copy_file_preserving_relative(path, dest, rel)?;
         }
     }
+    Ok(())
+}
+
+fn copy_file_preserving_relative(src: &Path, dest: &Path, rel: &Path) -> Result<(), String> {
+    let target = dest.join(rel);
+    if let Some(parent) = target.parent() {
+        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    fs::copy(src, &target).map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -216,6 +399,65 @@ mod tests {
         let audio = collect_audio_relative(&staging_root).expect("collect");
         assert_eq!(audio.len(), 1);
         assert_eq!(audio[0].0, "tracks/01.mp3");
+
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    fn write_minimal_schedule_xlsx(path: &Path) {
+        use rust_xlsxwriter::{Workbook, Worksheet};
+        let mut workbook = Workbook::new();
+        let mut worksheet = Worksheet::new();
+        worksheet.set_name("Event Schedule").unwrap();
+        worksheet.write_string(0, 0, "#").unwrap();
+        worksheet.write_string(0, 1, "Title").unwrap();
+        worksheet.write_string(1, 0, "01").unwrap();
+        worksheet.write_string(1, 1, "Test Event").unwrap();
+        workbook.push_worksheet(worksheet);
+        workbook.save(path).unwrap();
+    }
+
+    #[test]
+    fn delivery_folder_extracts_zip_and_keeps_schedule() {
+        let base = std::env::temp_dir().join(format!("tv-staging-{}", uuid::Uuid::new_v4()));
+        let drop = base.join("vendor");
+        fs::create_dir_all(&drop).expect("mkdir");
+        write_test_zip(&drop.join("tracks.zip"), "tracks/01.mp3", b"fake-mp3");
+        write_minimal_schedule_xlsx(&drop.join("event-schedule.xlsx"));
+
+        let sessions = base.join("sessions");
+        let staging_root = stage_delivery_sources(
+            &sessions,
+            "folder-session",
+            &[drop.to_string_lossy().into()],
+        )
+        .expect("stage");
+
+        let audio = collect_audio_relative(&staging_root).expect("collect");
+        assert_eq!(audio.len(), 1);
+
+        let schedule = find_schedule_xlsx(&staging_root).expect("find schedule");
+        assert!(schedule.is_some());
+
+        let zip_blob = staging_root.join("tracks.zip");
+        assert!(!zip_blob.is_file(), "archive should be extracted, not copied");
+
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn summarize_classifies_vendor_drop() {
+        let base = std::env::temp_dir().join(format!("tv-summary-{}", uuid::Uuid::new_v4()));
+        let drop = base.join("vendor");
+        fs::create_dir_all(&drop).expect("mkdir");
+        write_test_zip(&drop.join("tracks.zip"), "a.mp3", b"x");
+        write_minimal_schedule_xlsx(&drop.join("sched.xlsx"));
+        fs::write(drop.join("loose.wav"), b"wav").expect("wav");
+
+        let summary = summarize_delivery_folder(&drop).expect("summary");
+        assert_eq!(summary.archives.len(), 1);
+        assert_eq!(summary.schedules.len(), 1);
+        assert_eq!(summary.audio_files.len(), 1);
+        assert!(summary.can_import());
 
         let _ = fs::remove_dir_all(&base);
     }

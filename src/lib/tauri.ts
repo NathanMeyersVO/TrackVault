@@ -211,11 +211,38 @@ export interface DeliveryPreview {
   apply_mode_hint: DeliveryApplyModeHint;
   staged_audio_count: number;
   library_audio_count: number;
+  unchanged_audio_count: number;
 }
 
 export interface ApplyDeliveryResult {
   applied: number;
   skipped: number;
+}
+
+export type DeliveryEntryKind =
+  | "folder"
+  | "archive"
+  | "schedule"
+  | "audio"
+  | "other";
+
+export interface DeliveryBrowseEntry {
+  name: string;
+  path: string;
+  kind: DeliveryEntryKind;
+}
+
+export interface DeliveryFolderSummary {
+  archives: string[];
+  schedules: string[];
+  audio_files: string[];
+}
+
+export interface DeliveryFolderBrowseResult {
+  path: string;
+  parent_path: string | null;
+  entries: DeliveryBrowseEntry[];
+  summary: DeliveryFolderSummary;
 }
 
 export const api = {
@@ -418,7 +445,14 @@ export const api = {
   openProject: (projectId: string) => invoke<void>("open_project", { projectId }),
   updateProjectApplication: (projectId: string, applicationId: string) =>
     invoke<ProjectSummary>("update_project_application", { projectId, applicationId }),
-  deleteProject: (projectId: string) => invoke<void>("delete_project", { projectId }),
+  deleteProject: (projectId: string) =>
+    invoke<PlaybackState>("delete_project", { projectId }),
+  browseDeliveryFolder: (current: string | null) =>
+    invoke<DeliveryFolderBrowseResult>("browse_delivery_folder", { current }),
+  getLastDeliveryFolder: () =>
+    invoke<string | null>("get_last_delivery_folder"),
+  setLastDeliveryFolder: (path: string) =>
+    invoke<void>("set_last_delivery_folder", { path }),
   stageDelivery: (sourcePaths: string[], projectId: string | null) =>
     invoke<DeliveryPreview>("stage_delivery", { sourcePaths, projectId }),
   previewDeliveryWithMode: (stagingSessionId: string, applyMode: string) =>

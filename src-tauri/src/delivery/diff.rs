@@ -1,8 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
-use uuid::Uuid;
-
 use super::staging::{collect_audio_relative, find_schedule_xlsx};
 use super::{DeliveryChange, DeliveryChangeKind};
 use crate::file_hash::sha256_file;
@@ -22,6 +20,7 @@ pub struct DeliveryPreview {
     pub apply_mode_hint: DeliveryApplyModeHint,
     pub staged_audio_count: u32,
     pub library_audio_count: u32,
+    pub unchanged_audio_count: u32,
 }
 
 struct LibraryFile {
@@ -35,6 +34,7 @@ pub fn build_preview(
     staging_root: &Path,
     library_root: &Path,
     for_update: bool,
+    existing_library_schedule: Option<&Path>,
 ) -> Result<DeliveryPreview, String> {
     let staged = collect_audio_relative(staging_root)?;
     let library = collect_library_audio(library_root)?;
@@ -51,6 +51,7 @@ pub fn build_preview(
     let staged_rels: HashSet<String> = staged.iter().map(|(r, _)| r.clone()).collect();
     let mut changes = Vec::new();
     let mut move_sources_used: HashSet<String> = HashSet::new();
+    let mut unchanged_audio_count: u32 = 0;
 
     for (rel, abs) in &staged {
         let staged_hash = sha256_file(abs).ok();
@@ -63,6 +64,8 @@ pub fn build_preview(
                         format!("Update metadata: {rel}"),
                         rel,
                     ));
+                } else {
+                    unchanged_audio_count += 1;
                 }
             } else {
                 changes.push(change(
@@ -82,11 +85,12 @@ pub fn build_preview(
                     .cloned();
                 if let Some(old_rel) = old_rel {
                     move_sources_used.insert(old_rel.clone());
+                    let details = format!("from={old_rel};to={rel}");
                     changes.push(DeliveryChange {
-                        change_id: Uuid::new_v4().to_string(),
+                        change_id: stable_change_id(DeliveryChangeKind::AudioMove, &details),
                         kind: DeliveryChangeKind::AudioMove,
                         summary: format!("Move: {old_rel} → {rel}"),
-                        details: format!("from={old_rel};to={rel}"),
+                        details,
                         default_selected: true,
                     });
                     continue;
@@ -103,7 +107,12 @@ pub fn build_preview(
 
     if let Some(schedule) = find_schedule_xlsx(staging_root)? {
         if for_update {
-            diff_schedule(&mut changes, &schedule, library_root)?;
+            diff_schedule(
+                &mut changes,
+                &schedule,
+                library_root,
+                existing_library_schedule,
+            )?;
         } else {
             if let Ok(mappings) = crate::title_map::parse_usfs_ems_schedule(&schedule) {
                 for (tag, title) in mappings {
@@ -131,6 +140,7 @@ pub fn build_preview(
         apply_mode_hint: hint,
         staged_audio_count: staged_count,
         library_audio_count: library_count,
+        unchanged_audio_count,
     })
 }
 
@@ -144,7 +154,7 @@ pub fn append_full_replace_removals(
     for file in collect_library_audio(library_root)? {
         if !staged_set.contains(&file.rel) {
             preview.changes.push(DeliveryChange {
-                change_id: Uuid::new_v4().to_string(),
+                change_id: stable_change_id(DeliveryChangeKind::AudioRemove, &file.rel),
                 kind: DeliveryChangeKind::AudioRemove,
                 summary: format!("Remove: {}", file.rel),
                 details: file.rel.clone(),
@@ -155,14 +165,60 @@ pub fn append_full_replace_removals(
     Ok(())
 }
 
+pub fn stable_change_id(kind: DeliveryChangeKind, details: &str) -> String {
+    format!("{}:{}", delivery_change_kind_key(kind), details)
+}
+
+fn delivery_change_kind_key(kind: DeliveryChangeKind) -> &'static str {
+    match kind {
+        DeliveryChangeKind::AudioAdd => "audio_add",
+        DeliveryChangeKind::AudioUpdate => "audio_update",
+        DeliveryChangeKind::AudioReplace => "audio_replace",
+        DeliveryChangeKind::AudioMove => "audio_move",
+        DeliveryChangeKind::AudioRemove => "audio_remove",
+        DeliveryChangeKind::ScheduleEventAdd => "schedule_event_add",
+        DeliveryChangeKind::ScheduleEventUpdate => "schedule_event_update",
+        DeliveryChangeKind::ScheduleEventRemove => "schedule_event_remove",
+    }
+}
+
 fn change(kind: DeliveryChangeKind, summary: String, details: &str) -> DeliveryChange {
     DeliveryChange {
-        change_id: Uuid::new_v4().to_string(),
+        change_id: stable_change_id(kind, details),
         kind,
         summary,
         details: details.to_string(),
         default_selected: true,
     }
+}
+
+/// Map UI-selected change IDs onto a freshly rebuilt preview (stable IDs + kind/details fallback).
+pub fn map_selected_change_ids(
+    client_ids: &[String],
+    session_preview: &DeliveryPreview,
+    fresh_preview: &DeliveryPreview,
+) -> HashSet<String> {
+    let mut selected = HashSet::new();
+    for id in client_ids {
+        if fresh_preview
+            .changes
+            .iter()
+            .any(|c| c.change_id == *id)
+        {
+            selected.insert(id.clone());
+            continue;
+        }
+        let Some(logical) = session_preview.changes.iter().find(|c| c.change_id == *id) else {
+            continue;
+        };
+        for c in &fresh_preview.changes {
+            if c.kind == logical.kind && c.details == logical.details {
+                selected.insert(c.change_id.clone());
+                break;
+            }
+        }
+    }
+    selected
 }
 
 fn collect_library_audio(library_root: &Path) -> Result<Vec<LibraryFile>, String> {
@@ -187,9 +243,13 @@ fn diff_schedule(
     changes: &mut Vec<DeliveryChange>,
     staged_schedule: &Path,
     library_root: &Path,
+    existing_library_schedule: Option<&Path>,
 ) -> Result<(), String> {
     let new_map = crate::title_map::parse_usfs_ems_schedule(staged_schedule)?;
-    let canonical = library_root.join(crate::projects::DEFAULT_SCHEDULE_REL);
+    let canonical = existing_library_schedule
+        .filter(|p| p.is_file())
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| library_root.join(crate::projects::DEFAULT_SCHEDULE_REL));
     let old_map = if canonical.is_file() {
         crate::title_map::parse_usfs_ems_schedule(&canonical).unwrap_or_default()
     } else {
@@ -230,5 +290,66 @@ impl Clone for LibraryFile {
             abs: self.abs.clone(),
             hash: self.hash.clone(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    #[test]
+    fn identical_staged_and_library_audio_counts_as_unchanged() {
+        let base = std::env::temp_dir().join(format!("tv-diff-unchanged-{}", uuid::Uuid::new_v4()));
+        let staging = base.join("staging");
+        let library = base.join("library");
+        fs::create_dir_all(staging.join("tracks")).expect("mkdir staging");
+        fs::create_dir_all(library.join("tracks")).expect("mkdir library");
+        let bytes = b"same-audio-bytes-for-hash";
+        fs::write(staging.join("tracks/01.mp3"), bytes).expect("write staged");
+        fs::write(library.join("tracks/01.mp3"), bytes).expect("write library");
+
+        let preview = build_preview("sess", &staging, &library, true, None).expect("preview");
+        assert_eq!(preview.staged_audio_count, 1);
+        assert_eq!(preview.library_audio_count, 1);
+        assert_eq!(preview.unchanged_audio_count, 1);
+        assert!(
+            preview
+                .changes
+                .iter()
+                .all(|c| !matches!(
+                    c.kind,
+                    DeliveryChangeKind::AudioAdd
+                        | DeliveryChangeKind::AudioUpdate
+                        | DeliveryChangeKind::AudioReplace
+                        | DeliveryChangeKind::AudioMove
+                        | DeliveryChangeKind::AudioRemove
+                )),
+            "expected no audio diff rows, got {:?}",
+            preview.changes
+        );
+
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn rebuild_preview_uses_stable_change_ids() {
+        let base = std::env::temp_dir().join(format!("tv-diff-stable-{}", uuid::Uuid::new_v4()));
+        let staging = base.join("staging");
+        let library = base.join("library");
+        fs::create_dir_all(&staging).expect("mkdir staging");
+        fs::create_dir_all(&library).expect("mkdir library");
+        fs::write(staging.join("new.mp3"), b"new").expect("write");
+
+        let a = build_preview("sess", &staging, &library, true, None).expect("preview a");
+        let b = build_preview("sess", &staging, &library, true, None).expect("preview b");
+        assert_eq!(a.changes.len(), 1);
+        assert_eq!(a.changes[0].change_id, b.changes[0].change_id);
+        assert_eq!(
+            a.changes[0].change_id,
+            stable_change_id(DeliveryChangeKind::AudioAdd, "new.mp3")
+        );
+
+        let _ = fs::remove_dir_all(&base);
     }
 }

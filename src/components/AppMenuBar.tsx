@@ -15,6 +15,7 @@ export function AppMenuBar() {
     collectionId,
     collectionName,
     scanning,
+    deliveryStaging,
     libraryUploading,
     collectionUploading,
     savingConfig,
@@ -32,6 +33,7 @@ export function AppMenuBar() {
     refreshProjectSchedule,
     refreshingSchedule,
     projectHubModal,
+    deliveryFolderConfirmModal,
     deliveryUpdateModal,
     uploadToLibrary,
     uploadToCollection,
@@ -59,10 +61,10 @@ export function AppMenuBar() {
       disabled: actionsDisabled,
     },
     {
-      label: scanning ? "Staging delivery…" : "Apply Delivery Update…",
-      title: "Import a vendor delivery into the active project (preview before apply).",
+      label: deliveryStaging ? "Staging delivery…" : "Apply Delivery Update…",
+      title: "Choose a vendor folder (archives and/or event schedule) to preview and apply.",
       onClick: () => void applyDeliveryUpdate(),
-      disabled: libraryActionsDisabled,
+      disabled: libraryActionsDisabled || deliveryStaging,
     },
     {
       label: refreshingSchedule ? "Refreshing schedule…" : "Refresh Event Schedule",
@@ -215,6 +217,7 @@ export function AppMenuBar() {
       {collectionUploadConfirmDialog}
       {remoteImportModal}
       {projectHubModal}
+      {deliveryFolderConfirmModal}
       {deliveryUpdateModal}
       {shortcutsOpen ? (
         <KeyboardShortcutsModal onClose={() => setShortcutsOpen(false)} />

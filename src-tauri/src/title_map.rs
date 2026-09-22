@@ -53,7 +53,23 @@ pub fn parse_usfs_ems_schedule(path: &Path) -> Result<HashMap<String, String>, S
 }
 
 fn parse_excel(path: &Path) -> Result<HashMap<String, String>, String> {
-    let mut workbook = open_workbook_auto(path).map_err(|e| e.to_string())?;
+    let mut workbook = match open_workbook_auto(path) {
+        Ok(wb) => wb,
+        Err(e) => {
+            let msg = e.to_string();
+            let wrong_xlsx_ext = path
+                .extension()
+                .and_then(|x| x.to_str())
+                .is_some_and(|x| x.eq_ignore_ascii_case("xlsx"));
+            if wrong_xlsx_ext && (msg.contains("Zip") || msg.contains("EOCD")) {
+                return Err(format!(
+                    "File looks like legacy Excel (.xls) but is named .xlsx: {}",
+                    path.display()
+                ));
+            }
+            return Err(msg);
+        }
+    };
     let range = workbook
         .worksheet_range(EVENT_SCHEDULE_SHEET)
         .map_err(|e| format!("Failed to read sheet \"{EVENT_SCHEDULE_SHEET}\": {e}"))?;

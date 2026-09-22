@@ -109,6 +109,7 @@ interface PlayerStore {
   activeTrackIds: number[];
   playback: PlaybackState;
   scanning: boolean;
+  deliveryStaging: boolean;
   libraryFolder: string | null;
   activeProject: ProjectSummary | null;
   audioCacheProgress: AudioCacheProgress;
@@ -137,6 +138,7 @@ interface PlayerStore {
   setActiveTrackIds: (ids: number[]) => void;
   setPlayback: (playback: PlaybackState) => void;
   setScanning: (scanning: boolean) => void;
+  setDeliveryStaging: (deliveryStaging: boolean) => void;
   setLibraryFolder: (libraryFolder: string | null) => void;
   setActiveProject: (activeProject: ProjectSummary | null) => void;
   setAudioCacheProgress: (progress: AudioCacheProgress) => void;
@@ -194,6 +196,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     is_playing: false,
   },
   scanning: false,
+  deliveryStaging: false,
   libraryFolder: null,
   activeProject: null,
   audioCacheProgress: { done: 0, total: 0, finished: true },
@@ -227,6 +230,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   setActiveTrackIds: (activeTrackIds) => set({ activeTrackIds }),
   setPlayback: (playback) => set({ playback }),
   setScanning: (scanning) => set({ scanning }),
+  setDeliveryStaging: (deliveryStaging) => set({ deliveryStaging }),
   setLibraryFolder: (libraryFolder) => set({ libraryFolder }),
   setActiveProject: (activeProject) => set({ activeProject }),
   setAudioCacheProgress: (audioCacheProgress) => set({ audioCacheProgress }),

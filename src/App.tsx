@@ -9,6 +9,7 @@ import { TaglistView } from "./components/TaglistView";
 import { CollectionView } from "./components/CollectionView";
 import { NowPlayingBar } from "./components/NowPlayingBar";
 import { AudioCacheBanner } from "./components/AudioCacheBanner";
+import { DeliveryBusyOverlay } from "./components/DeliveryBusyOverlay";
 import { useLibrary, usePlayer } from "./hooks/usePlayer";
 import { initPlayerController } from "./playerController";
 import { useSidebarWidth } from "./hooks/useSidebarWidth";
@@ -65,6 +66,7 @@ function MainContent({ scheduleStale }: { scheduleStale: boolean }) {
 
 export default function App() {
   const [scheduleStale, setScheduleStale] = useState(false);
+  const deliveryStaging = usePlayerStore((state) => state.deliveryStaging);
 
   useEffect(() => {
     initPlayerController();
@@ -100,6 +102,12 @@ export default function App() {
 
   return (
     <div className="flex h-full flex-col">
+      {deliveryStaging ? (
+        <DeliveryBusyOverlay
+          title="Staging delivery…"
+          detail="Extracting archives and preparing preview."
+        />
+      ) : null}
       <AppMenuBar />
       <div className="flex min-h-0 flex-1">
         <Sidebar width={sidebarWidth} />

@@ -40,7 +40,7 @@ export function LibraryView() {
     ? "No tracks match your search."
     : !hasOpenProject
       ? "Open or create a project: Library → Projects…"
-      : "No tracks in this project yet. Import a delivery via Library → Projects… or Apply Delivery Update…";
+      : "No tracks yet. Library → Projects… (or Apply Delivery Update…) and choose your vendor folder.";
 
   const handleAddToPlaylist = useCallback(
     async (trackId: number, playlistId: number) => {

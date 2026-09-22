@@ -13,8 +13,10 @@ use crate::models::{
 };
 use crate::player::AudioPlayer;
 use crate::delivery::{
-    apply_delivery, append_full_replace_removals, build_preview, stage_delivery_sources,
-    ApplyDeliveryResult, ApplyMode, DeliveryPreview, DeliverySessionStore, StagingSession,
+    apply_delivery, append_full_replace_removals, browse_delivery_folder_at, build_preview,
+    map_selected_change_ids,
+    default_delivery_browse_root, stage_delivery_sources, ApplyDeliveryResult, ApplyMode,
+    DeliveryFolderBrowseResult, DeliveryPreview, DeliverySessionStore, StagingSession,
 };
 use crate::projects::{self, ProjectManifest, ProjectSummary, ACTIVE_PROJECT_KEY};
 use crate::project_config::{autosave_trackvault_json, load_trackvault_json_if_present};
@@ -1331,7 +1333,15 @@ pub fn get_active_project(state: State<'_, AppState>) -> Result<Option<ProjectSu
     }
     drop(db);
     let list = projects::list_projects(&state.app_data_dir)?;
-    Ok(list.into_iter().find(|p| p.id == project_id))
+    if let Some(summary) = list.iter().find(|p| p.id == project_id) {
+        return Ok(Some(summary.clone()));
+    }
+    state
+        .db
+        .lock()
+        .set_app_setting(ACTIVE_PROJECT_KEY, "null")
+        .map_err(|e| e.to_string())?;
+    Ok(None)
 }
 
 #[tauri::command]
@@ -1432,14 +1442,19 @@ fn reapply_project_application(
 }
 
 #[tauri::command]
-pub fn delete_project(app: AppHandle, state: State<'_, AppState>, project_id: String) -> Result<(), String> {
+pub fn delete_project(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    project_id: String,
+) -> Result<PlaybackState, String> {
+    let mut playback = state.player.state();
     {
         let db = state.db.lock();
         if let Ok(Some(json)) = db.get_app_setting(ACTIVE_PROJECT_KEY) {
             if let Ok(active) = serde_json::from_str::<String>(&json) {
                 if active == project_id {
                     drop(db);
-                    teardown_library(&state)?;
+                    playback = teardown_library(&state)?;
                     state
                         .db
                         .lock()
@@ -1451,7 +1466,52 @@ pub fn delete_project(app: AppHandle, state: State<'_, AppState>, project_id: St
     }
     projects::delete_project_dir(&state.app_data_dir, &project_id)?;
     let _ = app.emit("library-updated", ());
-    Ok(())
+    Ok(playback)
+}
+
+#[tauri::command]
+pub fn browse_delivery_folder(
+    state: State<'_, AppState>,
+    current: Option<String>,
+) -> Result<DeliveryFolderBrowseResult, String> {
+    let path = if let Some(current) = current.filter(|s| !s.trim().is_empty()) {
+        let p = PathBuf::from(current.trim());
+        if !p.is_dir() {
+            return Err(format!("Not a directory: {}", p.display()));
+        }
+        p
+    } else if let Some(last) = crate::app_settings::get_last_delivery_folder(&state.db.lock()) {
+        last
+    } else {
+        default_delivery_browse_root()
+    };
+    browse_delivery_folder_at(&path)
+}
+
+#[tauri::command]
+pub fn get_last_delivery_folder(state: State<'_, AppState>) -> Result<Option<String>, String> {
+    Ok(crate::app_settings::get_last_delivery_folder(&state.db.lock())
+        .map(|p| p.to_string_lossy().into_owned()))
+}
+
+#[tauri::command]
+pub fn set_last_delivery_folder(state: State<'_, AppState>, path: String) -> Result<(), String> {
+    let path = path.trim();
+    if path.is_empty() {
+        return Err("Path is required".to_string());
+    }
+    let p = PathBuf::from(path);
+    if !p.is_dir() {
+        return Err(format!("Not a directory: {}", p.display()));
+    }
+    crate::app_settings::set_last_delivery_folder(&state.db.lock(), &p)
+}
+
+fn existing_library_schedule_path(app_data: &Path, project_id: &str) -> Option<PathBuf> {
+    let project_root = projects::project_dir(app_data, project_id);
+    let manifest = projects::load_manifest(&project_root).ok()?;
+    let path = projects::schedule_path(&project_root, &manifest);
+    path.is_file().then_some(path)
 }
 
 #[tauri::command]
@@ -1461,7 +1521,13 @@ pub fn stage_delivery(
     project_id: Option<String>,
 ) -> Result<DeliveryPreview, String> {
     if source_paths.is_empty() {
-        return Err("Select at least one folder or archive".to_string());
+        return Err("Select a delivery folder".to_string());
+    }
+    if source_paths.len() == 1 {
+        let p = PathBuf::from(&source_paths[0]);
+        if p.is_dir() {
+            let _ = crate::app_settings::set_last_delivery_folder(&state.db.lock(), &p);
+        }
     }
     let session_id = uuid::Uuid::new_v4().to_string();
     let staging_root = stage_delivery_sources(
@@ -1472,17 +1538,24 @@ pub fn stage_delivery(
 
     let preview = if let Some(ref pid) = project_id {
         let library = projects::library_dir(&projects::project_dir(&state.app_data_dir, pid));
-        build_preview(&session_id, &staging_root, &library, true)?
+        let existing_schedule = existing_library_schedule_path(&state.app_data_dir, pid);
+        build_preview(
+            &session_id,
+            &staging_root,
+            &library,
+            true,
+            existing_schedule.as_deref(),
+        )?
     } else {
         let empty = state.app_data_dir.join("_empty_preview");
         std::fs::create_dir_all(&empty).ok();
-        build_preview(&session_id, &staging_root, &empty, false)?
+        build_preview(&session_id, &staging_root, &empty, false, None)?
     };
 
     if preview.staged_audio_count == 0 {
         return Err(
-            "No audio files found in delivery. Supported archives: .zip, .tar, .tar.gz, .tgz. \
-             Audio must use extensions such as mp3, flac, wav, m4a, aac, ogg, aiff, or mp4."
+            "No audio files found in the delivery folder. Put audio archives (.zip, .tar, .tar.gz, .tgz) \
+             or loose audio in the folder. Audio extensions: mp3, flac, wav, m4a, aac, ogg, aiff, mp4."
                 .to_string(),
         );
     }
@@ -1514,11 +1587,16 @@ pub fn preview_delivery_with_mode(
         state.app_data_dir.join("_empty_preview")
     };
     let for_update = session.target_project_id.is_some();
+    let existing_schedule = session
+        .target_project_id
+        .as_ref()
+        .and_then(|pid| existing_library_schedule_path(&state.app_data_dir, pid));
     let mut preview = build_preview(
         &staging_session_id,
         &session.staging_root,
         &library,
         for_update,
+        existing_schedule.as_deref(),
     )?;
     if apply_mode == "full_replace" && for_update {
         append_full_replace_removals(&mut preview, &session.staging_root, &library)?;
@@ -1569,16 +1647,30 @@ pub fn apply_staged_delivery(
     let project_root = projects::project_dir(&state.app_data_dir, &project_id);
     let library_root = projects::library_dir(&project_root);
 
-    let mut preview = session.preview.clone();
-    let mut selected: std::collections::HashSet<String> = change_ids.into_iter().collect();
+    let session_preview = session.preview.clone();
+    let existing_schedule = if for_update {
+        existing_library_schedule_path(&state.app_data_dir, &project_id)
+    } else {
+        None
+    };
+    let mut preview = build_preview(
+        &staging_session_id,
+        &session.staging_root,
+        &library_root,
+        for_update,
+        existing_schedule.as_deref(),
+    )?;
+    if matches!(mode, ApplyMode::FullReplace) && for_update {
+        append_full_replace_removals(&mut preview, &session.staging_root, &library_root)?;
+    }
+
+    let mut selected = map_selected_change_ids(&change_ids, &session_preview, &preview);
 
     if matches!(mode, ApplyMode::FullReplace) && for_update {
-        let has_removals = preview
-            .changes
-            .iter()
-            .any(|c| matches!(c.kind, crate::delivery::DeliveryChangeKind::AudioRemove));
-        if !has_removals {
-            append_full_replace_removals(&mut preview, &session.staging_root, &library_root)?;
+        let had_removals_in_session = session_preview.changes.iter().any(|c| {
+            matches!(c.kind, crate::delivery::DeliveryChangeKind::AudioRemove)
+        });
+        if !had_removals_in_session {
             for change in &preview.changes {
                 if matches!(change.kind, crate::delivery::DeliveryChangeKind::AudioRemove) {
                     selected.insert(change.change_id.clone());

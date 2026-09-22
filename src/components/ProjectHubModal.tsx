@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
-import { open } from "@tauri-apps/plugin-dialog";
-
 import { ConfirmDialog } from "./ConfirmDialog";
 import { DeliveryPreviewModal } from "./DeliveryPreviewModal";
+import { useDeliveryFolderConfirm } from "../hooks/useDeliveryFolderConfirm";
+import { useLibraryUiReset } from "../hooks/useLibraryUiReset";
+import { useLibrary } from "../hooks/usePlayer";
+import { usePlayerStore } from "../store/playerStore";
 import { APPLICATION_OPTIONS, getApplicationLabel } from "../lib/applicationLabels";
 import { api, type ApplicationId, type DeliveryPreview, type ProjectSummary } from "../lib/tauri";
-import { usePlayerStore } from "../store/playerStore";
-
 export interface ProjectHubModalProps {
   onClose: () => void;
 }
@@ -20,6 +20,9 @@ export function ProjectHubModal({ onClose }: ProjectHubModalProps) {
   const [deliveryPreview, setDeliveryPreview] = useState<DeliveryPreview | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ProjectSummary | null>(null);
   const [busy, setBusy] = useState(false);
+  const setDeliveryStaging = usePlayerStore((s) => s.setDeliveryStaging);
+  const { refresh } = useLibrary();
+  const { resetLibraryUi } = useLibraryUiReset();
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -37,34 +40,32 @@ export function ProjectHubModal({ onClose }: ProjectHubModalProps) {
     void reload();
   }, [reload]);
 
-  const pickDeliverySources = async (): Promise<string[] | null> => {
-    const selected = await open({
-      multiple: true,
-      title: "Select delivery folder or archives",
-    });
-    if (selected == null) return null;
-    if (Array.isArray(selected)) return selected;
-    return [selected];
-  };
+  const stageFromFolder = useCallback(
+    async (folder: string) => {
+      setDeliveryStaging(true);
+      setError(null);
+      try {
+        const preview = await api.stageDelivery([folder], null);
+        setDeliveryPreview(preview);
+      } catch (e) {
+        setError(String(e));
+      } finally {
+        setDeliveryStaging(false);
+      }
+    },
+    [setDeliveryStaging],
+  );
 
-  const startCreateFromDelivery = async () => {
-    const name = newName.trim();
-    if (!name) {
+  const { pickAndShow: pickDeliveryFolderForCreate, modal: deliveryFolderConfirmModal } =
+    useDeliveryFolderConfirm({ onConfirm: stageFromFolder });
+
+  const startCreateFromDelivery = () => {
+    if (!newName.trim()) {
       setError("Enter a project name");
       return;
     }
-    const sources = await pickDeliverySources();
-    if (!sources?.length) return;
-    setBusy(true);
     setError(null);
-    try {
-      const preview = await api.stageDelivery(sources, null);
-      setDeliveryPreview(preview);
-    } catch (e) {
-      setError(String(e));
-    } finally {
-      setBusy(false);
-    }
+    void pickDeliveryFolderForCreate();
   };
 
   const openProject = async (id: string) => {
@@ -97,10 +98,16 @@ export function ProjectHubModal({ onClose }: ProjectHubModalProps) {
 
   const confirmDelete = async () => {
     if (!deleteTarget) return;
+    const deletedId = deleteTarget.id;
+    const wasActive = deletedId === activeProjectId;
     setBusy(true);
     try {
-      await api.deleteProject(deleteTarget.id);
+      const playback = await api.deleteProject(deletedId);
+      if (wasActive) {
+        resetLibraryUi(playback);
+      }
       setDeleteTarget(null);
+      await refresh();
       await reload();
     } catch (e) {
       setError(String(e));
@@ -116,7 +123,7 @@ export function ProjectHubModal({ onClose }: ProjectHubModalProps) {
           <div className="border-b border-border px-4 py-3">
             <h2 className="text-sm font-semibold text-foreground">Projects</h2>
             <p className="mt-1 text-xs text-muted">
-              Each project stores its library inside TrackVault. Import a vendor delivery to begin.
+              Choose a vendor folder with audio archives and/or an event schedule spreadsheet (.xls, .xlsx).
             </p>
           </div>
 
@@ -237,6 +244,8 @@ export function ProjectHubModal({ onClose }: ProjectHubModalProps) {
           </div>
         </div>
       </div>
+
+      {deliveryFolderConfirmModal}
 
       {deliveryPreview && (
         <DeliveryPreviewModal

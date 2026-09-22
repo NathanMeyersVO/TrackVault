@@ -10,6 +10,7 @@ import {
   groupDeliveryChanges,
   groupSelectionState,
 } from "../lib/deliveryPreviewGroups";
+import { DeliveryBusyOverlay } from "./DeliveryBusyOverlay";
 
 export interface DeliveryPreviewModalProps {
   preview: DeliveryPreview;
@@ -35,6 +36,7 @@ export function DeliveryPreviewModal({
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(() => new Set());
   const [applyMode, setApplyMode] = useState<"merge" | "full_replace">("merge");
   const [busy, setBusy] = useState(false);
+  const [previewRefreshing, setPreviewRefreshing] = useState(mode === "update");
   const [error, setError] = useState<string | null>(null);
 
   const groups = useMemo(() => groupDeliveryChanges(preview.changes), [preview.changes]);
@@ -56,6 +58,7 @@ export function DeliveryPreviewModal({
   useEffect(() => {
     if (mode !== "update") return;
     let cancelled = false;
+    setPreviewRefreshing(true);
     void (async () => {
       try {
         const next = await api.previewDeliveryWithMode(
@@ -67,9 +70,12 @@ export function DeliveryPreviewModal({
           setSelected(
             new Set(next.changes.filter((c) => c.default_selected).map((c) => c.change_id)),
           );
+          setError(null);
         }
       } catch (e) {
         if (!cancelled) setError(String(e));
+      } finally {
+        if (!cancelled) setPreviewRefreshing(false);
       }
     })();
     return () => {
@@ -145,6 +151,14 @@ export function DeliveryPreviewModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+      {busy ? (
+        <DeliveryBusyOverlay
+          title={
+            mode === "create" ? "Creating project…" : "Applying delivery update…"
+          }
+          detail="Copying files and updating the project library."
+        />
+      ) : null}
       <div className="flex max-h-[90vh] w-full max-w-2xl flex-col rounded-lg border border-border bg-surface shadow-xl">
         <div className="border-b border-border px-4 py-3">
           <h2 className="text-sm font-semibold text-foreground">
@@ -155,8 +169,17 @@ export function DeliveryPreviewModal({
             {mode === "update"
               ? ` · ${preview.library_audio_count} in project library`
               : ""}
+          </p>
+          <p className="mt-0.5 text-xs text-muted">
+            {preview.changes.length} change{preview.changes.length === 1 ? "" : "s"} to review
+            {preview.unchanged_audio_count > 0
+              ? ` · ${preview.unchanged_audio_count} track${
+                  preview.unchanged_audio_count === 1 ? "" : "s"
+                } unchanged`
+              : ""}
             {" · "}
-            {selectedCount} of {preview.changes.length} changes selected
+            {selectedCount} of {preview.changes.length} selected
+            {previewRefreshing ? " · Updating preview…" : ""}
           </p>
         </div>
 
@@ -197,6 +220,14 @@ export function DeliveryPreviewModal({
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-2">
+          {preview.unchanged_audio_count > 0 ? (
+            <p className="mb-3 rounded-md border border-border/80 bg-surface-hover/40 px-3 py-2 text-xs text-muted">
+              <span className="font-medium text-foreground">Audio: </span>
+              {preview.unchanged_audio_count} track
+              {preview.unchanged_audio_count === 1 ? "" : "s"} in this delivery already match the
+              project library (same files and metadata). No audio updates to apply.
+            </p>
+          ) : null}
           {groups.map(({ def, items }) => (
             <DeliveryChangeGroupSection
               key={def.key}
@@ -227,10 +258,14 @@ export function DeliveryPreviewModal({
           <button
             type="button"
             onClick={() => void apply()}
-            disabled={busy || selectedCount === 0}
+            disabled={busy || previewRefreshing || selectedCount === 0}
             className="rounded-md bg-accent px-3 py-1.5 text-sm text-accent-foreground disabled:opacity-40"
           >
-            {busy ? "Applying…" : `Apply selected changes (${selectedCount})`}
+            {busy
+              ? "Applying…"
+              : previewRefreshing
+                ? "Updating preview…"
+                : `Apply selected changes (${selectedCount})`}
           </button>
         </div>
       </div>

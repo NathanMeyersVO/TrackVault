@@ -10,14 +10,15 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { importCollectionFromDialog } from "../components/CollectionView";
 import { DeliveryPreviewModal } from "../components/DeliveryPreviewModal";
+import { useDeliveryFolderConfirm } from "./useDeliveryFolderConfirm";
 import { ProjectHubModal } from "../components/ProjectHubModal";
 import { RemoteImportFromPhoneModal } from "../components/RemoteImportFromPhoneModal";
-import { api, type DeliveryPreview, type PlaybackState } from "../lib/tauri";
-import { clearTrackTagsCache } from "../lib/trackTagsCache";
+import { api, type DeliveryPreview } from "../lib/tauri";
 import { useLibrary } from "./usePlayer";
+import { useLibraryUiReset } from "./useLibraryUiReset";
 import { useUploadTracks } from "./useUploadTracks";
 import { useCollectionUpload } from "./useCollectionUpload";
-import { isLibrarySourcedView, usePlayerStore } from "../store/playerStore";
+import { usePlayerStore } from "../store/playerStore";
 
 function activeCollectionId(
   view: ReturnType<typeof usePlayerStore.getState>["view"],
@@ -36,18 +37,14 @@ export function useLibraryMenuActions() {
     libraryFolder,
     activeProject,
     scanning,
+    deliveryStaging,
     view,
     collections,
     setScanning,
+    setDeliveryStaging,
     setView,
-    setCursorTrackId,
-    setActiveTrackIds,
-    setPlayback,
-    setTaglistNav,
-    setCursorTaglistFooter,
-    clearPendingPausedLoad,
-    clearPendingPlayIntent,
   } = usePlayerStore();
+  const { resetLibraryUi } = useLibraryUiReset();
   const collectionId = activeCollectionId(view);
   const collectionName =
     collectionId != null
@@ -116,33 +113,6 @@ export function useLibraryMenuActions() {
   const [deliveryPreview, setDeliveryPreview] = useState<DeliveryPreview | null>(null);
   const [refreshingSchedule, setRefreshingSchedule] = useState(false);
 
-  const resetLibraryFrontend = useCallback(
-    (playback: PlaybackState) => {
-      const currentView = usePlayerStore.getState().view;
-      setPlayback(playback);
-      if (isLibrarySourcedView(currentView)) {
-        setView("library");
-        setCursorTrackId(null);
-        setActiveTrackIds([]);
-        setTaglistNav(null);
-        setCursorTaglistFooter(false);
-        clearPendingPlayIntent();
-      }
-      clearPendingPausedLoad();
-      clearTrackTagsCache();
-    },
-    [
-      clearPendingPausedLoad,
-      clearPendingPlayIntent,
-      setActiveTrackIds,
-      setCursorTaglistFooter,
-      setCursorTrackId,
-      setPlayback,
-      setTaglistNav,
-      setView,
-    ],
-  );
-
   const applyLibraryFolder = useCallback(
     async (path: string) => {
       setScanning(true);
@@ -152,7 +122,7 @@ export function useLibraryMenuActions() {
       try {
         if (libraryFolder) {
           const playback = await api.closeLibrary();
-          resetLibraryFrontend(playback);
+          resetLibraryUi(playback);
         }
         await api.setLibraryFolder(path);
         await refresh();
@@ -167,7 +137,7 @@ export function useLibraryMenuActions() {
         setScanning(false);
       }
     },
-    [clearUploadFeedback, libraryFolder, refresh, resetLibraryFrontend, setScanning],
+    [clearUploadFeedback, libraryFolder, refresh, resetLibraryUi, setScanning],
   );
 
   const openProjectHub = useCallback(() => {
@@ -178,28 +148,36 @@ export function useLibraryMenuActions() {
     setProjectHubOpen(false);
   }, []);
 
-  const applyDeliveryUpdate = useCallback(async () => {
+  const stageDeliveryFromFolder = useCallback(
+    async (folder: string) => {
+      if (!activeProject) return;
+      setDeliveryStaging(true);
+      setConfigError(null);
+      try {
+        const preview = await api.stageDelivery([folder], activeProject.id);
+        setDeliveryPreview(preview);
+      } catch (err) {
+        setConfigError(String(err));
+      } finally {
+        setDeliveryStaging(false);
+      }
+    },
+    [activeProject, setConfigError, setDeliveryStaging],
+  );
+
+  const {
+    pickAndShow: pickDeliveryFolderForUpdate,
+    modal: deliveryFolderConfirmModal,
+  } = useDeliveryFolderConfirm({ onConfirm: stageDeliveryFromFolder });
+
+  const applyDeliveryUpdate = useCallback(() => {
     if (!activeProject) {
       setConfigError("Open a project first.");
       return;
     }
-    const selected = await open({
-      multiple: true,
-      title: "Select delivery folder or archives",
-    });
-    if (selected == null) return;
-    const sources = Array.isArray(selected) ? selected : [selected];
-    setScanning(true);
     setConfigError(null);
-    try {
-      const preview = await api.stageDelivery(sources, activeProject.id);
-      setDeliveryPreview(preview);
-    } catch (err) {
-      setConfigError(String(err));
-    } finally {
-      setScanning(false);
-    }
-  }, [activeProject, setConfigError, setScanning]);
+    void pickDeliveryFolderForUpdate();
+  }, [activeProject, pickDeliveryFolderForUpdate, setConfigError]);
 
   const refreshProjectSchedule = useCallback(async () => {
     setRefreshingSchedule(true);
@@ -284,7 +262,7 @@ export function useLibraryMenuActions() {
     clearUploadFeedback();
     try {
       const playback = await api.closeLibrary();
-      resetLibraryFrontend(playback);
+      resetLibraryUi(playback);
       await refresh();
       setCloseLibraryConfirmOpen(false);
       return true;
@@ -294,7 +272,7 @@ export function useLibraryMenuActions() {
     } finally {
       setClosingLibrary(false);
     }
-  }, [clearUploadFeedback, refresh, resetLibraryFrontend]);
+  }, [clearUploadFeedback, refresh, resetLibraryUi]);
 
   const requestCloseLibrary = useCallback(() => {
     setCloseLibraryConfirmOpen(true);
@@ -487,6 +465,7 @@ export function useLibraryMenuActions() {
 
   const fileOperationBusy =
     scanning ||
+    deliveryStaging ||
     uploading ||
     savingConfig ||
     loadingConfig ||
@@ -504,6 +483,7 @@ export function useLibraryMenuActions() {
     collectionId,
     collectionName,
     scanning,
+    deliveryStaging,
     libraryUploading,
     collectionUploading,
     savingConfig,
@@ -526,6 +506,7 @@ export function useLibraryMenuActions() {
     refreshProjectSchedule,
     refreshingSchedule,
     projectHubModal,
+    deliveryFolderConfirmModal,
     deliveryUpdateModal,
     uploadToLibrary,
     uploadToCollection,

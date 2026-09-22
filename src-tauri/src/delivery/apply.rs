@@ -93,7 +93,13 @@ pub fn apply_delivery(
 
     if schedule_selected {
         if let Some(staged_schedule) = find_schedule_xlsx(staging_root)? {
+            let old_dest = projects::schedule_path(project_root, manifest);
+            manifest.schedule_relative_path =
+                projects::canonical_schedule_relative_path(&staged_schedule);
             let dest = projects::schedule_path(project_root, manifest);
+            if old_dest != dest && old_dest.is_file() {
+                fs::remove_file(&old_dest).map_err(|e| e.to_string())?;
+            }
             if let Some(parent) = dest.parent() {
                 fs::create_dir_all(parent).map_err(|e| e.to_string())?;
             }
@@ -236,6 +242,7 @@ fn import_schedule_merge<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::delivery::diff::stable_change_id;
     use crate::delivery::{DeliveryChange, DeliveryChangeKind};
     use crate::projects::ProjectManifest;
     use std::io::Write;
@@ -255,7 +262,8 @@ mod tests {
         let mut f = std::fs::File::create(&staged_path).unwrap();
         f.write_all(b"fake-mp3").unwrap();
 
-        let change_id = "stable-change-id".to_string();
+        let change_id =
+            stable_change_id(DeliveryChangeKind::AudioAdd, track_rel);
         let changes = vec![DeliveryChange {
             change_id: change_id.clone(),
             kind: DeliveryChangeKind::AudioAdd,
