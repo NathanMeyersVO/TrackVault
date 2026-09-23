@@ -44,7 +44,7 @@ export function RemoteImportFromPhoneModal({
     sourcePaths: string[];
     conflicts: string[];
   } | null>(null);
-  const startInFlight = useRef(false);
+  const effectGeneration = useRef(0);
 
   const title =
     mode === "library"
@@ -54,40 +54,56 @@ export function RemoteImportFromPhoneModal({
         : "Upload to collection from phone";
 
   const handleClose = useCallback(() => {
+    effectGeneration.current += 1;
     void api.stopReplaceRemoteUpload();
     onClose();
   }, [onClose]);
 
-  const startSession = useCallback(async () => {
-    if (startInFlight.current) return;
-    startInFlight.current = true;
-    setError(null);
-    setRemoteStarting(true);
-    try {
-      const info =
-        mode === "library"
-          ? await api.startLibraryRemoteUpload()
-          : await api.startCollectionRemoteUpload(collectionId!);
-      setRemoteUploadUrl(info.uploadUrl);
-      setRemoteLogPath(info.logFilePath);
-      setRemoteWaiting(true);
-    } catch (err) {
-      setRemoteUploadUrl(null);
-      setRemoteLogPath(null);
-      setRemoteWaiting(false);
-      setError(String(err));
-    } finally {
-      startInFlight.current = false;
-      setRemoteStarting(false);
-    }
-  }, [collectionId, mode]);
+  const runRemoteStart = useCallback(
+    async (generation: number) => {
+      setError(null);
+      setRemoteStarting(true);
+      try {
+        const info =
+          mode === "library"
+            ? await api.startLibraryRemoteUpload()
+            : await api.startCollectionRemoteUpload(collectionId!);
+        if (effectGeneration.current !== generation) return;
+        setRemoteUploadUrl(info.uploadUrl);
+        setRemoteLogPath(info.logFilePath);
+        setRemoteWaiting(true);
+      } catch (err) {
+        if (effectGeneration.current !== generation) return;
+        setRemoteUploadUrl(null);
+        setRemoteLogPath(null);
+        setRemoteWaiting(false);
+        setError(String(err));
+      } finally {
+        if (effectGeneration.current === generation) {
+          setRemoteStarting(false);
+        }
+      }
+    },
+    [collectionId, mode],
+  );
+
+  const retryRemoteStart = useCallback(() => {
+    const generation = ++effectGeneration.current;
+    void runRemoteStart(generation);
+  }, [runRemoteStart]);
 
   useEffect(() => {
-    void startSession();
+    const generation = ++effectGeneration.current;
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      if (cancelled) return;
+      void runRemoteStart(generation);
+    }, 0);
     return () => {
-      void api.stopReplaceRemoteUpload();
+      cancelled = true;
+      window.clearTimeout(timer);
     };
-  }, [startSession]);
+  }, [collectionId, mode, runRemoteStart]);
 
   useEffect(() => {
     void api.getReplaceRemoteUploadLogPath().then(setRemoteLogPath).catch(() => {});
@@ -204,7 +220,7 @@ export function RemoteImportFromPhoneModal({
     }
   }, [collectionId, mode, runImport, sourcePaths]);
 
-  const busy = remoteStarting || importing;
+  const actionsBusy = remoteStarting || importing;
 
   const uploadLabel =
     mode === "library"
@@ -227,7 +243,7 @@ export function RemoteImportFromPhoneModal({
             <button
               type="button"
               onClick={handleClose}
-              disabled={busy}
+              disabled={importing}
               className="rounded-md px-2 py-1 text-muted hover:bg-surface-hover hover:text-foreground disabled:opacity-40"
               aria-label="Close"
             >
@@ -259,7 +275,7 @@ export function RemoteImportFromPhoneModal({
             <RemoteUploadPanel
               uploadUrl={remoteUploadUrl}
               waiting={remoteWaiting && sourcePaths.length === 0}
-              busy={busy}
+              busy={actionsBusy}
               multipleFiles
               destinationHint={
                 mode === "library"
@@ -284,14 +300,27 @@ export function RemoteImportFromPhoneModal({
                 </ul>
               </div>
             )}
-            {error && <p className="text-sm text-red-400">{error}</p>}
+            {error && (
+              <div className="space-y-2">
+                <p className="text-sm text-red-400">{error}</p>
+                {!remoteStarting && !remoteUploadUrl ? (
+                  <button
+                    type="button"
+                    onClick={() => retryRemoteStart()}
+                    className="rounded-md border border-border px-2 py-1 text-xs text-foreground hover:bg-surface-hover"
+                  >
+                    Try again
+                  </button>
+                ) : null}
+              </div>
+            )}
           </div>
 
           <div className="flex flex-wrap justify-end gap-2 border-t border-border px-4 py-3">
             <button
               type="button"
               onClick={handleClose}
-              disabled={busy}
+              disabled={importing}
               className="rounded-md px-3 py-1.5 text-sm text-foreground hover:bg-surface-hover disabled:opacity-40"
             >
               Cancel
@@ -299,7 +328,7 @@ export function RemoteImportFromPhoneModal({
             <button
               type="button"
               onClick={() => void beginImport()}
-              disabled={busy || sourcePaths.length === 0}
+              disabled={actionsBusy || sourcePaths.length === 0}
               className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-40"
             >
               {importing ? "Uploading…" : uploadLabel}

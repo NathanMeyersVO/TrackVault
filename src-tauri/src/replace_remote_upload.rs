@@ -1,7 +1,7 @@
 use std::net::SocketAddr;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc;
 use std::sync::Arc;
 use std::thread::{self, JoinHandle};
@@ -195,6 +195,7 @@ pub struct ReplaceRemoteUploadManager {
     relay_process: Mutex<Option<crate::upload_relay::UploadRelayProcess>>,
     start_handshake: Mutex<()>,
     startup_in_progress: AtomicBool,
+    session_generation: AtomicU64,
     log: Mutex<Option<Arc<ReplaceUploadLog>>>,
 }
 
@@ -207,6 +208,7 @@ impl ReplaceRemoteUploadManager {
             relay_process: Mutex::new(None),
             start_handshake: Mutex::new(()),
             startup_in_progress: AtomicBool::new(false),
+            session_generation: AtomicU64::new(0),
             log: Mutex::new(None),
         }
     }
@@ -340,6 +342,7 @@ impl ReplaceRemoteUploadManager {
         let start_instant = Instant::now();
 
         self.stop_with_reason(app_data_dir, StopReason::NewSession, None);
+        let generation_at_start = self.session_generation.load(Ordering::SeqCst);
 
         let track_id = kind.track_id().unwrap_or(-1);
 
@@ -554,6 +557,22 @@ impl ReplaceRemoteUploadManager {
             });
         }
 
+        if self.session_generation.load(Ordering::SeqCst) != generation_at_start {
+            self.log_event(
+                app_data_dir,
+                &session_log_id,
+                "WARN",
+                "start_aborted",
+                "session cancelled during startup",
+            );
+            self.rollback_partial_start();
+            drop(handshake);
+            return Err(
+                "Upload session was cancelled during startup. Close and open Upload from phone again."
+                    .to_string(),
+            );
+        }
+
         drop(handshake);
 
         Ok(ReplaceRemoteUploadStartInfo {
@@ -569,12 +588,29 @@ impl ReplaceRemoteUploadManager {
         self.stop_with_reason(app_data_dir, StopReason::UserClose, None);
     }
 
+    fn rollback_partial_start(&self) {
+        if let Some(mut relay) = self.relay_process.lock().take() {
+            relay.stop();
+        }
+        if let Some(tx) = self.shutdown_tx.lock().take() {
+            let _ = tx.send(true);
+        }
+        if let Some(handle) = self.server_thread.lock().take() {
+            let _ = handle.join();
+        }
+        if let Some(record) = self.session.lock().take() {
+            let _ = std::fs::remove_dir_all(&record.temp_dir);
+        }
+    }
+
     fn stop_with_reason(
         &self,
         app_data_dir: &Path,
         reason: StopReason,
         session_log_id: Option<&str>,
     ) {
+        self.session_generation.fetch_add(1, Ordering::SeqCst);
+
         let session_id = session_log_id
             .map(str::to_string)
             .unwrap_or_else(|| "none".to_string());
