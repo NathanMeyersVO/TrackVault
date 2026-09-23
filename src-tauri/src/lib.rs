@@ -53,6 +53,7 @@ use commands::{
     start_replace_remote_upload, start_library_remote_upload, start_collection_remote_upload,
     stop_replace_remote_upload, get_replace_remote_upload_status,
     get_replace_remote_upload_log_path, get_replace_remote_upload_logs_dir,
+    setup_remote_upload_firewall,
 };
 use tauri::Manager;
 
@@ -102,6 +103,7 @@ pub fn run() {
             get_replace_remote_upload_status,
             get_replace_remote_upload_log_path,
             get_replace_remote_upload_logs_dir,
+            setup_remote_upload_firewall,
             delete_track,
             create_collection,
             delete_collection,

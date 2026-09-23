@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { DeliveryFolderDropZone } from "./DeliveryFolderDropZone";
 import { DeliveryPreviewModal } from "./DeliveryPreviewModal";
 import { useDeliveryFolderConfirm } from "../hooks/useDeliveryFolderConfirm";
 import { useLibraryUiReset } from "../hooks/useLibraryUiReset";
@@ -62,8 +63,13 @@ export function ProjectHubModal({ onClose }: ProjectHubModalProps) {
 
   const deliveryCopy = getDeliveryCopy(applicationId);
 
-  const { pickAndShow: pickDeliveryFolderForCreate, modal: deliveryFolderConfirmModal } =
-    useDeliveryFolderConfirm({ applicationId, onConfirm: stageFromFolder });
+  const {
+    pickAndShow: pickDeliveryFolderForCreate,
+    loadFolder: loadDeliveryFolderForCreate,
+    modal: deliveryFolderConfirmModal,
+  } = useDeliveryFolderConfirm({ applicationId, onConfirm: stageFromFolder });
+
+  const canStartDelivery = Boolean(newName.trim()) && !busy;
 
   const importProjectArchive = async () => {
     const source = await open({
@@ -193,12 +199,17 @@ export function ProjectHubModal({ onClose }: ProjectHubModalProps) {
             </label>
             <button
               type="button"
-              disabled={busy}
+              disabled={!canStartDelivery}
               onClick={() => void startCreateFromDelivery()}
               className="w-full rounded-md bg-accent px-3 py-2 text-sm text-accent-foreground disabled:opacity-40"
             >
               {deliveryCopy.importButton}
             </button>
+            <DeliveryFolderDropZone
+              label={deliveryCopy.createProjectDropZoneLabel}
+              enabled={canStartDelivery}
+              onFolderDropped={(path) => void loadDeliveryFolderForCreate(path)}
+            />
             <button
               type="button"
               disabled={busy || importingArchive}

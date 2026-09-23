@@ -117,10 +117,27 @@ export interface ReplaceRemoteUploadStartInfo {
   uploadUrl: string;
   lanIp: string;
   port: number;
+  httpPort: number;
   expiresAtMs: number;
   alternateUrls: string[];
   localhostTestUrl: string;
   logFilePath: string;
+  serverExePath: string;
+  firewallRuleOk: boolean;
+  usingStablePorts: boolean;
+}
+
+export interface RemoteUploadFirewallSetupResult {
+  success: boolean;
+  verified: boolean;
+  message: string;
+  networkProfileSummary: string | null;
+  portsRuleVerified: boolean;
+  programRuleVerified: boolean;
+  listeningExePath: string;
+  firewallProgramPath: string | null;
+  programPathMatchesListener: boolean;
+  sessionExePathMatchesListener: boolean;
 }
 
 export interface ReplaceRemoteUploadStatus {
@@ -277,6 +294,12 @@ export const api = {
     invoke<string>("get_replace_remote_upload_log_path"),
   getReplaceRemoteUploadLogsDir: () =>
     invoke<string>("get_replace_remote_upload_logs_dir"),
+  setupRemoteUploadFirewall: (serverExePath: string, httpsPort: number, httpPort: number) =>
+    invoke<RemoteUploadFirewallSetupResult>("setup_remote_upload_firewall", {
+      serverExePath,
+      httpsPort,
+      httpPort,
+    }),
   deleteTrack: (trackId: number) =>
     invoke<PlaybackState>("delete_track", { trackId }),
   saveLibraryConfig: () => invoke<string>("save_library_config"),

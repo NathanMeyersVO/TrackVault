@@ -40,6 +40,12 @@ export function RemoteImportFromPhoneModal({
   const [remoteWaiting, setRemoteWaiting] = useState(false);
   const [remoteStarting, setRemoteStarting] = useState(true);
   const [remoteLogPath, setRemoteLogPath] = useState<string | null>(null);
+  const [remoteLanIp, setRemoteLanIp] = useState<string | null>(null);
+  const [remoteHttpsPort, setRemoteHttpsPort] = useState<number | null>(null);
+  const [remoteHttpPort, setRemoteHttpPort] = useState<number | null>(null);
+  const [remoteServerExePath, setRemoteServerExePath] = useState<string | null>(null);
+  const [remoteFirewallRuleOk, setRemoteFirewallRuleOk] = useState(true);
+  const [remoteUsingStablePorts, setRemoteUsingStablePorts] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const [pendingImport, setPendingImport] = useState<{
@@ -74,12 +80,24 @@ export function RemoteImportFromPhoneModal({
       setRemoteAlternateUrls(info.alternateUrls);
       setRemoteLocalhostUrl(info.localhostTestUrl);
       setRemoteLogPath(info.logFilePath);
+      setRemoteLanIp(info.lanIp);
+      setRemoteHttpsPort(info.port);
+      setRemoteHttpPort(info.httpPort);
+      setRemoteServerExePath(info.serverExePath);
+      setRemoteFirewallRuleOk(info.firewallRuleOk);
+      setRemoteUsingStablePorts(info.usingStablePorts);
       setRemoteWaiting(true);
     } catch (err) {
       setRemoteUploadUrl(null);
       setRemoteAlternateUrls([]);
       setRemoteLocalhostUrl(null);
       setRemoteLogPath(null);
+      setRemoteLanIp(null);
+      setRemoteHttpsPort(null);
+      setRemoteHttpPort(null);
+      setRemoteServerExePath(null);
+      setRemoteFirewallRuleOk(true);
+      setRemoteUsingStablePorts(false);
       setRemoteWaiting(false);
       setError(String(err));
     } finally {
@@ -266,6 +284,12 @@ export function RemoteImportFromPhoneModal({
               uploadUrl={remoteUploadUrl}
               alternateUrls={remoteAlternateUrls}
               localhostTestUrl={remoteLocalhostUrl}
+              lanIp={remoteLanIp}
+              httpsPort={remoteHttpsPort}
+              httpPort={remoteHttpPort}
+              serverExePath={remoteServerExePath}
+              firewallRuleOk={remoteFirewallRuleOk}
+              usingStablePorts={remoteUsingStablePorts}
               waiting={remoteWaiting && sourcePaths.length === 0}
               busy={busy}
               multipleFiles

@@ -10,6 +10,8 @@ export interface DeliveryCopy {
   deliverySingular: string;
   createProjectHint: string;
   importButton: string;
+  /** Projects hub drop target label (Explorer folder drag) */
+  createProjectDropZoneLabel: string;
   pickFolderDialogTitle: string;
   confirmFolderModalTitle: string;
   applyUpdateMenuLabel: string;
@@ -36,6 +38,7 @@ const NONE_DELIVERY_COPY: DeliveryCopy = {
   createProjectHint:
     "Choose a folder with audio archives and/or loose audio files.",
   importButton: "Import delivery…",
+  createProjectDropZoneLabel: "Drop delivery folder here",
   pickFolderDialogTitle: "Select delivery folder",
   confirmFolderModalTitle: "Confirm delivery folder",
   applyUpdateMenuLabel: "Apply Delivery Update…",
@@ -58,6 +61,7 @@ const USFS_EMS_DELIVERY_COPY: DeliveryCopy = {
   createProjectHint:
     "Choose a folder of EMS downloads with audio archives and/or an event schedule spreadsheet (.xls, .xlsx).",
   importButton: "Import EMS download…",
+  createProjectDropZoneLabel: "Drop EMS download folder here",
   pickFolderDialogTitle: "Select EMS downloads folder",
   confirmFolderModalTitle: "Confirm EMS downloads folder",
   applyUpdateMenuLabel: "Apply EMS Download…",

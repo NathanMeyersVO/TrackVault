@@ -324,6 +324,41 @@ pub fn get_replace_remote_upload_logs_dir(
 }
 
 #[tauri::command]
+pub fn setup_remote_upload_firewall(
+    state: State<'_, AppState>,
+    server_exe_path: String,
+    https_port: u16,
+    http_port: u16,
+) -> Result<crate::replace_remote_upload::RemoteUploadFirewallSetupResult, String> {
+    let result = crate::replace_remote_upload::run_elevated_windows_firewall_setup(
+        &server_exe_path,
+        https_port,
+        http_port,
+    )?;
+    let network_summary = result
+        .network_profile_summary
+        .as_deref()
+        .unwrap_or("unknown");
+    let detail = format!(
+        "ports_rule={} program_rule={} session_exe_match={} program_path_match={} listening=\"{}\" rule_program=\"{}\"",
+        result.ports_rule_verified,
+        result.program_rule_verified,
+        result.session_exe_path_matches_listener,
+        result.program_path_matches_listener,
+        result.listening_exe_path,
+        result.firewall_program_path.as_deref().unwrap_or("")
+    );
+    state.replace_remote_upload.log_elevated_firewall_setup(
+        &state.app_data_dir,
+        result.success,
+        result.verified,
+        network_summary,
+        &detail,
+    );
+    Ok(result)
+}
+
+#[tauri::command]
 pub fn delete_track(
     app: AppHandle,
     state: State<'_, AppState>,

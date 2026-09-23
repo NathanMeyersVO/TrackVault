@@ -49,6 +49,12 @@ export function ReplaceTrackFileModal({ track, onClose }: ReplaceTrackFileModalP
   const [remoteWaiting, setRemoteWaiting] = useState(false);
   const [remoteStarting, setRemoteStarting] = useState(false);
   const [remoteLogPath, setRemoteLogPath] = useState<string | null>(null);
+  const [remoteLanIp, setRemoteLanIp] = useState<string | null>(null);
+  const [remoteHttpsPort, setRemoteHttpsPort] = useState<number | null>(null);
+  const [remoteHttpPort, setRemoteHttpPort] = useState<number | null>(null);
+  const [remoteServerExePath, setRemoteServerExePath] = useState<string | null>(null);
+  const [remoteFirewallRuleOk, setRemoteFirewallRuleOk] = useState(true);
+  const [remoteUsingStablePorts, setRemoteUsingStablePorts] = useState(false);
   const remoteStartInFlight = useRef(false);
 
   const handleClose = useCallback(() => {
@@ -106,6 +112,12 @@ export function ReplaceTrackFileModal({ track, onClose }: ReplaceTrackFileModalP
         setRemoteUploadUrl(null);
         setRemoteAlternateUrls([]);
         setRemoteLocalhostUrl(null);
+        setRemoteLanIp(null);
+        setRemoteHttpsPort(null);
+        setRemoteHttpPort(null);
+        setRemoteServerExePath(null);
+        setRemoteFirewallRuleOk(true);
+        setRemoteUsingStablePorts(false);
       } catch (err) {
         setSourcePath(null);
         setPreview(null);
@@ -143,6 +155,12 @@ export function ReplaceTrackFileModal({ track, onClose }: ReplaceTrackFileModalP
           setRemoteUploadUrl(null);
           setRemoteAlternateUrls([]);
           setRemoteLocalhostUrl(null);
+          setRemoteLanIp(null);
+          setRemoteHttpsPort(null);
+          setRemoteHttpPort(null);
+          setRemoteServerExePath(null);
+          setRemoteFirewallRuleOk(true);
+          setRemoteUsingStablePorts(false);
         }
       });
     }, 2000);
@@ -155,6 +173,12 @@ export function ReplaceTrackFileModal({ track, onClose }: ReplaceTrackFileModalP
     setRemoteUploadUrl(null);
     setRemoteAlternateUrls([]);
     setRemoteLocalhostUrl(null);
+    setRemoteLanIp(null);
+    setRemoteHttpsPort(null);
+    setRemoteHttpPort(null);
+    setRemoteServerExePath(null);
+    setRemoteFirewallRuleOk(true);
+    setRemoteUsingStablePorts(false);
     setRemoteWaiting(false);
     const selected = await open({
       multiple: false,
@@ -177,6 +201,12 @@ export function ReplaceTrackFileModal({ track, onClose }: ReplaceTrackFileModalP
       setRemoteAlternateUrls(info.alternateUrls);
       setRemoteLocalhostUrl(info.localhostTestUrl);
       setRemoteLogPath(info.logFilePath);
+      setRemoteLanIp(info.lanIp);
+      setRemoteHttpsPort(info.port);
+      setRemoteHttpPort(info.httpPort);
+      setRemoteServerExePath(info.serverExePath);
+      setRemoteFirewallRuleOk(info.firewallRuleOk);
+      setRemoteUsingStablePorts(info.usingStablePorts);
       setRemoteWaiting(true);
     } catch (err) {
       setRemoteUploadUrl(null);
@@ -266,6 +296,12 @@ export function ReplaceTrackFileModal({ track, onClose }: ReplaceTrackFileModalP
                 uploadUrl={remoteUploadUrl}
                 alternateUrls={remoteAlternateUrls}
                 localhostTestUrl={remoteLocalhostUrl}
+                lanIp={remoteLanIp}
+                httpsPort={remoteHttpsPort}
+                httpPort={remoteHttpPort}
+                serverExePath={remoteServerExePath}
+                firewallRuleOk={remoteFirewallRuleOk}
+                usingStablePorts={remoteUsingStablePorts}
                 waiting={remoteWaiting && !loading}
                 busy={busy}
                 onCopyError={setError}

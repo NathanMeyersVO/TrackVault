@@ -71,5 +71,5 @@ export function useDeliveryFolderConfirm(options: {
     />
   ) : null;
 
-  return { pickAndShow, modal };
+  return { pickAndShow, loadFolder, modal };
 }
