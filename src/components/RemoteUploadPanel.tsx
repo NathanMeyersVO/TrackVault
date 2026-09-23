@@ -6,6 +6,7 @@ interface RemoteUploadPanelProps {
   waiting: boolean;
   busy: boolean;
   multipleFiles?: boolean;
+  destinationHint?: string | null;
   onCopyError?: (message: string) => void;
 }
 
@@ -14,6 +15,7 @@ export function RemoteUploadPanel({
   waiting,
   busy,
   multipleFiles = false,
+  destinationHint = null,
   onCopyError,
 }: RemoteUploadPanelProps) {
   const [selectedUrl, setSelectedUrl] = useState<string | null>(null);
@@ -36,6 +38,9 @@ export function RemoteUploadPanel({
   return (
     <div className="space-y-3 rounded-md border border-border bg-background/40 p-3">
       <p className="font-medium text-foreground">Upload from your phone</p>
+      {destinationHint ? (
+        <p className="text-sm text-foreground">{destinationHint}</p>
+      ) : null}
       <p className="text-muted">
         Scan the QR code or open the link on your phone (Wi‑Fi or cellular). Upload{" "}
         {multipleFiles ? "one or more audio files" : "one audio file"}. This link works only for

@@ -261,6 +261,13 @@ export function RemoteImportFromPhoneModal({
               waiting={remoteWaiting && sourcePaths.length === 0}
               busy={busy}
               multipleFiles
+              destinationHint={
+                mode === "library"
+                  ? "Uploading to your library"
+                  : collectionName
+                    ? `Uploading to collection “${collectionName}”`
+                    : "Uploading to collection"
+              }
               onCopyError={setError}
             />
             {sourcePaths.length > 0 && (

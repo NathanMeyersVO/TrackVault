@@ -148,8 +148,27 @@ impl SessionKind {
     }
 }
 
+#[derive(Debug, Clone)]
+enum UploadPageContext {
+    Replace {
+        title: String,
+        artist: String,
+        album: String,
+        file_name: String,
+        duration_ms: i64,
+    },
+    Library {
+        folder_label: String,
+        folder_path: String,
+    },
+    Collection {
+        name: String,
+    },
+}
+
 struct SessionRecord {
     kind: SessionKind,
+    page_context: UploadPageContext,
     token: String,
     upload_url: String,
     expires_at_ms: i64,
@@ -514,10 +533,16 @@ impl ReplaceRemoteUploadManager {
             &format!("origin={}", tunnel_config.public_origin),
         );
 
+        let page_context = {
+            let db_guard = db.lock();
+            resolve_upload_page_context(&db_guard, &kind)?
+        };
+
         {
             let mut session = self.session.lock();
             *session = Some(SessionRecord {
                 kind,
+                page_context,
                 token,
                 upload_url: upload_url.clone(),
                 expires_at_ms,
@@ -768,12 +793,24 @@ async fn upload_page_inner(token: String, ctx: Arc<ServerContext>) -> Response {
 
     let html = {
         let session = ctx.session.lock();
-        match session.as_ref().map(|r| &r.kind) {
-            Some(SessionKind::Replace { .. }) => UPLOAD_PAGE_REPLACE_HTML,
-            Some(SessionKind::LibraryImport) | Some(SessionKind::CollectionImport { .. }) => {
-                UPLOAD_PAGE_IMPORT_HTML
-            }
-            None => UPLOAD_PAGE_REPLACE_HTML,
+        match session.as_ref() {
+            Some(record) => match &record.page_context {
+                UploadPageContext::Replace { .. } => render_replace_upload_page(&record.page_context),
+                UploadPageContext::Library { .. } | UploadPageContext::Collection { .. } => {
+                    let allow_multiple = matches!(
+                        record.kind,
+                        SessionKind::LibraryImport | SessionKind::CollectionImport { .. }
+                    );
+                    render_import_upload_page(&record.page_context, allow_multiple)
+                }
+            },
+            None => render_replace_upload_page(&UploadPageContext::Replace {
+                title: "Library track".to_string(),
+                artist: String::new(),
+                album: String::new(),
+                file_name: String::new(),
+                duration_ms: 0,
+            }),
         }
     };
     Html(html).into_response()
@@ -978,11 +1015,19 @@ async fn receive_upload(
                 }),
             );
 
-            html_message(
-                StatusCode::OK,
-                "Upload received",
-                "You can close this page and confirm the replacement in TrackVault.",
-            )
+            let success_detail = {
+                let session = ctx.session.lock();
+                match session.as_ref().map(|r| &r.page_context) {
+                    Some(UploadPageContext::Replace { title, .. }) => format!(
+                        "You can close this page and confirm replacing “{}” in TrackVault.",
+                        html_escape(title)
+                    ),
+                    _ => "You can close this page and confirm the replacement in TrackVault."
+                        .to_string(),
+                }
+            };
+
+            html_message(StatusCode::OK, "Upload received", &success_detail)
         }
         SessionKind::LibraryImport | SessionKind::CollectionImport { .. } => {
             if !is_audio_file(&temp_path) {
@@ -1181,52 +1226,256 @@ fn unique_temp_path(temp_dir: &Path, file_name: &str) -> PathBuf {
     temp_dir.join(format!("{stem}-dup{extension}"))
 }
 
-const UPLOAD_PAGE_REPLACE_HTML: &str = r#"<!DOCTYPE html>
+fn resolve_upload_page_context(
+    db: &Database,
+    kind: &SessionKind,
+) -> Result<UploadPageContext, String> {
+    match kind {
+        SessionKind::Replace { track_id } => {
+            let track = db
+                .get_track(*track_id)
+                .map_err(|e| e.to_string())?
+                .ok_or_else(|| "Track not found".to_string())?;
+            let file_name = Path::new(&track.path)
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or("track")
+                .to_string();
+            Ok(UploadPageContext::Replace {
+                title: track.title,
+                artist: track.artist,
+                album: track.album,
+                file_name,
+                duration_ms: track.duration_ms,
+            })
+        }
+        SessionKind::LibraryImport => {
+            let folder_path = db
+                .get_library_folder()
+                .map_err(|e| e.to_string())?
+                .ok_or_else(|| "No library folder configured".to_string())?;
+            let folder_label = Path::new(&folder_path)
+                .file_name()
+                .and_then(|name| name.to_str())
+                .filter(|label| !label.is_empty())
+                .unwrap_or("Library")
+                .to_string();
+            Ok(UploadPageContext::Library {
+                folder_label,
+                folder_path,
+            })
+        }
+        SessionKind::CollectionImport { collection_id } => {
+            let collection = db
+                .get_collection(*collection_id)
+                .map_err(|e| e.to_string())?
+                .ok_or_else(|| "Collection not found".to_string())?;
+            Ok(UploadPageContext::Collection {
+                name: collection.name,
+            })
+        }
+    }
+}
+
+fn html_escape(value: &str) -> String {
+    value
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&#39;")
+}
+
+fn format_duration_ms(ms: i64) -> String {
+    let total_secs = (ms.max(0) / 1000) as u64;
+    let mins = total_secs / 60;
+    let secs = total_secs % 60;
+    format!("{mins}:{secs:02}")
+}
+
+const UPLOAD_PAGE_STYLES: &str = r#"
+    body { font-family: system-ui, sans-serif; margin: 1.5rem; line-height: 1.5; max-width: 28rem; }
+    h1 { font-size: 1.25rem; margin-bottom: 0.5rem; }
+    p { color: #444; }
+    .context { background: #f4f4f5; border-radius: 0.375rem; padding: 0.75rem 1rem; margin: 1rem 0; }
+    .context-title { font-weight: 600; color: #111; margin: 0 0 0.25rem; font-size: 1rem; }
+    .context-meta { font-size: 0.875rem; color: #555; margin: 0; word-break: break-all; }
+    input[type=file] { width: 100%; margin: 1rem 0; }
+    button { font: inherit; padding: 0.6rem 1rem; border: 0; border-radius: 0.375rem; background: #2563eb; color: #fff; }
+    .note { font-size: 0.875rem; margin-top: 1rem; }
+"#;
+
+fn render_replace_upload_page(ctx: &UploadPageContext) -> String {
+    let UploadPageContext::Replace {
+        title,
+        artist,
+        album,
+        file_name,
+        duration_ms,
+    } = ctx
+    else {
+        return render_replace_upload_page(&UploadPageContext::Replace {
+            title: "Library track".to_string(),
+            artist: String::new(),
+            album: String::new(),
+            file_name: String::new(),
+            duration_ms: 0,
+        });
+    };
+
+    let mut meta_parts: Vec<String> = Vec::new();
+    if !artist.trim().is_empty() {
+        meta_parts.push(html_escape(artist.trim()));
+    }
+    if !album.trim().is_empty() {
+        meta_parts.push(html_escape(album.trim()));
+    }
+    if *duration_ms > 0 {
+        meta_parts.push(format!(
+            "{}",
+            html_escape(&format_duration_ms(*duration_ms))
+        ));
+    }
+    let meta_line = if meta_parts.is_empty() {
+        String::new()
+    } else {
+        format!(r#"<p class="context-meta">{}</p>"#, meta_parts.join(" · "))
+    };
+
+    let file_line = if file_name.is_empty() {
+        String::new()
+    } else {
+        format!(
+            r#"<p class="context-meta">Current file: {}</p>"#,
+            html_escape(file_name)
+        )
+    };
+
+    format!(
+        r#"<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>TrackVault — Replace file</title>
-  <style>
-    body { font-family: system-ui, sans-serif; margin: 1.5rem; line-height: 1.5; max-width: 28rem; }
-    h1 { font-size: 1.25rem; margin-bottom: 0.5rem; }
-    p { color: #444; }
-    input[type=file] { width: 100%; margin: 1rem 0; }
-    button { font: inherit; padding: 0.6rem 1rem; border: 0; border-radius: 0.375rem; background: #2563eb; color: #fff; }
-    .note { font-size: 0.875rem; margin-top: 1rem; }
-  </style>
+  <style>{UPLOAD_PAGE_STYLES}</style>
 </head>
 <body>
   <h1>Upload replacement audio</h1>
   <p>Select one audio file to send to TrackVault (maximum 500 MB).</p>
+  <div class="context">
+    <p class="context-title">Replacing: {title}</p>
+    {meta_line}
+    {file_line}
+  </div>
   <form method="post" enctype="multipart/form-data">
     <input type="file" name="file" accept="audio/*,.mp3,.flac,.wav,.ogg,.m4a,.aac,.mp4,.aiff" required />
     <button type="submit">Upload</button>
   </form>
 </body>
-</html>"#;
+</html>"#,
+        title = html_escape(title),
+        meta_line = meta_line,
+        file_line = file_line,
+    )
+}
 
-const UPLOAD_PAGE_IMPORT_HTML: &str = r#"<!DOCTYPE html>
+fn render_import_upload_page(ctx: &UploadPageContext, allow_multiple: bool) -> String {
+    let (page_title, context_heading, context_detail) = match ctx {
+        UploadPageContext::Library {
+            folder_label,
+            folder_path,
+        } => (
+            "TrackVault — Upload to library",
+            format!("Upload to library: {}", html_escape(folder_label)),
+            format!("Folder: {}", html_escape(folder_path)),
+        ),
+        UploadPageContext::Collection { name } => (
+            "TrackVault — Upload to collection",
+            format!("Upload to collection: {}", html_escape(name)),
+            String::new(),
+        ),
+        UploadPageContext::Replace { .. } => (
+            "TrackVault — Upload tracks",
+            "Upload to TrackVault".to_string(),
+            String::new(),
+        ),
+    };
+
+    let instructions = if allow_multiple {
+        "Select one or more audio files (maximum 500 MB each). You can submit again to add more files."
+    } else {
+        "Select one audio file to send to TrackVault (maximum 500 MB)."
+    };
+
+    let multiple_attr = if allow_multiple { " multiple" } else { "" };
+    let detail_block = if context_detail.is_empty() {
+        String::new()
+    } else {
+        format!(r#"<p class="context-meta">{context_detail}</p>"#)
+    };
+
+    format!(
+        r#"<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>TrackVault — Upload tracks</title>
-  <style>
-    body { font-family: system-ui, sans-serif; margin: 1.5rem; line-height: 1.5; max-width: 28rem; }
-    h1 { font-size: 1.25rem; margin-bottom: 0.5rem; }
-    p { color: #444; }
-    input[type=file] { width: 100%; margin: 1rem 0; }
-    button { font: inherit; padding: 0.6rem 1rem; border: 0; border-radius: 0.375rem; background: #2563eb; color: #fff; }
-    .note { font-size: 0.875rem; margin-top: 1rem; }
-  </style>
+  <title>{page_title}</title>
+  <style>{UPLOAD_PAGE_STYLES}</style>
 </head>
 <body>
   <h1>Upload audio to TrackVault</h1>
-  <p>Select one or more audio files (maximum 500 MB each). You can submit again to add more files.</p>
+  <p>{instructions}</p>
+  <div class="context">
+    <p class="context-title">{context_heading}</p>
+    {detail_block}
+  </div>
   <form method="post" enctype="multipart/form-data">
-    <input type="file" name="file" accept="audio/*,.mp3,.flac,.wav,.ogg,.m4a,.aac,.mp4,.aiff" multiple required />
+    <input type="file" name="file" accept="audio/*,.mp3,.flac,.wav,.ogg,.m4a,.aac,.mp4,.aiff"{multiple_attr} required />
     <button type="submit">Upload</button>
   </form>
 </body>
-</html>"#;
+</html>"#,
+        instructions = html_escape(instructions),
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn html_escape_neutralizes_markup() {
+        let escaped = html_escape("<script>alert(\"x\")</script>");
+        assert!(!escaped.contains('<'));
+        assert!(escaped.contains("&lt;script&gt;"));
+    }
+
+    #[test]
+    fn replace_page_escapes_track_title() {
+        let html = render_replace_upload_page(&UploadPageContext::Replace {
+            title: "Song <b>Title</b>".to_string(),
+            artist: "Artist".to_string(),
+            album: String::new(),
+            file_name: "track.mp3".to_string(),
+            duration_ms: 125_000,
+        });
+        assert!(html.contains("Song &lt;b&gt;Title&lt;/b&gt;"));
+        assert!(!html.contains("<b>Title</b>"));
+        assert!(html.contains("Current file: track.mp3"));
+        assert!(html.contains("2:05"));
+    }
+
+    #[test]
+    fn import_page_shows_collection_name() {
+        let html = render_import_upload_page(
+            &UploadPageContext::Collection {
+                name: "Demo & Mixes".to_string(),
+            },
+            true,
+        );
+        assert!(html.contains("Demo &amp; Mixes"));
+        assert!(html.contains("multiple"));
+    }
+}

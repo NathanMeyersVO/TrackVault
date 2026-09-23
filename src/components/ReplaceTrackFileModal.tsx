@@ -12,6 +12,7 @@ import { invalidateTrackTags } from "../lib/trackTagsCache";
 import { useLibrary } from "../hooks/usePlayer";
 import { usePhoneUploadSettings } from "../hooks/usePhoneUploadSettings";
 import { usePlayerStore } from "../store/playerStore";
+import { LocalFileAudioPreview } from "./LocalFileAudioPreview";
 import { RemoteUploadPanel } from "./RemoteUploadPanel";
 
 const AUDIO_EXTENSIONS = ["mp3", "flac", "wav", "ogg", "m4a", "aac", "mp4", "aiff"];
@@ -257,6 +258,7 @@ export function ReplaceTrackFileModal({ track, onClose }: ReplaceTrackFileModalP
                   uploadUrl={remoteUploadUrl}
                   waiting={remoteWaiting && !loading}
                   busy={busy}
+                  destinationHint={`Replacing “${track.title}”`}
                   onCopyError={setError}
                 />
               ) : null}
@@ -295,6 +297,15 @@ export function ReplaceTrackFileModal({ track, onClose }: ReplaceTrackFileModalP
 
               {preview.path_collision && preview.collision_message && (
                 <p className="text-sm text-red-400">{preview.collision_message}</p>
+              )}
+
+              {sourcePath && (
+                <LocalFileAudioPreview
+                  filePath={sourcePath}
+                  durationMs={preview.replacement.duration_ms}
+                  label="Listen to new file"
+                  disabled={busy}
+                />
               )}
 
               <div className="overflow-x-auto rounded-md border border-border">
