@@ -10,6 +10,7 @@ import {
 } from "../lib/tauri";
 import { invalidateTrackTags } from "../lib/trackTagsCache";
 import { useLibrary } from "../hooks/usePlayer";
+import { usePhoneUploadSettings } from "../hooks/usePhoneUploadSettings";
 import { usePlayerStore } from "../store/playerStore";
 import { RemoteUploadPanel } from "./RemoteUploadPanel";
 
@@ -37,6 +38,7 @@ function libraryDirectory(fullPath: string): string {
 
 export function ReplaceTrackFileModal({ track, onClose }: ReplaceTrackFileModalProps) {
   const { refresh } = useLibrary();
+  const { phoneUploadReady } = usePhoneUploadSettings();
   const patchTrack = usePlayerStore((state) => state.patchTrack);
   const [preview, setPreview] = useState<ReplaceTrackFilePreview | null>(null);
   const [sourcePath, setSourcePath] = useState<string | null>(null);
@@ -44,17 +46,9 @@ export function ReplaceTrackFileModal({ track, onClose }: ReplaceTrackFileModalP
   const [committing, setCommitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [remoteUploadUrl, setRemoteUploadUrl] = useState<string | null>(null);
-  const [remoteAlternateUrls, setRemoteAlternateUrls] = useState<string[]>([]);
-  const [remoteLocalhostUrl, setRemoteLocalhostUrl] = useState<string | null>(null);
   const [remoteWaiting, setRemoteWaiting] = useState(false);
   const [remoteStarting, setRemoteStarting] = useState(false);
   const [remoteLogPath, setRemoteLogPath] = useState<string | null>(null);
-  const [remoteLanIp, setRemoteLanIp] = useState<string | null>(null);
-  const [remoteHttpsPort, setRemoteHttpsPort] = useState<number | null>(null);
-  const [remoteHttpPort, setRemoteHttpPort] = useState<number | null>(null);
-  const [remoteServerExePath, setRemoteServerExePath] = useState<string | null>(null);
-  const [remoteFirewallRuleOk, setRemoteFirewallRuleOk] = useState(true);
-  const [remoteUsingStablePorts, setRemoteUsingStablePorts] = useState(false);
   const remoteStartInFlight = useRef(false);
 
   const handleClose = useCallback(() => {
@@ -110,14 +104,6 @@ export function ReplaceTrackFileModal({ track, onClose }: ReplaceTrackFileModalP
         setPreview(result);
         setRemoteWaiting(false);
         setRemoteUploadUrl(null);
-        setRemoteAlternateUrls([]);
-        setRemoteLocalhostUrl(null);
-        setRemoteLanIp(null);
-        setRemoteHttpsPort(null);
-        setRemoteHttpPort(null);
-        setRemoteServerExePath(null);
-        setRemoteFirewallRuleOk(true);
-        setRemoteUsingStablePorts(false);
       } catch (err) {
         setSourcePath(null);
         setPreview(null);
@@ -153,14 +139,6 @@ export function ReplaceTrackFileModal({ track, onClose }: ReplaceTrackFileModalP
           setError(status.error);
           setRemoteWaiting(false);
           setRemoteUploadUrl(null);
-          setRemoteAlternateUrls([]);
-          setRemoteLocalhostUrl(null);
-          setRemoteLanIp(null);
-          setRemoteHttpsPort(null);
-          setRemoteHttpPort(null);
-          setRemoteServerExePath(null);
-          setRemoteFirewallRuleOk(true);
-          setRemoteUsingStablePorts(false);
         }
       });
     }, 2000);
@@ -171,14 +149,6 @@ export function ReplaceTrackFileModal({ track, onClose }: ReplaceTrackFileModalP
   const chooseFile = useCallback(async () => {
     setError(null);
     setRemoteUploadUrl(null);
-    setRemoteAlternateUrls([]);
-    setRemoteLocalhostUrl(null);
-    setRemoteLanIp(null);
-    setRemoteHttpsPort(null);
-    setRemoteHttpPort(null);
-    setRemoteServerExePath(null);
-    setRemoteFirewallRuleOk(true);
-    setRemoteUsingStablePorts(false);
     setRemoteWaiting(false);
     const selected = await open({
       multiple: false,
@@ -198,20 +168,10 @@ export function ReplaceTrackFileModal({ track, onClose }: ReplaceTrackFileModalP
     try {
       const info = await api.startReplaceRemoteUpload(track.id);
       setRemoteUploadUrl(info.uploadUrl);
-      setRemoteAlternateUrls(info.alternateUrls);
-      setRemoteLocalhostUrl(info.localhostTestUrl);
       setRemoteLogPath(info.logFilePath);
-      setRemoteLanIp(info.lanIp);
-      setRemoteHttpsPort(info.port);
-      setRemoteHttpPort(info.httpPort);
-      setRemoteServerExePath(info.serverExePath);
-      setRemoteFirewallRuleOk(info.firewallRuleOk);
-      setRemoteUsingStablePorts(info.usingStablePorts);
       setRemoteWaiting(true);
     } catch (err) {
       setRemoteUploadUrl(null);
-      setRemoteAlternateUrls([]);
-      setRemoteLocalhostUrl(null);
       setRemoteLogPath(null);
       setRemoteWaiting(false);
       setError(String(err));
@@ -292,20 +252,14 @@ export function ReplaceTrackFileModal({ track, onClose }: ReplaceTrackFileModalP
               {sourcePath && loading && (
                 <p className="text-muted">Verifying selected file…</p>
               )}
-              <RemoteUploadPanel
-                uploadUrl={remoteUploadUrl}
-                alternateUrls={remoteAlternateUrls}
-                localhostTestUrl={remoteLocalhostUrl}
-                lanIp={remoteLanIp}
-                httpsPort={remoteHttpsPort}
-                httpPort={remoteHttpPort}
-                serverExePath={remoteServerExePath}
-                firewallRuleOk={remoteFirewallRuleOk}
-                usingStablePorts={remoteUsingStablePorts}
-                waiting={remoteWaiting && !loading}
-                busy={busy}
-                onCopyError={setError}
-              />
+              {phoneUploadReady ? (
+                <RemoteUploadPanel
+                  uploadUrl={remoteUploadUrl}
+                  waiting={remoteWaiting && !loading}
+                  busy={busy}
+                  onCopyError={setError}
+                />
+              ) : null}
             </div>
           ) : (
             <div className="space-y-3 text-sm text-foreground">
@@ -418,14 +372,20 @@ export function ReplaceTrackFileModal({ track, onClose }: ReplaceTrackFileModalP
           </button>
           {!preview ? (
             <>
-              <button
-                type="button"
-                onClick={() => void startRemoteUpload()}
-                disabled={busy || remoteWaiting}
-                className="rounded-md border border-border px-3 py-1.5 text-sm text-foreground hover:bg-surface-hover disabled:opacity-40"
-              >
-                {remoteStarting ? "Starting server…" : remoteWaiting ? "Waiting for phone…" : "Upload from phone…"}
-              </button>
+              {phoneUploadReady ? (
+                <button
+                  type="button"
+                  onClick={() => void startRemoteUpload()}
+                  disabled={busy || remoteWaiting}
+                  className="rounded-md border border-border px-3 py-1.5 text-sm text-foreground hover:bg-surface-hover disabled:opacity-40"
+                >
+                  {remoteStarting
+                    ? "Starting tunnel…"
+                    : remoteWaiting
+                      ? "Waiting for phone…"
+                      : "Upload from phone…"}
+                </button>
+              ) : null}
               <button
                 type="button"
                 onClick={() => void chooseFile()}

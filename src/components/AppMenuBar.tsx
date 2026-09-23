@@ -31,10 +31,14 @@ export function AppMenuBar() {
     openProjectHub,
     applyDeliveryUpdate,
     projectHubModal,
+    applyDeliveryPickerModal,
     deliveryFolderConfirmModal,
     deliveryUpdateModal,
     uploadToLibrary,
     uploadToCollection,
+    phoneUploadReady,
+    openPhoneUploadSettings,
+    phoneUploadSettingsModal,
     openLibraryRemoteUpload,
     openCollectionRemoteUpload,
     remoteImportModal,
@@ -69,22 +73,19 @@ export function AppMenuBar() {
       label: libraryUploading ? "Uploading to library…" : "Upload to Library",
       title: "Copy audio files into the library folder and add them to the index.",
       disabled: libraryUploadDisabled,
-      children: [
-        {
-          label: libraryUploading ? "Uploading…" : "Upload locally…",
-          title: "Choose audio files on this computer to copy into the library.",
-          onClick: () => void uploadToLibrary(),
-          disabled: libraryUploadDisabled,
-        },
-        {
-          label: "Upload from phone…",
-          title:
-            "Receive audio over Wi‑Fi from your phone, then add them to the library.",
-          onClick: () => openLibraryRemoteUpload(),
-          disabled: libraryUploadDisabled,
-        },
-      ],
+      onClick: () => void uploadToLibrary(),
     },
+    ...(phoneUploadReady
+      ? [
+          {
+            label: "Upload to library from phone…",
+            title:
+              "Open a Cloudflare tunnel session and receive audio from your phone into the library.",
+            onClick: () => openLibraryRemoteUpload(),
+            disabled: libraryUploadDisabled,
+          } satisfies MenuEntry,
+        ]
+      : []),
     {
       label: exportingProject ? "Exporting project…" : "Export Project…",
       title: "Save the open project (library audio, schedule, and trackvault.json) to a .tgz archive.",
@@ -106,22 +107,19 @@ export function AppMenuBar() {
         : collectionUploadLabel,
       title: "Copy audio files into the active stored collection.",
       disabled: collectionUploadDisabled,
-      children: [
-        {
-          label: collectionUploading ? "Uploading…" : "Upload locally…",
-          title: "Choose audio files on this computer to copy into the collection.",
-          onClick: () => void uploadToCollection(),
-          disabled: collectionUploadDisabled,
-        },
-        {
-          label: "Upload from phone…",
-          title:
-            "Receive audio over Wi‑Fi from your phone, then add them to the active collection.",
-          onClick: () => openCollectionRemoteUpload(),
-          disabled: collectionUploadDisabled,
-        },
-      ],
+      onClick: () => void uploadToCollection(),
     },
+    ...(phoneUploadReady
+      ? [
+          {
+            label: "Upload to collection from phone…",
+            title:
+              "Open a Cloudflare tunnel session and receive audio from your phone into the active collection.",
+            onClick: () => openCollectionRemoteUpload(),
+            disabled: collectionUploadDisabled,
+          } satisfies MenuEntry,
+        ]
+      : []),
   ];
 
   const fileItems: MenuEntry[] = [
@@ -137,6 +135,12 @@ export function AppMenuBar() {
       label: "Appearance…",
       title: "Change color theme and appearance.",
       onClick: () => setAppearanceOpen(true),
+    },
+    {
+      label: "Phone upload setup…",
+      title:
+        "Configure Cloudflare named tunnel for upload from phone (public HTTPS via your domain).",
+      onClick: () => openPhoneUploadSettings(),
     },
   ];
 
@@ -202,7 +206,9 @@ export function AppMenuBar() {
       {libraryUploadConfirmDialog}
       {collectionUploadConfirmDialog}
       {remoteImportModal}
+      {phoneUploadSettingsModal}
       {projectHubModal}
+      {applyDeliveryPickerModal}
       {deliveryFolderConfirmModal}
       {deliveryUpdateModal}
       {shortcutsOpen ? (

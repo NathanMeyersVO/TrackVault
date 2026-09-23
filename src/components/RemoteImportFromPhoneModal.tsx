@@ -35,17 +35,9 @@ export function RemoteImportFromPhoneModal({
   const setScanning = usePlayerStore((state) => state.setScanning);
   const [sourcePaths, setSourcePaths] = useState<string[]>([]);
   const [remoteUploadUrl, setRemoteUploadUrl] = useState<string | null>(null);
-  const [remoteAlternateUrls, setRemoteAlternateUrls] = useState<string[]>([]);
-  const [remoteLocalhostUrl, setRemoteLocalhostUrl] = useState<string | null>(null);
   const [remoteWaiting, setRemoteWaiting] = useState(false);
   const [remoteStarting, setRemoteStarting] = useState(true);
   const [remoteLogPath, setRemoteLogPath] = useState<string | null>(null);
-  const [remoteLanIp, setRemoteLanIp] = useState<string | null>(null);
-  const [remoteHttpsPort, setRemoteHttpsPort] = useState<number | null>(null);
-  const [remoteHttpPort, setRemoteHttpPort] = useState<number | null>(null);
-  const [remoteServerExePath, setRemoteServerExePath] = useState<string | null>(null);
-  const [remoteFirewallRuleOk, setRemoteFirewallRuleOk] = useState(true);
-  const [remoteUsingStablePorts, setRemoteUsingStablePorts] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const [pendingImport, setPendingImport] = useState<{
@@ -77,27 +69,11 @@ export function RemoteImportFromPhoneModal({
           ? await api.startLibraryRemoteUpload()
           : await api.startCollectionRemoteUpload(collectionId!);
       setRemoteUploadUrl(info.uploadUrl);
-      setRemoteAlternateUrls(info.alternateUrls);
-      setRemoteLocalhostUrl(info.localhostTestUrl);
       setRemoteLogPath(info.logFilePath);
-      setRemoteLanIp(info.lanIp);
-      setRemoteHttpsPort(info.port);
-      setRemoteHttpPort(info.httpPort);
-      setRemoteServerExePath(info.serverExePath);
-      setRemoteFirewallRuleOk(info.firewallRuleOk);
-      setRemoteUsingStablePorts(info.usingStablePorts);
       setRemoteWaiting(true);
     } catch (err) {
       setRemoteUploadUrl(null);
-      setRemoteAlternateUrls([]);
-      setRemoteLocalhostUrl(null);
       setRemoteLogPath(null);
-      setRemoteLanIp(null);
-      setRemoteHttpsPort(null);
-      setRemoteHttpPort(null);
-      setRemoteServerExePath(null);
-      setRemoteFirewallRuleOk(true);
-      setRemoteUsingStablePorts(false);
       setRemoteWaiting(false);
       setError(String(err));
     } finally {
@@ -261,7 +237,7 @@ export function RemoteImportFromPhoneModal({
 
           <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-3 text-sm text-foreground">
             <p className="text-muted">
-              Send audio from your phone over Wi‑Fi. When you are done, tap Upload here to add
+              Send audio from your phone (any network). When you are done, tap Upload here to add
               the received files{mode === "library" ? " to your library" : " to this collection"}.
             </p>
             {remoteLogPath && (
@@ -282,14 +258,6 @@ export function RemoteImportFromPhoneModal({
             )}
             <RemoteUploadPanel
               uploadUrl={remoteUploadUrl}
-              alternateUrls={remoteAlternateUrls}
-              localhostTestUrl={remoteLocalhostUrl}
-              lanIp={remoteLanIp}
-              httpsPort={remoteHttpsPort}
-              httpPort={remoteHttpPort}
-              serverExePath={remoteServerExePath}
-              firewallRuleOk={remoteFirewallRuleOk}
-              usingStablePorts={remoteUsingStablePorts}
               waiting={remoteWaiting && sourcePaths.length === 0}
               busy={busy}
               multipleFiles

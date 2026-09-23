@@ -324,38 +324,55 @@ pub fn get_replace_remote_upload_logs_dir(
 }
 
 #[tauri::command]
-pub fn setup_remote_upload_firewall(
+pub fn get_phone_upload_settings(
     state: State<'_, AppState>,
-    server_exe_path: String,
-    https_port: u16,
-    http_port: u16,
-) -> Result<crate::replace_remote_upload::RemoteUploadFirewallSetupResult, String> {
-    let result = crate::replace_remote_upload::run_elevated_windows_firewall_setup(
-        &server_exe_path,
-        https_port,
-        http_port,
-    )?;
-    let network_summary = result
-        .network_profile_summary
-        .as_deref()
-        .unwrap_or("unknown");
-    let detail = format!(
-        "ports_rule={} program_rule={} session_exe_match={} program_path_match={} listening=\"{}\" rule_program=\"{}\"",
-        result.ports_rule_verified,
-        result.program_rule_verified,
-        result.session_exe_path_matches_listener,
-        result.program_path_matches_listener,
-        result.listening_exe_path,
-        result.firewall_program_path.as_deref().unwrap_or("")
-    );
-    state.replace_remote_upload.log_elevated_firewall_setup(
+) -> Result<crate::phone_upload_settings::PhoneUploadSettingsResponse, String> {
+    let db = state.db.lock();
+    crate::phone_upload_settings::get_phone_upload_settings(&db, &state.app_data_dir)
+}
+
+#[tauri::command]
+pub fn set_phone_upload_settings(
+    state: State<'_, AppState>,
+    settings: crate::phone_upload_settings::PhoneUploadSettings,
+    tunnel_token: Option<String>,
+) -> Result<crate::phone_upload_settings::PhoneUploadSettingsResponse, String> {
+    let db = state.db.lock();
+    crate::phone_upload_settings::set_phone_upload_settings(
+        &db,
         &state.app_data_dir,
-        result.success,
-        result.verified,
-        network_summary,
-        &detail,
-    );
-    Ok(result)
+        settings,
+        tunnel_token,
+    )
+}
+
+#[tauri::command]
+pub fn probe_cloudflared() -> Result<String, String> {
+    crate::upload_relay::probe_cloudflared()
+}
+
+#[tauri::command]
+pub fn probe_phone_upload_local_port(port: u16) -> Result<(), String> {
+    crate::phone_upload_settings::probe_local_port(port)
+}
+
+#[tauri::command]
+pub fn probe_phone_upload_path(
+    state: State<'_, AppState>,
+    settings: crate::phone_upload_settings::PhoneUploadSettings,
+    tunnel_token: Option<String>,
+) -> Result<String, String> {
+    if state.replace_remote_upload.is_session_active() {
+        return Err(
+            "Stop the current phone upload session before testing the tunnel path.".to_string(),
+        );
+    }
+    let config = crate::phone_upload_settings::tunnel_config_for_probe(
+        &settings,
+        &state.app_data_dir,
+        tunnel_token,
+    )?;
+    crate::phone_upload_probe::run_path_probe(config)
 }
 
 #[tauri::command]

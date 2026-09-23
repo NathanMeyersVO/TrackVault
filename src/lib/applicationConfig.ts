@@ -17,6 +17,9 @@ export interface DeliveryCopy {
   applyUpdateMenuLabel: string;
   applyUpdateMenuLabelStaging: string;
   applyUpdateMenuTitle: string;
+  applyUpdatePickerTitle: string;
+  applyUpdateChooseFolderButton: string;
+  applyUpdateDropZoneLabel: string;
   previewCreateTitle: string;
   previewApplyTitle: string;
   stagingBusyTitle: string;
@@ -45,6 +48,9 @@ const NONE_DELIVERY_COPY: DeliveryCopy = {
   applyUpdateMenuLabelStaging: "Staging delivery…",
   applyUpdateMenuTitle:
     "Choose a delivery folder with audio archives and/or loose audio to preview and apply.",
+  applyUpdatePickerTitle: "Apply delivery update",
+  applyUpdateChooseFolderButton: "Choose folder…",
+  applyUpdateDropZoneLabel: "Drop delivery folder here",
   previewCreateTitle: "Create project from delivery",
   previewApplyTitle: "Apply delivery update",
   stagingBusyTitle: "Staging delivery…",
@@ -68,6 +74,9 @@ const USFS_EMS_DELIVERY_COPY: DeliveryCopy = {
   applyUpdateMenuLabelStaging: "Staging EMS download…",
   applyUpdateMenuTitle:
     "Choose a folder of EMS downloads (archives and/or event schedule) to preview and apply.",
+  applyUpdatePickerTitle: "Apply EMS download",
+  applyUpdateChooseFolderButton: "Choose folder…",
+  applyUpdateDropZoneLabel: "Drop EMS download folder here",
   previewCreateTitle: "Create project from EMS download",
   previewApplyTitle: "Apply EMS download",
   stagingBusyTitle: "Staging EMS download…",

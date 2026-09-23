@@ -9,10 +9,13 @@ import { open, save } from "@tauri-apps/plugin-dialog";
 
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { importCollectionFromDialog } from "../components/CollectionView";
+import { DeliveryFolderPickerModal } from "../components/DeliveryFolderPickerModal";
 import { DeliveryPreviewModal } from "../components/DeliveryPreviewModal";
 import { useDeliveryFolderConfirm } from "./useDeliveryFolderConfirm";
 import { ProjectHubModal } from "../components/ProjectHubModal";
+import { PhoneUploadSettingsModal } from "../components/PhoneUploadSettingsModal";
 import { RemoteImportFromPhoneModal } from "../components/RemoteImportFromPhoneModal";
+import { usePhoneUploadSettings } from "./usePhoneUploadSettings";
 import { getDeliveryCopy, normalizeApplicationId } from "../lib/applicationConfig";
 import { api, type DeliveryPreview } from "../lib/tauri";
 import { useLibrary } from "./usePlayer";
@@ -113,6 +116,9 @@ export function useLibraryMenuActions() {
   const [projectHubOpen, setProjectHubOpen] = useState(false);
   const [deliveryPreview, setDeliveryPreview] = useState<DeliveryPreview | null>(null);
   const [exportingProject, setExportingProject] = useState(false);
+  const [applyDeliveryPickerOpen, setApplyDeliveryPickerOpen] = useState(false);
+  const [phoneUploadSettingsOpen, setPhoneUploadSettingsOpen] = useState(false);
+  const { phoneUploadReady, reload: reloadPhoneUploadSettings } = usePhoneUploadSettings();
 
   const applyLibraryFolder = useCallback(
     async (path: string) => {
@@ -175,11 +181,16 @@ export function useLibraryMenuActions() {
 
   const {
     pickAndShow: pickDeliveryFolderForUpdate,
+    loadFolder: loadDeliveryFolderForUpdate,
     modal: deliveryFolderConfirmModal,
   } = useDeliveryFolderConfirm({
     applicationId: deliveryApplicationId,
     onConfirm: stageDeliveryFromFolder,
   });
+
+  const closeApplyDeliveryPicker = useCallback(() => {
+    setApplyDeliveryPickerOpen(false);
+  }, []);
 
   const applyDeliveryUpdate = useCallback(() => {
     if (!activeProject) {
@@ -187,8 +198,21 @@ export function useLibraryMenuActions() {
       return;
     }
     setConfigError(null);
+    setApplyDeliveryPickerOpen(true);
+  }, [activeProject, setConfigError]);
+
+  const chooseApplyDeliveryFolder = useCallback(() => {
+    setApplyDeliveryPickerOpen(false);
     void pickDeliveryFolderForUpdate();
-  }, [activeProject, pickDeliveryFolderForUpdate, setConfigError]);
+  }, [pickDeliveryFolderForUpdate]);
+
+  const dropApplyDeliveryFolder = useCallback(
+    (path: string) => {
+      setApplyDeliveryPickerOpen(false);
+      void loadDeliveryFolderForUpdate(path);
+    },
+    [loadDeliveryFolderForUpdate],
+  );
 
   const exportProject = useCallback(async () => {
     if (!activeProject) {
@@ -347,23 +371,50 @@ export function useLibraryMenuActions() {
     }
   }, [applyLibraryFolder, pendingLibraryFolder, saveConfiguration]);
 
+  const openPhoneUploadSettings = useCallback(() => {
+    setPhoneUploadSettingsOpen(true);
+  }, []);
+
+  const closePhoneUploadSettings = useCallback(() => {
+    setPhoneUploadSettingsOpen(false);
+  }, []);
+
+  const ensurePhoneUploadReady = useCallback((): boolean => {
+    if (phoneUploadReady) return true;
+    setConfigError("Configure phone upload in View → Phone upload setup.");
+    setPhoneUploadSettingsOpen(true);
+    return false;
+  }, [phoneUploadReady]);
+
   const openLibraryRemoteUpload = useCallback(() => {
     if (!libraryFolder) {
       showLibraryUploadError("Choose a library folder before uploading tracks.");
       return;
     }
+    if (!ensurePhoneUploadReady()) return;
     clearUploadFeedback();
     setRemoteImportMode("library");
-  }, [clearUploadFeedback, libraryFolder, showLibraryUploadError]);
+  }, [
+    clearUploadFeedback,
+    ensurePhoneUploadReady,
+    libraryFolder,
+    showLibraryUploadError,
+  ]);
 
   const openCollectionRemoteUpload = useCallback(() => {
     if (collectionId == null) {
       showCollectionUploadError("Open a stored collection before uploading tracks.");
       return;
     }
+    if (!ensurePhoneUploadReady()) return;
     clearUploadFeedback();
     setRemoteImportMode("collection");
-  }, [clearUploadFeedback, collectionId, showCollectionUploadError]);
+  }, [
+    clearUploadFeedback,
+    collectionId,
+    ensurePhoneUploadReady,
+    showCollectionUploadError,
+  ]);
 
   const closeRemoteImport = useCallback(() => {
     setRemoteImportMode(null);
@@ -454,6 +505,19 @@ export function useLibraryMenuActions() {
     <ProjectHubModal onClose={closeProjectHub} />
   ) : null;
 
+  const applyDeliveryPickerModal = applyDeliveryPickerOpen ? (
+    <DeliveryFolderPickerModal
+      title={deliveryCopy.applyUpdatePickerTitle}
+      description={deliveryCopy.applyUpdateMenuTitle}
+      chooseButtonLabel={deliveryCopy.applyUpdateChooseFolderButton}
+      dropZoneLabel={deliveryCopy.applyUpdateDropZoneLabel}
+      enabled={!deliveryStaging}
+      onClose={closeApplyDeliveryPicker}
+      onChooseFolder={chooseApplyDeliveryFolder}
+      onFolderDropped={dropApplyDeliveryFolder}
+    />
+  ) : null;
+
   const deliveryUpdateModal =
     deliveryPreview && activeProject ? (
       <DeliveryPreviewModal
@@ -469,6 +533,13 @@ export function useLibraryMenuActions() {
         }}
       />
     ) : null;
+
+  const phoneUploadSettingsModal = phoneUploadSettingsOpen ? (
+    <PhoneUploadSettingsModal
+      onClose={closePhoneUploadSettings}
+      onSaved={() => void reloadPhoneUploadSettings()}
+    />
+  ) : null;
 
   const remoteImportModal =
     remoteImportMode === "library" ? (
@@ -530,10 +601,14 @@ export function useLibraryMenuActions() {
     openProjectHub,
     applyDeliveryUpdate,
     projectHubModal,
+    applyDeliveryPickerModal,
     deliveryFolderConfirmModal,
     deliveryUpdateModal,
     uploadToLibrary,
     uploadToCollection,
+    phoneUploadReady,
+    openPhoneUploadSettings,
+    phoneUploadSettingsModal,
     openLibraryRemoteUpload,
     openCollectionRemoteUpload,
     remoteImportModal,

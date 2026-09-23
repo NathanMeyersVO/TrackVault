@@ -115,29 +115,24 @@ export interface ReplaceTrackFilePreview {
 
 export interface ReplaceRemoteUploadStartInfo {
   uploadUrl: string;
-  lanIp: string;
-  port: number;
+  publicUploadUrl?: string | null;
   httpPort: number;
   expiresAtMs: number;
-  alternateUrls: string[];
-  localhostTestUrl: string;
   logFilePath: string;
-  serverExePath: string;
-  firewallRuleOk: boolean;
-  usingStablePorts: boolean;
 }
 
-export interface RemoteUploadFirewallSetupResult {
-  success: boolean;
-  verified: boolean;
-  message: string;
-  networkProfileSummary: string | null;
-  portsRuleVerified: boolean;
-  programRuleVerified: boolean;
-  listeningExePath: string;
-  firewallProgramPath: string | null;
-  programPathMatchesListener: boolean;
-  sessionExePathMatchesListener: boolean;
+export interface PhoneUploadSettings {
+  enabled: boolean;
+  publicOrigin: string;
+  localPort: number;
+}
+
+export interface PhoneUploadSettingsResponse {
+  enabled: boolean;
+  publicOrigin: string;
+  localPort: number;
+  hasTunnelToken: boolean;
+  ready: boolean;
 }
 
 export interface ReplaceRemoteUploadStatus {
@@ -294,11 +289,20 @@ export const api = {
     invoke<string>("get_replace_remote_upload_log_path"),
   getReplaceRemoteUploadLogsDir: () =>
     invoke<string>("get_replace_remote_upload_logs_dir"),
-  setupRemoteUploadFirewall: (serverExePath: string, httpsPort: number, httpPort: number) =>
-    invoke<RemoteUploadFirewallSetupResult>("setup_remote_upload_firewall", {
-      serverExePath,
-      httpsPort,
-      httpPort,
+  getPhoneUploadSettings: () =>
+    invoke<PhoneUploadSettingsResponse>("get_phone_upload_settings"),
+  setPhoneUploadSettings: (settings: PhoneUploadSettings, tunnelToken?: string | null) =>
+    invoke<PhoneUploadSettingsResponse>("set_phone_upload_settings", {
+      settings,
+      tunnelToken: tunnelToken ?? null,
+    }),
+  probeCloudflared: () => invoke<string>("probe_cloudflared"),
+  probePhoneUploadLocalPort: (port: number) =>
+    invoke<void>("probe_phone_upload_local_port", { port }),
+  probePhoneUploadPath: (settings: PhoneUploadSettings, tunnelToken?: string | null) =>
+    invoke<string>("probe_phone_upload_path", {
+      settings,
+      tunnelToken: tunnelToken ?? null,
     }),
   deleteTrack: (trackId: number) =>
     invoke<PlaybackState>("delete_track", { trackId }),
