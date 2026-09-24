@@ -9,7 +9,8 @@ use walkdir::WalkDir;
 
 use crate::db::Database;
 use crate::delivery::DeliveryProgressCtx;
-use crate::models::{AudioCacheProgress, DeliveryProgressPhase, ScanProgress};
+use crate::models::{AudioCacheProgress, DeliveryProgressPhase, ProjectLoadPhase, ScanProgress};
+use crate::project_load::ProjectLoadProgressCtx;
 use crate::waveform::probe_duration_ms;
 
 const AUDIO_EXTENSIONS: &[&str] = &["mp3", "flac", "wav", "ogg", "m4a", "aac", "mp4", "aiff"];
@@ -52,6 +53,12 @@ pub fn read_tags(path: &Path) -> (String, String, String, Option<i32>, i64) {
     (title, artist, album, track_number, duration_ms)
 }
 
+fn file_label(path: &Path) -> String {
+    path.file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| path.to_string_lossy().to_string())
+}
+
 fn emit_scan_progress(
     app: &AppHandle,
     done: u32,
@@ -59,6 +66,7 @@ fn emit_scan_progress(
     finished: bool,
     current_path: Option<&Path>,
     delivery: Option<&DeliveryProgressCtx>,
+    project_load: Option<&ProjectLoadProgressCtx>,
 ) {
     let _ = app.emit(
         "library-scan-progress",
@@ -68,13 +76,26 @@ fn emit_scan_progress(
             finished,
         },
     );
+    let current = current_path.map(file_label);
     if let Some(ctx) = delivery {
-        let current = current_path.map(|p| {
-            p.file_name()
-                .map(|n| n.to_string_lossy().to_string())
-                .unwrap_or_else(|| p.to_string_lossy().to_string())
-        });
-        ctx.emit(DeliveryProgressPhase::ScanningLibrary, done, total, finished, current);
+        ctx.emit(
+            DeliveryProgressPhase::ScanningLibrary,
+            done,
+            total,
+            finished,
+            current.clone(),
+        );
+    }
+    if let Some(ctx) = project_load {
+        if !finished {
+            ctx.emit(
+                ProjectLoadPhase::Scanning,
+                done,
+                total,
+                false,
+                current,
+            );
+        }
     }
 }
 
@@ -84,6 +105,7 @@ pub fn scan_folder(
     seen: &mut HashSet<String>,
     app: &AppHandle,
     delivery: Option<&DeliveryProgressCtx>,
+    project_load: Option<&ProjectLoadProgressCtx>,
 ) -> Result<ScanProgress, String> {
     let files: Vec<PathBuf> = WalkDir::new(folder)
         .follow_links(false)
@@ -94,7 +116,7 @@ pub fn scan_folder(
         .collect();
 
     let total = files.len() as u32;
-    emit_scan_progress(app, 0, total, false, None, delivery);
+    emit_scan_progress(app, 0, total, false, None, delivery, project_load);
 
     let mut scanned = 0u32;
     let mut added = 0u32;
@@ -124,7 +146,7 @@ pub fn scan_folder(
             Err(e) => eprintln!("Failed to upsert {}: {}", path_str, e),
         }
 
-        emit_scan_progress(app, scanned, total, false, Some(&path), delivery);
+        emit_scan_progress(app, scanned, total, false, Some(&path), delivery, project_load);
     }
 
     Ok(ScanProgress {
@@ -139,8 +161,9 @@ pub fn scan_library_folder(
     db: &Database,
     app: &AppHandle,
     delivery: Option<&DeliveryProgressCtx>,
+    project_load: Option<&ProjectLoadProgressCtx>,
 ) -> Result<ScanProgress, String> {
-    emit_scan_progress(app, 0, 0, false, None, delivery);
+    emit_scan_progress(app, 0, 0, false, None, delivery, project_load);
 
     let mut seen = HashSet::new();
     let mut total = ScanProgress {
@@ -152,13 +175,13 @@ pub fn scan_library_folder(
 
     let folder = db.get_library_folder().map_err(|e| e.to_string())?;
     let Some(folder) = folder else {
-        emit_scan_progress(app, 0, 0, true, None, delivery);
+        emit_scan_progress(app, 0, 0, true, None, delivery, project_load);
         return Ok(total);
     };
 
     let path = PathBuf::from(&folder);
     if path.exists() {
-        let progress = scan_folder(db, &path, &mut seen, app, delivery)?;
+        let progress = scan_folder(db, &path, &mut seen, app, delivery, project_load)?;
         total.scanned += progress.scanned;
         total.added += progress.added;
     }
@@ -174,6 +197,6 @@ pub fn scan_library_folder(
         .delete_library_tracks_by_paths(&missing)
         .map_err(|e| e.to_string())?;
 
-    emit_scan_progress(app, total.scanned, total.scanned, true, None, delivery);
+    emit_scan_progress(app, total.scanned, total.scanned, true, None, delivery, project_load);
     Ok(total)
 }

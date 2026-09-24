@@ -46,5 +46,9 @@ ureq = { version = "2.12", features = ["tls"] }
 name = "anonymize-library"
 path = "src/bin/anonymize_library.rs"
 
+[[bin]]
+name = "generate-demo-dataset"
+path = "src/bin/generate_demo_dataset.rs"
+
 [dev-dependencies]
 rust_xlsxwriter = "0.79"

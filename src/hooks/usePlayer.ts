@@ -4,7 +4,7 @@ import { listen } from "@tauri-apps/api/event";
 
 
 
-import { api, type AudioCacheProgress, type DeliveryProgress } from "../lib/tauri";
+import { api, type AudioCacheProgress, type DeliveryProgress, type ProjectLoadProgress } from "../lib/tauri";
 
 import { playerController } from "../playerController";
 
@@ -21,9 +21,10 @@ export function useLibrary() {
     setCollections,
     setLibraryFolder,
     setActiveProject,
-    setAudioCacheProgress,
     setLibraryScanProgress,
     setDeliveryProgress,
+    setProjectLoadProgress,
+    markProjectLoadChecked,
   } = usePlayerStore();
 
 
@@ -83,24 +84,30 @@ export function useLibrary() {
 
 
   useEffect(() => {
+    let cancelled = false;
+    api
+      .getProjectLoadProgress()
+      .then((progress) => {
+        if (!cancelled) {
+          markProjectLoadChecked(progress);
+        }
+      })
+      .catch((error) => {
+        console.error(error);
+        if (!cancelled) {
+          markProjectLoadChecked(null);
+        }
+      });
 
-    const unlisten = listen<AudioCacheProgress>("audio-cache-progress", (event) => {
-
-      setAudioCacheProgress(event.payload);
-
+    const unlisten = listen<ProjectLoadProgress>("project-load-progress", (event) => {
+      setProjectLoadProgress(event.payload);
     });
 
-
-
     return () => {
-
+      cancelled = true;
       unlisten.then((fn) => fn());
-
     };
-
-  }, [setAudioCacheProgress]);
-
-
+  }, [markProjectLoadChecked, setProjectLoadProgress]);
 
   useEffect(() => {
 

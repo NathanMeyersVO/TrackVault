@@ -8,16 +8,19 @@ export interface DeliveryBusyOverlayProps {
   title: string;
   detail?: string;
   progress?: DeliveryProgress | null;
+  percent?: number | null;
 }
 
 export function DeliveryBusyOverlay({
   title,
   detail,
   progress,
+  percent: percentProp,
 }: DeliveryBusyOverlayProps) {
   const progressDetail = formatDeliveryProgressDetail(progress ?? null);
   const line = progressDetail ?? detail;
-  const percent = deliveryProgressPercent(progress ?? null);
+  const percent =
+    percentProp !== undefined ? percentProp : deliveryProgressPercent(progress ?? null);
   const determinate = percent != null;
 
   return (

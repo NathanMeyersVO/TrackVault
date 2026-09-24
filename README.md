@@ -105,6 +105,20 @@ cargo run --manifest-path src-tauri/Cargo.toml --bin anonymize-library -- `
 
 Use `--dry-run` to preview changes. Optional flags: `--output-subdir`, `--seed`.
 
+### Demo EMS dataset
+
+To build a fake meet folder for testing **Import EMS download** (event schedule plus tagged tracks under `tracks/`), use **generate-demo-dataset**. You supply the real **Event Schedule** spreadsheet and a **track pool** folder tree. Each generated file copies a distinct pool track chosen by a random walk into leaf subfolders; only files **longer than 1 minute** (by default) are eligible. Some fake skaters are placed in two or three events.
+
+```powershell
+cargo run --manifest-path src-tauri/Cargo.toml --bin generate-demo-dataset -- `
+  --schedule "D:\meets\event-schedule.xlsx" `
+  --output "D:\drops\demo-meet" `
+  --track-pool "D:\Music\pool" `
+  --seed 42
+```
+
+Use `--dry-run` to preview paths. Tune roster size with `--competitors-min`, `--competitors-max`, and `--multi-event-2-weight` / `--multi-event-3-weight`. Override the length filter with `--min-duration-secs` (default `60` means strictly greater than one minute).
+
 ## Project structure
 
 ```

@@ -14,6 +14,10 @@ import { initPlayerController } from "./playerController";
 import { useSidebarWidth } from "./hooks/useSidebarWidth";
 import { useTrackCursor } from "./hooks/useTrackCursor";
 import { getDeliveryCopy } from "./lib/applicationConfig";
+import {
+  formatProjectLoadProgressDetail,
+  projectLoadProgressPercent,
+} from "./lib/projectLoadProgress";
 import { usePlayerStore, type View } from "./store/playerStore";
 
 function isPlaylistView(view: View): view is { playlistId: number } {
@@ -65,10 +69,19 @@ export default function App() {
   const deliveryStagingApplicationId = usePlayerStore(
     (state) => state.deliveryStagingApplicationId,
   );
+  const projectLoadChecked = usePlayerStore((state) => state.projectLoadChecked);
+  const projectLoadProgress = usePlayerStore((state) => state.projectLoadProgress);
   const activeProject = usePlayerStore((state) => state.activeProject);
   const stagingTitle = getDeliveryCopy(
     deliveryStagingApplicationId ?? activeProject?.application_id,
   ).stagingBusyTitle;
+  const projectLoadActive =
+    projectLoadProgress != null && !projectLoadProgress.finished;
+  const showProjectLoad = !deliveryStaging && (!projectLoadChecked || projectLoadActive);
+  const projectLoadTitle =
+    projectLoadActive && projectLoadProgress.project_name
+      ? `Loading ${projectLoadProgress.project_name}`
+      : "Loading project…";
 
   useEffect(() => {
     initPlayerController();
@@ -98,6 +111,18 @@ export default function App() {
     <div className="flex h-full flex-col">
       {deliveryStaging ? (
         <DeliveryBusyOverlay title={stagingTitle} progress={deliveryProgress} />
+      ) : showProjectLoad ? (
+        <DeliveryBusyOverlay
+          title={projectLoadTitle}
+          detail={
+            projectLoadActive
+              ? formatProjectLoadProgressDetail(projectLoadProgress)
+              : undefined
+          }
+          percent={
+            projectLoadActive ? projectLoadProgressPercent(projectLoadProgress) : null
+          }
+        />
       ) : null}
       <AppMenuBar />
       <div className="flex min-h-0 flex-1">

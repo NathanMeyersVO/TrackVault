@@ -11,6 +11,7 @@ import type {
   Track,
   AudioCacheProgress,
   DeliveryProgress,
+  ProjectLoadProgress,
 } from "../lib/tauri";
 
 export type View =
@@ -117,8 +118,9 @@ interface PlayerStore {
   deliveryProgress: DeliveryProgress | null;
   libraryFolder: string | null;
   activeProject: ProjectSummary | null;
-  audioCacheProgress: AudioCacheProgress;
   libraryScanProgress: AudioCacheProgress;
+  projectLoadProgress: ProjectLoadProgress | null;
+  projectLoadChecked: boolean;
   transportBusy: boolean;
   transportMode: TransportMode;
   lockedPositionMs: number | null;
@@ -147,8 +149,9 @@ interface PlayerStore {
   setDeliveryProgress: (deliveryProgress: DeliveryProgress | null) => void;
   setLibraryFolder: (libraryFolder: string | null) => void;
   setActiveProject: (activeProject: ProjectSummary | null) => void;
-  setAudioCacheProgress: (progress: AudioCacheProgress) => void;
   setLibraryScanProgress: (progress: AudioCacheProgress) => void;
+  setProjectLoadProgress: (progress: ProjectLoadProgress | null) => void;
+  markProjectLoadChecked: (progress: ProjectLoadProgress | null) => void;
   beginTransport: (targetMs: number) => void;
   beginTrackLoad: (targetMs: number, autoplay: boolean) => void;
   endTrackLoad: (result: PlaybackState) => void;
@@ -207,8 +210,9 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   deliveryProgress: null,
   libraryFolder: null,
   activeProject: null,
-  audioCacheProgress: { done: 0, total: 0, finished: true },
   libraryScanProgress: { done: 0, total: 0, finished: true },
+  projectLoadProgress: null,
+  projectLoadChecked: false,
   transportBusy: false,
   transportMode: "idle",
   lockedPositionMs: null,
@@ -251,8 +255,16 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   setDeliveryProgress: (deliveryProgress) => set({ deliveryProgress }),
   setLibraryFolder: (libraryFolder) => set({ libraryFolder }),
   setActiveProject: (activeProject) => set({ activeProject }),
-  setAudioCacheProgress: (audioCacheProgress) => set({ audioCacheProgress }),
   setLibraryScanProgress: (libraryScanProgress) => set({ libraryScanProgress }),
+  setProjectLoadProgress: (projectLoadProgress) =>
+    set({ projectLoadProgress, projectLoadChecked: true }),
+  markProjectLoadChecked: (progress) =>
+    set((state) => {
+      if (state.projectLoadProgress && !state.projectLoadProgress.finished) {
+        return { projectLoadChecked: true };
+      }
+      return { projectLoadChecked: true, projectLoadProgress: progress };
+    }),
   beginTransport: (targetMs) =>
     set((state) => ({
       transportBusy: true,

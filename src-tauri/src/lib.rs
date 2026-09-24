@@ -1,4 +1,5 @@
 pub mod anonymize;
+pub mod demo_dataset;
 mod app_settings;
 mod application;
 mod audio_cache;
@@ -30,6 +31,7 @@ mod replace_upload_log;
 mod replace_remote_upload;
 mod phone_upload_settings;
 mod phone_upload_probe;
+mod project_load;
 mod upload_relay;
 mod waveform;
 
@@ -38,7 +40,7 @@ use commands::{
     close_library, create_collection, create_playlist, create_taglist, delete_collection,
     delete_collection_track, delete_playlist, delete_taglist, delete_track, export_collection,
     get_app_settings, get_application_settings, get_collection_playback_state, get_collection_tracks,
-    apply_staged_delivery, create_project, delete_project, export_project, get_active_project,
+    apply_staged_delivery, create_project, delete_project, export_project,     get_active_project, get_project_load_progress,
     get_library_folder, import_project_archive,
     list_projects, open_project, preview_delivery_with_mode,
     browse_delivery_folder, get_last_delivery_folder,
@@ -74,6 +76,9 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             let (state, restore_project_id) = init_state(app.handle())?;
+            if let Some(project_id) = restore_project_id.as_deref() {
+                commands::note_startup_project_load(&state, project_id);
+            }
             app.manage(state);
             if let Some(project_id) = restore_project_id {
                 restore_active_project_in_background(app.handle().clone(), project_id);
@@ -87,6 +92,7 @@ pub fn run() {
             set_library_folder,
             list_projects,
             get_active_project,
+            get_project_load_progress,
             create_project,
             open_project,
             update_project_application,

@@ -82,6 +82,21 @@ export interface AudioCacheProgress {
   finished: boolean;
 }
 
+export type ProjectLoadPhase =
+  | "opening"
+  | "scanning"
+  | "loading_config"
+  | "applying_setup";
+
+export interface ProjectLoadProgress {
+  phase: ProjectLoadPhase;
+  project_name: string;
+  done: number;
+  total: number;
+  finished: boolean;
+  current?: string;
+}
+
 export type DeliveryProgressPhase =
   | "scanning"
   | "staging"
@@ -533,6 +548,8 @@ export const api = {
     invoke<ThemeSettings>("set_app_settings", { settings }),
   listProjects: () => invoke<ProjectSummary[]>("list_projects"),
   getActiveProject: () => invoke<ProjectSummary | null>("get_active_project"),
+  getProjectLoadProgress: () =>
+    invoke<ProjectLoadProgress | null>("get_project_load_progress"),
   createProject: (name: string, applicationId: string) =>
     invoke<ProjectSummary>("create_project", { name, applicationId }),
   openProject: (projectId: string) => invoke<void>("open_project", { projectId }),

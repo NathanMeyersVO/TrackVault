@@ -7,9 +7,8 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use crate::audio_cache::{cached_seek_index, peaks_from_cache, AudioCacheWorker};
 use crate::db::Database;
 use crate::models::{
-    Collection, PlaybackState, Playlist, ScanProgress, Taglist, TaglistSwapTarget, TaglistValue, Track,
-    UploadResult,
-    WaveformPeaks,
+    Collection, PlaybackState, Playlist, ProjectLoadPhase, ProjectLoadProgress, ScanProgress, Taglist,
+    TaglistSwapTarget, TaglistValue, Track, UploadResult, WaveformPeaks,
 };
 use crate::player::AudioPlayer;
 use crate::delivery::{
@@ -25,6 +24,7 @@ use crate::drop_staging::{
     new_drop_staging_cache, new_drop_staging_failures, DropStagingCache, DropStagingFailures,
 };
 use crate::replace_remote_upload::ReplaceRemoteUploadManager;
+use crate::project_load::{self, ProjectLoadFinishGuard, ProjectLoadProgressCtx};
 use crate::scanner;
 
 pub struct AppState {
@@ -36,6 +36,7 @@ pub struct AppState {
     pub delivery_sessions: DeliverySessionStore,
     pub drop_staging_cache: DropStagingCache,
     pub drop_staging_failures: DropStagingFailures,
+    pub project_load: Arc<Mutex<Option<ProjectLoadProgress>>>,
 }
 
 fn try_autosave_project_config(state: &AppState) {
@@ -102,7 +103,7 @@ pub fn set_library_folder(
         Err(e) => {
             let _progress = {
                 let db = state.db.lock();
-                scanner::scan_library_folder(&db, &app, None)?
+                scanner::scan_library_folder(&db, &app, None, None)?
             };
             let _ = app.emit("library-updated", ());
             state.audio_cache.kick();
@@ -114,7 +115,7 @@ pub fn set_library_folder(
 
     let progress = {
         let db = state.db.lock();
-        scanner::scan_library_folder(&db, &app, None)?
+        scanner::scan_library_folder(&db, &app, None, None)?
     };
 
     if let Some(config) = pending_config {
@@ -1817,7 +1818,7 @@ pub fn apply_staged_delivery(
 
     {
         let db = state.db.lock();
-        scanner::scan_library_folder(&db, &app, Some(&progress))?;
+        scanner::scan_library_folder(&db, &app, Some(&progress), None)?;
     }
 
     state.delivery_sessions.remove(&staging_session_id);
@@ -1830,10 +1831,23 @@ pub fn apply_staged_delivery(
 
 fn open_project_internal(app: &AppHandle, state: &AppState, project_id: &str) -> Result<(), String> {
     let project_root = projects::project_dir(&state.app_data_dir, project_id);
+    let initial_name = projects::load_manifest(&project_root)
+        .map(|manifest| manifest.name)
+        .unwrap_or_else(|_| "Project".to_string());
+    let ctx = ProjectLoadProgressCtx::new(
+        app.clone(),
+        Arc::clone(&state.project_load),
+        initial_name,
+    );
+    let _finish = ProjectLoadFinishGuard::new(&ctx);
+
     if !project_root.is_dir() {
         return Err("Project not found".to_string());
     }
     let manifest = projects::load_manifest(&project_root)?;
+    ctx.set_project_name(&manifest.name);
+    ctx.emit(ProjectLoadPhase::Opening, 0, 0, false, None);
+
     let library_root = projects::library_dir(&project_root);
     std::fs::create_dir_all(&library_root).map_err(|e| e.to_string())?;
     let library_str = library_root.to_string_lossy().to_string();
@@ -1850,15 +1864,31 @@ fn open_project_internal(app: &AppHandle, state: &AppState, project_id: &str) ->
         projects::set_active_project_id(&db, project_id)?;
     }
 
-    scanner::scan_library_folder(&state.db.lock(), app, None)?;
+    scanner::scan_library_folder(&state.db.lock(), app, None, Some(&ctx))?;
 
+    ctx.emit(ProjectLoadPhase::LoadingConfig, 0, 0, false, None);
     {
         let db = state.db.lock();
         let _ = load_trackvault_json_if_present(&db, &library_root);
     }
 
+    ctx.emit(ProjectLoadPhase::ApplyingSetup, 0, 0, false, None);
     reapply_project_application(app, state, &project_root, &manifest)?;
     Ok(())
+}
+
+pub fn note_startup_project_load(state: &AppState, project_id: &str) {
+    let name = projects::load_manifest(&projects::project_dir(&state.app_data_dir, project_id))
+        .map(|manifest| manifest.name)
+        .unwrap_or_else(|_| "Project".to_string());
+    project_load::note_opening(&state.project_load, &name);
+}
+
+#[tauri::command]
+pub fn get_project_load_progress(
+    state: State<'_, AppState>,
+) -> Result<Option<ProjectLoadProgress>, String> {
+    Ok(state.project_load.lock().clone())
 }
 
 pub fn init_state(app: &AppHandle) -> Result<(AppState, Option<String>), String> {
@@ -1884,6 +1914,7 @@ pub fn init_state(app: &AppHandle) -> Result<(AppState, Option<String>), String>
         delivery_sessions,
         drop_staging_cache: new_drop_staging_cache(),
         drop_staging_failures: new_drop_staging_failures(),
+        project_load: Arc::new(Mutex::new(None)),
     };
 
     Ok((state, restore_project_id))
