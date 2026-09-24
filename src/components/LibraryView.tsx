@@ -6,6 +6,7 @@ import { useLibrary, usePlayer } from "../hooks/usePlayer";
 import { useDeleteTrack } from "../hooks/useDeleteTrack";
 import { useReplaceLibraryTrackFile } from "../hooks/useReplaceLibraryTrackFile";
 import { useProjectLibrarySearch } from "../hooks/useProjectLibrarySearch";
+import { formatProjectLibrarySearchSubtitle } from "../lib/projectLibrarySearchCopy";
 import { usePlayerStore } from "../store/playerStore";
 import { playerController } from "../playerController";
 import { TagEditorModal } from "./TagEditorModal";
@@ -27,22 +28,20 @@ export function LibraryView() {
   const { requestDeleteTrack, confirmDialog: deleteConfirmDialog } = useDeleteTrack();
   const { requestReplaceFile, replaceFileModal } = useReplaceLibraryTrackFile();
   const [editingTrackId, setEditingTrackId] = useState<number | null>(null);
-  const { query, setQuery, filteredTracks, isSearching, hits, searchLoading, searchError, globalHitCount } =
-    useProjectLibrarySearch(tracks);
+  const { query, setQuery, isSearching, hits, searchLoading, searchError, globalHitCount } =
+    useProjectLibrarySearch();
 
   useEffect(() => {
-    const trackIds = filteredTracks.map((track) => track.id);
+    const trackIds = tracks.map((track) => track.id);
     setActiveTrackIds(trackIds);
     playerController.syncTracklistContext("library", trackIds);
-  }, [filteredTracks, setActiveTrackIds]);
+  }, [tracks, setActiveTrackIds]);
 
   const hasOpenProject = activeProject != null || libraryFolder != null;
 
-  const libraryEmptyMessage = isSearching
-    ? "No tracks match your search."
-    : !hasOpenProject
-      ? "Open or create a project: Library → Projects…"
-      : getDeliveryCopy(activeProject?.application_id).libraryEmptyWithProject;
+  const libraryEmptyMessage = !hasOpenProject
+    ? "Open or create a project: Library → Projects…"
+    : getDeliveryCopy(activeProject?.application_id).libraryEmptyWithProject;
 
   const handleAddToPlaylist = useCallback(
     async (trackId: number, playlistId: number) => {
@@ -58,7 +57,7 @@ export function LibraryView() {
         <h2 className="text-base font-semibold text-white">Project library</h2>
         <p className="text-xs text-muted">
           {isSearching
-            ? `${filteredTracks.length} in view · ${globalHitCount} project-wide`
+            ? formatProjectLibrarySearchSubtitle(searchLoading, globalHitCount)
             : `${tracks.length} track${tracks.length === 1 ? "" : "s"}`}
         </p>
       </div>
@@ -74,7 +73,7 @@ export function LibraryView() {
       </div>
       <div className="min-h-0 flex-1">
         <TrackTable
-          tracks={filteredTracks}
+          tracks={tracks}
           playingTrackId={playback.track_id}
           cursorTrackId={cursorTrackId}
           onCursorChange={selectTrack}

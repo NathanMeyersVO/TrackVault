@@ -6,6 +6,7 @@ import { formatTaglistLabel, getTaglistValueSingularLabel } from "../lib/taglist
 import { usePlayer } from "../hooks/usePlayer";
 import { useDeleteTrack } from "../hooks/useDeleteTrack";
 import { useReplaceLibraryTrackFile } from "../hooks/useReplaceLibraryTrackFile";
+import { formatProjectLibrarySearchSubtitle } from "../lib/projectLibrarySearchCopy";
 import { useProjectLibrarySearch } from "../hooks/useProjectLibrarySearch";
 import { scrollToTrackRowWithRetry } from "../hooks/useProjectLibrarySearchNavigation";
 import { usePlayerStore, serializeView } from "../store/playerStore";
@@ -48,13 +49,12 @@ export function TaglistView({ taglistId, value }: TaglistViewProps) {
   const {
     query,
     setQuery,
-    filteredTracks,
     isSearching,
     hits,
     searchLoading,
     searchError,
     globalHitCount,
-  } = useProjectLibrarySearch(tracks);
+  } = useProjectLibrarySearch();
 
   const taglist = taglists.find((entry) => entry.id === taglistId);
   const changeTaglistValueLabel = taglist
@@ -144,8 +144,7 @@ export function TaglistView({ taglistId, value }: TaglistViewProps) {
     if (!tracksLoaded) return;
 
     const partitionTrackIds = tracks.map((track) => track.id);
-    const visibleTrackIds = filteredTracks.map((track) => track.id);
-    setActiveTrackIds(visibleTrackIds);
+    setActiveTrackIds(partitionTrackIds);
 
     const viewKey = serializeView({ taglistId, value });
     const focus = pendingPartitionFocus;
@@ -155,7 +154,7 @@ export function TaglistView({ taglistId, value }: TaglistViewProps) {
       focus.value === value &&
       partitionTrackIds.includes(focus.trackId)
     ) {
-      playerController.syncTracklistContext(viewKey, visibleTrackIds, {
+      playerController.syncTracklistContext(viewKey, partitionTrackIds, {
         trackId: focus.trackId,
         startMs: 0,
       });
@@ -165,9 +164,8 @@ export function TaglistView({ taglistId, value }: TaglistViewProps) {
       return;
     }
 
-    playerController.syncTracklistContext(viewKey, visibleTrackIds);
+    playerController.syncTracklistContext(viewKey, partitionTrackIds);
   }, [
-    filteredTracks,
     pendingPartitionFocus,
     setActiveTrackIds,
     setPendingPartitionFocus,
@@ -237,7 +235,7 @@ export function TaglistView({ taglistId, value }: TaglistViewProps) {
               } · `
             : ""}
           {isSearching
-            ? `${filteredTracks.length} in view · ${globalHitCount} project-wide`
+            ? formatProjectLibrarySearchSubtitle(searchLoading, globalHitCount)
             : `${tracks.length} track${tracks.length === 1 ? "" : "s"}`}
         </p>
       </div>
@@ -253,7 +251,7 @@ export function TaglistView({ taglistId, value }: TaglistViewProps) {
       </div>
       <div className="min-h-0 flex-1">
         <TrackTable
-          tracks={filteredTracks}
+          tracks={tracks}
           playingTrackId={playback.track_id}
           cursorTrackId={cursorTrackId}
           onCursorChange={selectTrack}
@@ -267,11 +265,9 @@ export function TaglistView({ taglistId, value }: TaglistViewProps) {
           onReplaceFile={requestReplaceFile}
           onReorderTracks={isSearching ? undefined : reorderTracks}
           emptyMessage={
-            isSearching
-              ? "No tracks match your search."
-              : value == null
-                ? "No tracks without this tag."
-                : "No tracks with this tag."
+            value == null
+              ? "No tracks without this tag."
+              : "No tracks with this tag."
           }
           footerRow={
             hasNextSublist && footerLabel

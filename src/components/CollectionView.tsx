@@ -6,6 +6,7 @@ import { api, type CollectionPlaybackMode, type Track } from "../lib/tauri";
 import { useDeleteCollectionTrack } from "../hooks/useDeleteCollectionTrack";
 import { useLibrary, usePlayer } from "../hooks/usePlayer";
 import { playerController } from "../playerController";
+import { formatProjectLibrarySearchSubtitle } from "../lib/projectLibrarySearchCopy";
 import { useProjectLibrarySearch } from "../hooks/useProjectLibrarySearch";
 import { usePlayerStore, serializeView } from "../store/playerStore";
 import { TagEditorModal } from "./TagEditorModal";
@@ -33,13 +34,12 @@ export function CollectionView({ collectionId }: CollectionViewProps) {
   const {
     query,
     setQuery,
-    filteredTracks,
     isSearching,
     hits,
     searchLoading,
     searchError,
     globalHitCount,
-  } = useProjectLibrarySearch(tracks);
+  } = useProjectLibrarySearch();
 
   const collection = collections.find((entry) => entry.id === collectionId);
   const playbackMode = collection?.playback_mode ?? "discrete";
@@ -78,7 +78,7 @@ export function CollectionView({ collectionId }: CollectionViewProps) {
   );
 
   useEffect(() => {
-    const trackIds = filteredTracks.map((track) => track.id);
+    const trackIds = tracks.map((track) => track.id);
     setActiveTrackIds(trackIds);
     const viewKey = serializeView({ collectionId });
     if (playbackMode === "continuous" && trackIds.length > 0) {
@@ -90,7 +90,7 @@ export function CollectionView({ collectionId }: CollectionViewProps) {
     } else {
       playerController.syncTracklistContext(viewKey, trackIds);
     }
-  }, [collectionId, filteredTracks, playbackMode, setActiveTrackIds]);
+  }, [collectionId, tracks, playbackMode, setActiveTrackIds]);
 
   const refreshTracks = useCallback(() => {
     api.getCollectionTracks(collectionId).then(setTracks).catch(console.error);
@@ -151,7 +151,7 @@ export function CollectionView({ collectionId }: CollectionViewProps) {
             </h2>
             <p className="text-xs text-muted">
               {isSearching
-                ? `${filteredTracks.length} in view · ${globalHitCount} project-wide`
+                ? formatProjectLibrarySearchSubtitle(searchLoading, globalHitCount)
                 : `${tracks.length} track${tracks.length === 1 ? "" : "s"}`}
             </p>
           </div>
@@ -215,7 +215,7 @@ export function CollectionView({ collectionId }: CollectionViewProps) {
       </div>
       <div className="min-h-0 flex-1">
         <TrackTable
-          tracks={filteredTracks}
+          tracks={tracks}
           playingTrackId={playback.track_id}
           cursorTrackId={cursorTrackId}
           onCursorChange={selectTrack}
@@ -224,11 +224,7 @@ export function CollectionView({ collectionId }: CollectionViewProps) {
           onDeleteTrack={requestDeleteTrack}
           onReorderTracks={isSearching ? undefined : reorderTracks}
           draggable={false}
-          emptyMessage={
-            isSearching
-              ? "No tracks match your search."
-              : "No tracks in this stored collection yet. Use Stored Collections → Upload to stored collection… to add audio files."
-          }
+          emptyMessage="No tracks in this stored collection yet. Use Stored Collections → Upload to stored collection… to add audio files."
         />
       </div>
       {deleteConfirmDialog}

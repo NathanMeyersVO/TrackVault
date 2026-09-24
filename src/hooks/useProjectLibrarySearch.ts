@@ -1,12 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
-import { filterTracksByProjectLibraryQuery } from "../lib/trackSearch";
-import { api, type ProjectLibrarySearchHit, type Track } from "../lib/tauri";
+import { api, type ProjectLibrarySearchHit } from "../lib/tauri";
 import { usePlayerStore } from "../store/playerStore";
 
 const SEARCH_DEBOUNCE_MS = 200;
 
-export function useProjectLibrarySearch(tracks: Track[]) {
+export function useProjectLibrarySearch() {
   const query = usePlayerStore((state) => state.projectLibrarySearchQuery);
   const setQuery = usePlayerStore((state) => state.setProjectLibrarySearchQuery);
   const [hits, setHits] = useState<ProjectLibrarySearchHit[]>([]);
@@ -51,21 +50,10 @@ export function useProjectLibrarySearch(tracks: Track[]) {
     };
   }, [trimmedQuery]);
 
-  const matchingTrackIds = useMemo(
-    () => new Set(hits.map((hit) => hit.track_id)),
-    [hits],
-  );
-
-  const filteredTracks = useMemo(
-    () => filterTracksByProjectLibraryQuery(tracks, query, matchingTrackIds),
-    [tracks, query, matchingTrackIds],
-  );
-
   return {
     query,
     setQuery,
     hits,
-    filteredTracks,
     isSearching,
     searchLoading,
     searchError,
