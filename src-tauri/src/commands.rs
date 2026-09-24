@@ -20,6 +20,7 @@ use crate::delivery::{
 };
 use crate::projects::{self, ProjectManifest, ProjectSummary};
 use crate::project_config::{autosave_trackvault_json, load_trackvault_json_if_present};
+use crate::drop_staging::{DropStagingCache, new_drop_staging_cache};
 use crate::replace_remote_upload::ReplaceRemoteUploadManager;
 use crate::scanner;
 
@@ -30,6 +31,7 @@ pub struct AppState {
     pub audio_cache: AudioCacheWorker,
     pub replace_remote_upload: ReplaceRemoteUploadManager,
     pub delivery_sessions: DeliverySessionStore,
+    pub drop_staging_cache: DropStagingCache,
 }
 
 fn try_autosave_project_config(state: &AppState) {
@@ -190,6 +192,47 @@ pub fn check_upload_conflicts(
 }
 
 #[tauri::command]
+pub fn stage_drop_source_path(
+    state: State<'_, AppState>,
+    source_path: String,
+    force: Option<bool>,
+) -> Result<String, String> {
+    let force = force.unwrap_or(false);
+    let staged = crate::drop_staging::resolve_staged_path(
+        &state.app_data_dir,
+        &state.drop_staging_cache,
+        Path::new(&source_path),
+        force,
+    )?;
+    Ok(staged.to_string_lossy().into_owned())
+}
+
+#[tauri::command]
+pub fn stage_drop_source_paths(
+    state: State<'_, AppState>,
+    source_paths: Vec<String>,
+    force: Option<bool>,
+) -> Result<Vec<String>, String> {
+    let force = force.unwrap_or(false);
+    let paths: Vec<PathBuf> = source_paths.into_iter().map(PathBuf::from).collect();
+    let staged = crate::drop_staging::resolve_paths(
+        &state.app_data_dir,
+        &state.drop_staging_cache,
+        &paths,
+        force,
+    )?;
+    Ok(staged
+        .into_iter()
+        .map(|p| p.to_string_lossy().into_owned())
+        .collect())
+}
+
+#[tauri::command]
+pub fn cleanup_drop_staging(state: State<'_, AppState>) -> Result<(), String> {
+    crate::drop_staging::cleanup_drop_staging(&state.app_data_dir, &state.drop_staging_cache)
+}
+
+#[tauri::command]
 pub fn upload_tracks(
     app: AppHandle,
     state: State<'_, AppState>,
@@ -197,6 +240,12 @@ pub fn upload_tracks(
     overwrite: Option<bool>,
 ) -> Result<UploadResult, String> {
     let paths: Vec<PathBuf> = source_paths.into_iter().map(PathBuf::from).collect();
+    let paths = crate::drop_staging::resolve_paths(
+        &state.app_data_dir,
+        &state.drop_staging_cache,
+        &paths,
+        false,
+    )?;
     let overwrite = overwrite.unwrap_or(false);
     let result = {
         let db = state.db.lock();
@@ -1209,6 +1258,12 @@ pub fn upload_collection_tracks(
     overwrite: Option<bool>,
 ) -> Result<UploadResult, String> {
     let paths: Vec<PathBuf> = source_paths.into_iter().map(PathBuf::from).collect();
+    let paths = crate::drop_staging::resolve_paths(
+        &state.app_data_dir,
+        &state.drop_staging_cache,
+        &paths,
+        false,
+    )?;
     let overwrite = overwrite.unwrap_or(false);
     let result = {
         let db = state.db.lock();
@@ -1876,6 +1931,7 @@ pub fn init_state(app: &AppHandle) -> Result<(AppState, Option<String>), String>
         audio_cache,
         replace_remote_upload: ReplaceRemoteUploadManager::new(),
         delivery_sessions,
+        drop_staging_cache: new_drop_staging_cache(),
     };
 
     Ok((state, restore_project_id))

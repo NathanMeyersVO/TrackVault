@@ -267,6 +267,11 @@ export const api = {
     invoke<UploadResult>("upload_tracks", { sourcePaths, overwrite }),
   checkUploadConflicts: (sourcePaths: string[]) =>
     invoke<string[]>("check_upload_conflicts", { sourcePaths }),
+  stageDropSourcePath: (sourcePath: string, force = false) =>
+    invoke<string>("stage_drop_source_path", { sourcePath, force }),
+  stageDropSourcePaths: (sourcePaths: string[], force = false) =>
+    invoke<string[]>("stage_drop_source_paths", { sourcePaths, force }),
+  cleanupDropStaging: () => invoke<void>("cleanup_drop_staging"),
   previewReplaceLibraryTrackFile: (trackId: number, sourcePath: string) =>
     invoke<ReplaceTrackFilePreview>("preview_replace_library_track_file", {
       trackId,

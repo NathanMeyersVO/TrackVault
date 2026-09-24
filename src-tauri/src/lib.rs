@@ -8,6 +8,7 @@ mod commands;
 mod config;
 mod db;
 mod delivery;
+mod drop_staging;
 mod file_hash;
 mod project_archive;
 mod project_config;
@@ -53,6 +54,7 @@ use commands::{
     set_app_settings, set_application_settings, set_collection_continuous_volume, set_collection_playback_mode,
     set_library_folder, set_taglist_value_title, set_volume, stop_playback, update_track_tags, upload_collection_tracks, upload_tracks,
     preview_replace_library_track_file, replace_library_track_file,
+    stage_drop_source_path, stage_drop_source_paths, cleanup_drop_staging,
     start_replace_remote_upload, start_library_remote_upload, start_collection_remote_upload,
     stop_replace_remote_upload, get_replace_remote_upload_status,
     get_replace_remote_upload_log_path, get_replace_remote_upload_logs_dir,
@@ -60,7 +62,9 @@ use commands::{
     probe_phone_upload_local_port,
     probe_phone_upload_path,
 };
-use tauri::Manager;
+use commands::AppState;
+use tauri::{Manager, RunEvent, WebviewEvent};
+use tauri::DragDropEvent;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -101,6 +105,9 @@ pub fn run() {
             check_upload_conflicts,
             preview_replace_library_track_file,
             replace_library_track_file,
+            stage_drop_source_path,
+            stage_drop_source_paths,
+            cleanup_drop_staging,
             start_replace_remote_upload,
             start_library_remote_upload,
             start_collection_remote_upload,
@@ -166,6 +173,18 @@ pub fn run() {
             get_application_settings,
             set_application_settings,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app_handle, event| {
+            if let RunEvent::WebviewEvent { event, .. } = event {
+                if let WebviewEvent::DragDrop(DragDropEvent::Drop { paths, .. }) = event {
+                    let state = app_handle.state::<AppState>();
+                    crate::drop_staging::stage_drop_on_drag(
+                        &state.app_data_dir,
+                        &state.drop_staging_cache,
+                        &paths,
+                    );
+                }
+            }
+        });
 }

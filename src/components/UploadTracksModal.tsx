@@ -54,6 +54,7 @@ export function UploadTracksModal({
   const handleClose = useCallback(() => {
     if (busy) return;
     void api.stopReplaceRemoteUpload();
+    void api.cleanupDropStaging();
     onClose();
   }, [busy, onClose]);
 
@@ -66,9 +67,12 @@ export function UploadTracksModal({
   }, [busy, handleClose]);
 
   const runLocalPaths = useCallback(
-    async (paths: string[]) => {
+    async (paths: string[], fromDragDrop: boolean) => {
       setLocalError(null);
-      const ok = await onUploadFromPaths(paths);
+      const staged = fromDragDrop
+        ? await api.stageDropSourcePaths(paths, true)
+        : paths;
+      const ok = await onUploadFromPaths(staged);
       if (ok) {
         void api.stopReplaceRemoteUpload();
         onClose();
@@ -86,7 +90,7 @@ export function UploadTracksModal({
     });
     if (selected == null) return;
     const sourcePaths = Array.isArray(selected) ? selected : [selected];
-    await runLocalPaths(sourcePaths);
+    await runLocalPaths(sourcePaths, false);
   }, [busy, enabled, runLocalPaths]);
 
   const handlePhoneUploaded = useCallback(
@@ -144,7 +148,7 @@ export function UploadTracksModal({
               label="Drop audio files here"
               enabled={enabled && !busy}
               multiple
-              onAudioPathsDropped={(paths) => void runLocalPaths(paths)}
+              onAudioPathsDropped={(paths) => void runLocalPaths(paths, true)}
               onRejected={() =>
                 setLocalError("Drop audio files only (mp3, flac, wav, and similar formats).")
               }

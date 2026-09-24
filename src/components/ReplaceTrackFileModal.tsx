@@ -52,6 +52,7 @@ export function ReplaceTrackFileModal({ track, onClose }: ReplaceTrackFileModalP
 
   const handleClose = useCallback(() => {
     void api.stopReplaceRemoteUpload();
+    void api.cleanupDropStaging();
     onClose();
   }, [onClose]);
 
@@ -81,12 +82,14 @@ export function ReplaceTrackFileModal({ track, onClose }: ReplaceTrackFileModalP
   }, [committing, handleClose]);
 
   const applySourcePath = useCallback(
-    async (selected: string) => {
+    async (selected: string, fromDragDrop: boolean) => {
       setError(null);
       setLoading(true);
-      setSourcePath(selected);
+      setSourcePath(null);
       try {
-        const result = await api.previewReplaceLibraryTrackFile(track.id, selected);
+        const staged = await api.stageDropSourcePath(selected, fromDragDrop);
+        setSourcePath(staged);
+        const result = await api.previewReplaceLibraryTrackFile(track.id, staged);
         setPreview(result);
       } catch (err) {
         setSourcePath(null);
@@ -105,7 +108,7 @@ export function ReplaceTrackFileModal({ track, onClose }: ReplaceTrackFileModalP
       "replace-remote-upload-ready",
       (event) => {
         if (cancelled || event.payload.trackId !== track.id) return;
-        void applySourcePath(event.payload.sourcePath);
+        void applySourcePath(event.payload.sourcePath, true);
       },
     );
     return () => {
@@ -123,7 +126,7 @@ export function ReplaceTrackFileModal({ track, onClose }: ReplaceTrackFileModalP
     });
     if (selected == null || Array.isArray(selected)) return;
 
-    await applySourcePath(selected);
+    await applySourcePath(selected, false);
   }, [applySourcePath]);
 
   const handleConfirm = useCallback(async () => {
@@ -202,7 +205,7 @@ export function ReplaceTrackFileModal({ track, onClose }: ReplaceTrackFileModalP
                   multiple={false}
                   onAudioPathsDropped={(paths) => {
                     setDropError(null);
-                    void applySourcePath(paths[0]);
+                    void applySourcePath(paths[0], true);
                   }}
                   onRejected={() =>
                     setDropError(
