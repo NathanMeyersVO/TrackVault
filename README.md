@@ -60,6 +60,29 @@ npm run tauri build
 
 If line endings look wrong locally after cloning, run `git add --renormalize .` once (see [`.gitattributes`](.gitattributes)).
 
+### Windows installers (GitHub Releases)
+
+Pre-built Windows installers are published as [GitHub Release](https://docs.github.com/en/repositories/releasing-projects-on-github/about-releases) assets (after the repo is on GitHub):
+
+1. Open **Releases** on `https://github.com/OWNER/REPO/releases` and download the latest installer (`.msi` and/or `.exe` setup, depending on what the build produced).
+2. Unsigned builds may trigger a SmartScreen warning until the app is code-signed.
+
+**Maintainers — ship a new version**
+
+1. Bump the same version in `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`, and `package.json`.
+2. Commit on `main` and push.
+3. Tag and push the tag (this triggers [`.github/workflows/release.yml`](.github/workflows/release.yml)):
+
+   ```powershell
+   git tag v0.9.0
+   git push github v0.9.0
+   ```
+
+4. In GitHub **Actions**, wait for the **Release** workflow to finish.
+5. Open the new **draft** release under **Releases**, verify the Windows assets, then **Publish release**.
+
+Use tag names like `v0.9.0` that match the app version `0.9.0`.
+
 ## Usage
 
 1. Open **Library → Projects…** and create a project (name + application), or **Import EMS download…** from a folder of EMS downloads (ZIP archives and/or event schedule spreadsheet).
