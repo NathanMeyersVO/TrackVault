@@ -496,7 +496,7 @@ export function UploadTracksPhoneSection({
 
         <p className="text-xs text-muted">
 
-          Send audio from your phone (any network). Files are added to{" "}
+          Send tracks from your phone. Files are added to{" "}
 
           {mode === "library" ? "your library" : "this collection"} automatically after upload.
 

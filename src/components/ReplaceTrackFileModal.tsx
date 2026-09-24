@@ -183,7 +183,7 @@ export function ReplaceTrackFileModal({ track, onClose }: ReplaceTrackFileModalP
                 </p>
                 <p>
                   TrackVault will verify the file, then show a confirmation step before the
-                  library copy is updated. Your original file on disk is not moved or deleted.
+                  library copy is updated.
                 </p>
               </div>
 

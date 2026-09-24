@@ -182,6 +182,7 @@ pub fn run() {
                     crate::drop_staging::stage_drop_on_drag(
                         &state.app_data_dir,
                         &state.drop_staging_cache,
+                        &state.drop_staging_failures,
                         &paths,
                     );
                 }

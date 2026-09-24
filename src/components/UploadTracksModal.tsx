@@ -69,13 +69,17 @@ export function UploadTracksModal({
   const runLocalPaths = useCallback(
     async (paths: string[], fromDragDrop: boolean) => {
       setLocalError(null);
-      const staged = fromDragDrop
-        ? await api.stageDropSourcePaths(paths, true)
-        : paths;
-      const ok = await onUploadFromPaths(staged);
-      if (ok) {
-        void api.stopReplaceRemoteUpload();
-        onClose();
+      try {
+        const staged = fromDragDrop
+          ? await api.stageDropSourcePaths(paths, true)
+          : paths;
+        const ok = await onUploadFromPaths(staged);
+        if (ok) {
+          void api.stopReplaceRemoteUpload();
+          onClose();
+        }
+      } catch (err) {
+        setLocalError(String(err));
       }
     },
     [onClose, onUploadFromPaths],

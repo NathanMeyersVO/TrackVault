@@ -10,9 +10,55 @@ use crate::scanner::is_audio_file;
 const DROP_STAGING_DIR: &str = "drop-staging";
 
 pub type DropStagingCache = Arc<Mutex<HashMap<String, String>>>;
+pub type DropStagingFailures = Arc<Mutex<Vec<String>>>;
 
 pub fn new_drop_staging_cache() -> DropStagingCache {
     Arc::new(Mutex::new(HashMap::new()))
+}
+
+pub fn new_drop_staging_failures() -> DropStagingFailures {
+    Arc::new(Mutex::new(Vec::new()))
+}
+
+pub fn record_drop_staging_failure(failures: &DropStagingFailures, message: String) {
+    failures.lock().push(message);
+}
+
+pub fn take_drop_staging_failures(failures: &DropStagingFailures) -> Vec<String> {
+    std::mem::take(&mut *failures.lock())
+}
+
+fn is_under_drop_staging(app_data_dir: &Path, staged: &Path) -> bool {
+    let root = drop_staging_dir(app_data_dir);
+    staged.starts_with(&root)
+        || staged
+            .canonicalize()
+            .ok()
+            .zip(root.canonicalize().ok())
+            .is_some_and(|(s, r)| s.starts_with(&r))
+}
+
+fn ensure_usable_staged_file(staged: &Path) -> Result<(), String> {
+    let meta = fs::metadata(staged)
+        .map_err(|e| format!("Staged file is not readable ({}): {e}", staged.display()))?;
+    if !meta.is_file() {
+        return Err(format!("Staged path is not a file: {}", staged.display()));
+    }
+    if meta.len() == 0 {
+        return Err(format!("Staged file is empty: {}", staged.display()));
+    }
+    Ok(())
+}
+
+fn ensure_force_staged(app_data_dir: &Path, source: &Path, staged: &Path) -> Result<(), String> {
+    ensure_usable_staged_file(staged)?;
+    if is_under_drop_staging(app_data_dir, staged) {
+        return Ok(());
+    }
+    Err(format!(
+        "Could not keep a stable copy of {}. Save the attachment or drag from Desktop first.",
+        source.display()
+    ))
 }
 
 pub fn drop_staging_dir(app_data_dir: &Path) -> PathBuf {
@@ -128,10 +174,20 @@ pub fn resolve_staged_path(
 ) -> Result<PathBuf, String> {
     if let Some(staged) = cache_lookup(cache, source) {
         if staged.is_file() {
+            if force {
+                ensure_force_staged(app_data_dir, source, &staged)?;
+            } else {
+                ensure_usable_staged_file(&staged)?;
+            }
             return Ok(staged);
         }
     }
     let staged = stage_drop_source(app_data_dir, source, force)?;
+    if force {
+        ensure_force_staged(app_data_dir, source, &staged)?;
+    } else if staged != source {
+        ensure_usable_staged_file(&staged)?;
+    }
     if staged != source {
         cache_insert(cache, source, &staged);
     }
@@ -154,6 +210,7 @@ pub fn resolve_paths(
 pub fn stage_drop_on_drag(
     app_data_dir: &Path,
     cache: &DropStagingCache,
+    failures: &DropStagingFailures,
     paths: &[PathBuf],
 ) {
     for source in paths {
@@ -161,14 +218,39 @@ pub fn stage_drop_on_drag(
             continue;
         }
         match copy_to_staging(app_data_dir, source) {
-            Ok(staged) => cache_insert(cache, source, &staged),
-            Err(err) => eprintln!("drop staging on drag failed for {}: {err}", source.display()),
+            Ok(staged) => {
+                if let Err(err) = ensure_usable_staged_file(&staged) {
+                    record_drop_staging_failure(
+                        failures,
+                        format!("{}: {err}", source.display()),
+                    );
+                    let _ = fs::remove_file(&staged);
+                    continue;
+                }
+                cache_insert(cache, source, &staged);
+            }
+            Err(err) => {
+                record_drop_staging_failure(failures, format!("{}: {err}", source.display()));
+            }
         }
     }
 }
 
-pub fn cleanup_drop_staging(app_data_dir: &Path, cache: &DropStagingCache) -> Result<(), String> {
+pub fn enrich_staging_error(failures: &DropStagingFailures, err: String) -> String {
+    let notes = take_drop_staging_failures(failures);
+    if notes.is_empty() {
+        return err;
+    }
+    format!("{err}\n{}", notes.join("\n"))
+}
+
+pub fn cleanup_drop_staging(
+    app_data_dir: &Path,
+    cache: &DropStagingCache,
+    failures: &DropStagingFailures,
+) -> Result<(), String> {
     cache.lock().clear();
+    failures.lock().clear();
     let dir = drop_staging_dir(app_data_dir);
     if !dir.exists() {
         return Ok(());

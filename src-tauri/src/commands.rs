@@ -20,7 +20,9 @@ use crate::delivery::{
 };
 use crate::projects::{self, ProjectManifest, ProjectSummary};
 use crate::project_config::{autosave_trackvault_json, load_trackvault_json_if_present};
-use crate::drop_staging::{DropStagingCache, new_drop_staging_cache};
+use crate::drop_staging::{
+    new_drop_staging_cache, new_drop_staging_failures, DropStagingCache, DropStagingFailures,
+};
 use crate::replace_remote_upload::ReplaceRemoteUploadManager;
 use crate::scanner;
 
@@ -32,6 +34,7 @@ pub struct AppState {
     pub replace_remote_upload: ReplaceRemoteUploadManager,
     pub delivery_sessions: DeliverySessionStore,
     pub drop_staging_cache: DropStagingCache,
+    pub drop_staging_failures: DropStagingFailures,
 }
 
 fn try_autosave_project_config(state: &AppState) {
@@ -198,12 +201,21 @@ pub fn stage_drop_source_path(
     force: Option<bool>,
 ) -> Result<String, String> {
     let force = force.unwrap_or(false);
-    let staged = crate::drop_staging::resolve_staged_path(
+    let staged = match crate::drop_staging::resolve_staged_path(
         &state.app_data_dir,
         &state.drop_staging_cache,
         Path::new(&source_path),
         force,
-    )?;
+    ) {
+        Ok(path) => path,
+        Err(err) => {
+            return Err(crate::drop_staging::enrich_staging_error(
+                &state.drop_staging_failures,
+                err,
+            ));
+        }
+    };
+    let _ = crate::drop_staging::take_drop_staging_failures(&state.drop_staging_failures);
     Ok(staged.to_string_lossy().into_owned())
 }
 
@@ -215,12 +227,21 @@ pub fn stage_drop_source_paths(
 ) -> Result<Vec<String>, String> {
     let force = force.unwrap_or(false);
     let paths: Vec<PathBuf> = source_paths.into_iter().map(PathBuf::from).collect();
-    let staged = crate::drop_staging::resolve_paths(
+    let staged = match crate::drop_staging::resolve_paths(
         &state.app_data_dir,
         &state.drop_staging_cache,
         &paths,
         force,
-    )?;
+    ) {
+        Ok(paths) => paths,
+        Err(err) => {
+            return Err(crate::drop_staging::enrich_staging_error(
+                &state.drop_staging_failures,
+                err,
+            ));
+        }
+    };
+    let _ = crate::drop_staging::take_drop_staging_failures(&state.drop_staging_failures);
     Ok(staged
         .into_iter()
         .map(|p| p.to_string_lossy().into_owned())
@@ -229,7 +250,11 @@ pub fn stage_drop_source_paths(
 
 #[tauri::command]
 pub fn cleanup_drop_staging(state: State<'_, AppState>) -> Result<(), String> {
-    crate::drop_staging::cleanup_drop_staging(&state.app_data_dir, &state.drop_staging_cache)
+    crate::drop_staging::cleanup_drop_staging(
+        &state.app_data_dir,
+        &state.drop_staging_cache,
+        &state.drop_staging_failures,
+    )
 }
 
 #[tauri::command]
@@ -1932,6 +1957,7 @@ pub fn init_state(app: &AppHandle) -> Result<(AppState, Option<String>), String>
         replace_remote_upload: ReplaceRemoteUploadManager::new(),
         delivery_sessions,
         drop_staging_cache: new_drop_staging_cache(),
+        drop_staging_failures: new_drop_staging_failures(),
     };
 
     Ok((state, restore_project_id))
