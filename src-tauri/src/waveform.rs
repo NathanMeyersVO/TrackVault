@@ -6,9 +6,6 @@ use symphonia::core::io::MediaSourceStream;
 use symphonia::core::meta::MetadataOptions;
 use symphonia::core::probe::Hint;
 
-use crate::audio_scan::scan_audio;
-use crate::models::WaveformPeaks;
-
 pub fn probe_duration_ms(path: &Path) -> Option<i64> {
     let file = File::open(path).ok()?;
     let mss = MediaSourceStream::new(Box::new(file), Default::default());
@@ -21,8 +18,4 @@ pub fn probe_duration_ms(path: &Path) -> Option<i64> {
     let n_frames = track.codec_params.n_frames?;
     let time = tb.calc_time(n_frames);
     Some((time.seconds as i64) * 1000 + (time.frac * 1000.0) as i64)
-}
-
-pub fn generate_peaks(path: &Path) -> Result<WaveformPeaks, String> {
-    Ok(scan_audio(path)?.peaks)
 }

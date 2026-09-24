@@ -39,7 +39,7 @@ export function UploadTracksModal({
 
   const title =
     mode === "library"
-      ? "Upload to library"
+      ? "Upload to project library"
       : collectionName
         ? `Upload to ${collectionName}`
         : "Upload to stored collection";
@@ -48,7 +48,7 @@ export function UploadTracksModal({
   const deliveryOptions = phoneUploadReady ? 3 : 2;
   const destinationHint =
     mode === "library"
-      ? "Files are copied into your library folder."
+      ? "Files are copied into your project library folder."
       : "Files are copied into this stored collection.";
 
   const handleClose = useCallback(() => {

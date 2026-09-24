@@ -274,7 +274,7 @@ fn install_replacement_file(
 
         fs::remove_file(dest_path)
 
-            .map_err(|e| format!("Failed to remove existing library file: {e}"))?;
+            .map_err(|e| format!("Failed to remove existing project library file: {e}"))?;
 
     }
 
@@ -330,7 +330,7 @@ fn resolve_target_path(
 
         .parent()
 
-        .ok_or_else(|| "Library track has no parent directory.".to_string())?;
+        .ok_or_else(|| "Project library track has no parent directory.".to_string())?;
 
     let file_name = source_path
 
@@ -454,7 +454,7 @@ fn path_collision_message(
 
             return Ok(Some(format!(
 
-                "The path \"{}\" is already used by another library track.",
+                "The path \"{}\" is already used by another project library track.",
 
                 target_str
 
@@ -476,7 +476,7 @@ fn resolve_library_dest_path(db: &Database, track_id: i64) -> Result<String, Str
 
     if !db.is_library_track(track_id).map_err(|e| e.to_string())? {
 
-        return Err("Only library tracks can be replaced".to_string());
+        return Err("Only project library tracks can be replaced".to_string());
 
     }
 
@@ -545,7 +545,7 @@ fn validate_source_for_replace(dest_path: &str, source_path: &Path) -> Result<()
 
     if paths_are_same_file(Path::new(dest_path), source_path)? {
 
-        return Err("Choose a different file than the library track itself.".to_string());
+        return Err("Choose a different file than the project library track itself.".to_string());
 
     }
 

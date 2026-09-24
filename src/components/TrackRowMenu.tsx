@@ -120,7 +120,7 @@ export function TrackRowMenu({
                 }}
                 className="flex w-full items-center justify-between px-3 py-1.5 text-left text-xs text-foreground hover:bg-surface-hover"
               >
-                <span>Add to library playlist</span>
+                <span>Add to project library playlist</span>
                 <span aria-hidden="true">›</span>
               </button>
               {submenuOpen && (
@@ -154,7 +154,7 @@ export function TrackRowMenu({
               }}
               className="block w-full px-3 py-1.5 text-left text-xs text-red-400 hover:bg-surface-hover"
             >
-              Remove from library playlist
+              Remove from project library playlist
             </button>
           )}
 

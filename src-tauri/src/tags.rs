@@ -193,7 +193,7 @@ fn verify_written_tags(path: &Path, expected: &HashMap<String, String>) -> Resul
     for (key, value) in expected {
         if !field_value_matches(value, actual.get(key).map(String::as_str)) {
             return Err(
-                "Tags were written but could not be verified. Try rescanning the library."
+                "Tags were written but could not be verified. Try rescanning the project library."
                     .to_string(),
             );
         }

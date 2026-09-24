@@ -174,7 +174,7 @@ pub fn export_config(db: &Database, library_root: &Path) -> Result<LibraryConfig
                 .map_err(|e| e.to_string())?
                 .ok_or_else(|| format!("Track {track_id} not found"))?;
             let rel = relative_path(&library_root, Path::new(&path))
-                .ok_or_else(|| format!("Track path not under library: {path}"))?;
+                .ok_or_else(|| format!("Track path not under project library: {path}"))?;
             track_order
                 .entry(tag_value)
                 .or_default()

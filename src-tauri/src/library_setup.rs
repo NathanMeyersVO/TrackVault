@@ -1,3 +1,5 @@
+//! Application-specific setup for a project's library directory (project library on disk).
+
 use std::path::Path;
 
 use crate::application::ApplicationId;

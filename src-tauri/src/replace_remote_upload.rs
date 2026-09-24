@@ -255,7 +255,7 @@ impl ReplaceRemoteUploadManager {
         track_id: i64,
     ) -> Result<ReplaceRemoteUploadStartInfo, String> {
         if !db.lock().is_library_track(track_id).map_err(|e| e.to_string())? {
-            return Err("Only library tracks can be replaced".to_string());
+            return Err("Only project library tracks can be replaced".to_string());
         }
         self.start_with_kind(
             app,
@@ -278,7 +278,7 @@ impl ReplaceRemoteUploadManager {
                 .map_err(|e| e.to_string())?
                 .is_none()
             {
-                return Err("No library folder configured".to_string());
+                return Err("No project library folder configured".to_string());
             }
         }
         self.start_with_kind(app, db, app_data_dir, SessionKind::LibraryImport)
@@ -841,7 +841,7 @@ async fn upload_page_inner(token: String, ctx: Arc<ServerContext>) -> Response {
                 }
             },
             None => render_replace_upload_page(&UploadPageContext::Replace {
-                title: "Library track".to_string(),
+                title: "Project library track".to_string(),
                 artist: String::new(),
                 album: String::new(),
                 file_name: String::new(),
@@ -1341,12 +1341,12 @@ fn resolve_upload_page_context(
             let folder_path = db
                 .get_library_folder()
                 .map_err(|e| e.to_string())?
-                .ok_or_else(|| "No library folder configured".to_string())?;
+                .ok_or_else(|| "No project library folder configured".to_string())?;
             let folder_label = Path::new(&folder_path)
                 .file_name()
                 .and_then(|name| name.to_str())
                 .filter(|label| !label.is_empty())
-                .unwrap_or("Library")
+                .unwrap_or("Project library")
                 .to_string();
             Ok(UploadPageContext::Library {
                 folder_label,
@@ -1403,7 +1403,7 @@ fn render_replace_upload_page(ctx: &UploadPageContext) -> String {
     } = ctx
     else {
         return render_replace_upload_page(&UploadPageContext::Replace {
-            title: "Library track".to_string(),
+            title: "Project library track".to_string(),
             artist: String::new(),
             album: String::new(),
             file_name: String::new(),

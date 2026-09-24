@@ -67,15 +67,15 @@ export function AppMenuBar() {
       disabled: libraryActionsDisabled || deliveryStaging,
     },
     {
-      label: libraryUploading ? "Uploading to library…" : "Upload to Library…",
+      label: libraryUploading ? "Uploading to project library…" : "Upload to project library…",
       title:
-        "Copy audio files into the library folder (choose files, drag and drop, or upload from phone).",
+        "Copy audio files into the project library folder (choose files, drag and drop, or upload from phone).",
       disabled: libraryUploadDisabled,
       onClick: () => openLibraryUpload(),
     },
     {
       label: exportingProject ? "Exporting project…" : "Export Project…",
-      title: "Save the open project (library audio, schedule, and trackvault.json) to a .tgz archive.",
+      title: "Save the open project (project library audio, schedule, and trackvault.json) to a .tgz archive.",
       onClick: () => void exportProject(),
       disabled: libraryActionsDisabled || exportingProject,
     },

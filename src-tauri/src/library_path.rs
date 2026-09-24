@@ -1,6 +1,6 @@
+//! Path checks for tracks under the open project's library folder (project library).
+
 use std::path::Path;
-
-
 
 use crate::db::Database;
 
@@ -14,7 +14,7 @@ pub fn ensure_under_library_folder(db: &Database, path: &Path) -> Result<(), Str
 
     }
 
-    Err("Track path is not under the library folder.".to_string())
+    Err("Track path is not under the project library folder.".to_string())
 
 }
 
@@ -44,7 +44,7 @@ pub fn ensure_writable_track_path(db: &Database, path: &Path) -> Result<(), Stri
 
     }
 
-    Err("Track path is not under the library folder or a collection folder.".to_string())
+    Err("Track path is not under the project library folder or a collection folder.".to_string())
 
 }
 

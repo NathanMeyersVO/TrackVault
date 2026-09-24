@@ -8,18 +8,18 @@ use trackvault_lib::anonymize::{
 
 fn print_help() {
     eprintln!(
-        r#"anonymize-library — copy library audio with skater names replaced by fake names
+        r#"anonymize-library — copy project library audio with skater names replaced by fake names
 
 PII is taken from the Track Title tag (skater name). Copies are written under a
-subfolder of the library root; filename stems and Track Title tags are updated.
+subfolder of the project library root; filename stems and Track Title tags are updated.
 Original files are not modified.
 
 USAGE:
     anonymize-library --library <PATH> [OPTIONS]
 
 OPTIONS:
-    --library <PATH>           Library root folder to scan (required)
-    --output-subdir <NAME>     Output subfolder under library root [default: DEMO_COPY]
+    --library <PATH>           Project library root folder to scan (required)
+    --output-subdir <NAME>     Output subfolder under project library root [default: DEMO_COPY]
     --seed <N>                 Seed for reproducible fake names [default: 42]
     --dry-run                  Print planned copies without writing files
     --strict                   Exit with error if any file cannot be processed

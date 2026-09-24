@@ -54,7 +54,7 @@ export function LibraryView() {
   return (
     <div className="flex h-full flex-col">
       <div className="border-b border-border px-4 py-3">
-        <h2 className="text-base font-semibold text-white">Library</h2>
+        <h2 className="text-base font-semibold text-white">Project library</h2>
         <p className="text-xs text-muted">
           {isSearching
             ? `${filteredTracks.length} of ${tracks.length} track${tracks.length === 1 ? "" : "s"}`

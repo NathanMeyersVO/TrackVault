@@ -70,10 +70,10 @@ pub fn anonymize_library(opts: AnonymizeOptions) -> Result<AnonymizeReport, Stri
     let library_root = opts
         .library_root
         .canonicalize()
-        .map_err(|e| format!("Invalid library path: {e}"))?;
+        .map_err(|e| format!("Invalid project library path: {e}"))?;
 
     if !library_root.is_dir() {
-        return Err("Library path is not a directory.".to_string());
+        return Err("Project library path is not a directory.".to_string());
     }
 
     let output_root = library_root.join(&opts.output_subdir);
@@ -156,7 +156,7 @@ pub fn anonymize_library(opts: AnonymizeOptions) -> Result<AnonymizeReport, Stri
 
         let relative = source
             .strip_prefix(&library_root)
-            .map_err(|e| format!("Path not under library root: {e}"))?;
+            .map_err(|e| format!("Path not under project library root: {e}"))?;
         let relative_parent = relative.parent().unwrap_or(Path::new(""));
         let dest_dir = output_root.join(relative_parent);
         let destination = dest_dir.join(format!("{new_stem}{extension}"));

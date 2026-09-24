@@ -55,6 +55,7 @@ pub fn project_dir(app_data: &Path, project_id: &str) -> PathBuf {
     projects_root(app_data).join(project_id)
 }
 
+/// Audio and schedule files for a project live under this directory (`library/` on disk).
 pub fn library_dir(project_root: &Path) -> PathBuf {
     project_root.join(LIBRARY_SUBDIR)
 }

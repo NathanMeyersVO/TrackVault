@@ -106,7 +106,7 @@ pub fn set_library_folder(
             let _ = app.emit("library-updated", ());
             state.audio_cache.kick();
             return Err(format!(
-                "Library folder set and scanned, but config could not be loaded: {e}"
+                "Project library folder set and scanned, but config could not be loaded: {e}"
             ));
         }
     };
@@ -142,7 +142,7 @@ pub fn save_library_config(state: State<'_, AppState>) -> Result<String, String>
     let library = db
         .get_library_folder()
         .map_err(|e| e.to_string())?
-        .ok_or_else(|| "No library folder configured".to_string())?;
+        .ok_or_else(|| "No project library folder configured".to_string())?;
     let path = crate::config::save_config(&db, Path::new(&library))?;
     Ok(path.to_string_lossy().to_string())
 }
@@ -154,7 +154,7 @@ pub fn load_library_config(app: AppHandle, state: State<'_, AppState>) -> Result
         let library = db
             .get_library_folder()
             .map_err(|e| e.to_string())?
-            .ok_or_else(|| "No library folder configured".to_string())?;
+            .ok_or_else(|| "No project library folder configured".to_string())?;
         let library_root = PathBuf::from(&library);
         let config_path = crate::config::config_file_path(&library_root);
         let config = crate::config::load_config_file(&library_root)?.ok_or_else(|| {
@@ -473,7 +473,7 @@ pub fn delete_track(
 
     if let Err(error) = std::fs::remove_file(&path) {
         return Err(format!(
-            "Track removed from library, but file could not be deleted: {error}"
+            "Track removed from project library, but file could not be deleted: {error}"
         ));
     }
 

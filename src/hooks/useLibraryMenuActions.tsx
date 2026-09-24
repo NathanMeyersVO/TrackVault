@@ -34,7 +34,7 @@ function activeCollectionId(
 }
 
 const CLOSE_LIBRARY_MESSAGE =
-  "Remove the current library folder and clear all indexed tracks, library playlists, and library taglists from the app? Audio files on disk are not deleted. Stored collections are kept.\n\nSave configuration first if you want library playlists and library taglists written to trackvault.json.";
+  "Remove the current project library folder and clear all indexed tracks, project library playlists, and project library taglists from the app? Audio files on disk are not deleted. Stored collections are kept.\n\nSave configuration first if you want project library playlists and project library taglists written to trackvault.json.";
 
 export function useLibraryMenuActions() {
   const {
@@ -245,7 +245,7 @@ export function useLibraryMenuActions() {
     const selected = await open({
       directory: true,
       multiple: false,
-      title: "Choose library folder",
+      title: "Choose project library folder",
     });
     if (typeof selected !== "string") return;
     if (selected === libraryFolder) return;
@@ -334,7 +334,7 @@ export function useLibraryMenuActions() {
   const confirmCloseLibrary = useCallback(async () => {
     const closed = await closeLibrary();
     if (closed) {
-      setConfigMessage("Library closed");
+      setConfigMessage("Project library closed");
     }
   }, [closeLibrary]);
 
@@ -343,7 +343,7 @@ export function useLibraryMenuActions() {
     if (!saved) return;
     const closed = await closeLibrary();
     if (closed) {
-      setConfigMessage("Saved and library closed");
+      setConfigMessage("Saved and project library closed");
     }
   }, [closeLibrary, saveConfiguration]);
 
@@ -357,7 +357,7 @@ export function useLibraryMenuActions() {
     if (pendingLibraryFolder == null) return;
     const changed = await applyLibraryFolder(pendingLibraryFolder);
     if (changed) {
-      setConfigMessage("Library folder changed");
+      setConfigMessage("Project library folder changed");
     }
   }, [applyLibraryFolder, pendingLibraryFolder]);
 
@@ -367,7 +367,7 @@ export function useLibraryMenuActions() {
     if (!saved) return;
     const changed = await applyLibraryFolder(pendingLibraryFolder);
     if (changed) {
-      setConfigMessage("Saved and library folder changed");
+      setConfigMessage("Saved and project library folder changed");
     }
   }, [applyLibraryFolder, pendingLibraryFolder, saveConfiguration]);
 
@@ -381,7 +381,7 @@ export function useLibraryMenuActions() {
 
   const openLibraryUpload = useCallback(() => {
     if (!libraryFolder) {
-      showLibraryUploadError("Choose a library folder before uploading tracks.");
+      showLibraryUploadError("Choose a project library folder before uploading tracks.");
       return;
     }
     clearUploadFeedback();
@@ -440,7 +440,7 @@ export function useLibraryMenuActions() {
   const loadConfigConfirmDialog = loadConfigConfirmOpen ? (
     <ConfirmDialog
       title="Load configuration"
-      message="Replace all current library playlists and library taglists with the contents of trackvault.json? Indexed tracks are not affected."
+      message="Replace all current project library playlists and project library taglists with the contents of trackvault.json? Indexed tracks are not affected."
       confirmLabel="Load"
       cancelLabel="Cancel"
       destructive
@@ -452,10 +452,10 @@ export function useLibraryMenuActions() {
 
   const closeLibraryConfirmDialog = closeLibraryConfirmOpen ? (
     <ConfirmDialog
-      title="Close library?"
+      title="Close project library?"
       message={CLOSE_LIBRARY_MESSAGE}
-      confirmLabel="Close library"
-      secondaryLabel="Save & close library"
+      confirmLabel="Close project library"
+      secondaryLabel="Save & close project library"
       cancelLabel="Cancel"
       destructive
       busy={closingLibrary || savingConfig}
@@ -467,10 +467,10 @@ export function useLibraryMenuActions() {
 
   const changeLibraryConfirmDialog = changeLibraryConfirmOpen ? (
     <ConfirmDialog
-      title="Change library folder?"
+      title="Change project library folder?"
       message={CLOSE_LIBRARY_MESSAGE}
-      confirmLabel="Close library"
-      secondaryLabel="Save & close library"
+      confirmLabel="Close project library"
+      secondaryLabel="Save & close project library"
       cancelLabel="Cancel"
       destructive
       busy={scanning || closingLibrary || savingConfig}

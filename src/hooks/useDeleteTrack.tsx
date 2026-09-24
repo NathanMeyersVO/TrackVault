@@ -50,7 +50,7 @@ export function useDeleteTrack() {
   const confirmDialog = pendingTrack ? (
     <ConfirmDialog
       title="Delete track"
-      message={`Delete "${pendingTrack.title}" from the library? This will remove it from all library playlists and library taglists and delete the file. This cannot be undone.`}
+      message={`Delete "${pendingTrack.title}" from the project library? This will remove it from all project library playlists and project library taglists and delete the file. This cannot be undone.`}
       confirmLabel="Delete"
       cancelLabel="Cancel"
       destructive

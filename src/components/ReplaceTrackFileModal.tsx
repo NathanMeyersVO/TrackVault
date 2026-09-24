@@ -179,11 +179,11 @@ export function ReplaceTrackFileModal({ track, onClose }: ReplaceTrackFileModalP
                 <p className="text-sm text-foreground">
                   {trackDeliveryIntro(deliveryOptions, false)} Replacing{" "}
                   <span className="font-medium text-foreground">{track.title}</span> in the
-                  library.
+                  project library.
                 </p>
                 <p>
                   TrackVault will verify the file, then show a confirmation step before the
-                  library copy is updated.
+                  project library copy is updated.
                 </p>
               </div>
 
@@ -250,15 +250,15 @@ export function ReplaceTrackFileModal({ track, onClose }: ReplaceTrackFileModalP
                     </li>
                   )}
                   <li>
-                    Tag values from the current library file will be written onto the library
-                    copy, replacing tags on the copied file.
+                    Tag values from the current project library file will be written onto the
+                    project library copy, replacing tags on the copied file.
                   </li>
                   <li>
-                    After the copy is ready, the current library file will be removed from
+                    After the copy is ready, the current project library file will be removed from
                     disk (see paths below if the filename changes).
                   </li>
                   <li>
-                    Library playlists and taglists that include this track keep the same entry.
+                    Project library playlists and taglists that include this track keep the same entry.
                   </li>
                 </ul>
               </div>
@@ -282,10 +282,10 @@ export function ReplaceTrackFileModal({ track, onClose }: ReplaceTrackFileModalP
                     <tr className="border-b border-border bg-background/50">
                       <th className="px-3 py-2 font-medium text-muted"> </th>
                       <th className="px-3 py-2 font-medium text-foreground">
-                        Current library file
+                        Current project library file
                       </th>
                       <th className="px-3 py-2 font-medium text-foreground">
-                        New library file (after copy)
+                        New project library file (after copy)
                       </th>
                     </tr>
                   </thead>
@@ -296,7 +296,7 @@ export function ReplaceTrackFileModal({ track, onClose }: ReplaceTrackFileModalP
                       <td className="px-3 py-2">{preview.replacement.file_name}</td>
                     </tr>
                     <tr className="border-b border-border">
-                      <td className="px-3 py-2 text-muted">Library path</td>
+                      <td className="px-3 py-2 text-muted">Project library path</td>
                       <td className="px-3 py-2 break-all">{preview.library_path_before}</td>
                       <td className="px-3 py-2 break-all">{preview.library_path_after}</td>
                     </tr>
@@ -330,8 +330,8 @@ export function ReplaceTrackFileModal({ track, onClose }: ReplaceTrackFileModalP
                 <p className="text-xs text-muted">
                   Selected file (unchanged):{" "}
                   <span className="break-all text-foreground">{sourcePath}</span>
-                  . Tag values in the “New library file” column are from the selected file
-                  before tags are copied from the current library file.
+                  . Tag values in the “New project library file” column are from the selected file
+                  before tags are copied from the current project library file.
                 </p>
               )}
             </div>

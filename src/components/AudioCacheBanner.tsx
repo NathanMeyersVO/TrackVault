@@ -19,8 +19,8 @@ export function AudioCacheBanner() {
     : 0;
   const label = scanning
     ? determinate
-      ? `Scanning library ${done} / ${total}`
-      : "Scanning library…"
+      ? `Scanning project library ${done} / ${total}`
+      : "Scanning project library…"
     : `Preparing tracks ${done} / ${total}`;
 
   return (

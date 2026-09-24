@@ -448,7 +448,7 @@ function TaglistGroup({
             type="button"
             onClick={(event) => void deleteTaglist(event)}
             className="rounded px-1 text-xs text-muted hover:text-red-400"
-            title="Delete library taglist"
+            title="Delete project library taglist"
           >
             ×
           </button>
@@ -798,7 +798,7 @@ export function Sidebar({ width }: { width: number }) {
     >
       <div className="border-b border-border px-4 py-3">
         <h2 className="text-sm font-semibold tracking-tight text-foreground">Browse</h2>
-        <p className="text-xs text-muted">Library, stored collections, library playlists & library taglists</p>
+        <p className="text-xs text-muted">Project library, stored collections, project library playlists & project library taglists</p>
       </div>
 
       <nav className="flex-1 overflow-y-auto bg-background p-2">
@@ -810,7 +810,7 @@ export function Sidebar({ width }: { width: number }) {
               : "text-foreground hover:bg-surface-hover/60"
           }`}
         >
-          Library
+          Project library
         </button>
 
         <div className="mb-2 mt-4 px-3 text-xs font-medium uppercase tracking-wide text-muted">
@@ -995,7 +995,7 @@ export function Sidebar({ width }: { width: number }) {
         )}
 
         <div className="mb-2 mt-4 px-3 text-xs font-medium uppercase tracking-wide text-muted">
-          {isTrackDragging ? "Drop on a library playlist or library taglist" : "Library Playlists"}
+          {isTrackDragging ? "Drop on a project library playlist or project library taglist" : "Project library playlists"}
         </div>
 
         {playlists.map((playlist, index) => {
@@ -1154,7 +1154,7 @@ export function Sidebar({ width }: { width: number }) {
                     type="button"
                     onClick={(event) => startRenamePlaylist(event, playlist)}
                     className="ml-1 hidden shrink-0 cursor-pointer rounded px-1 text-xs text-muted hover:text-foreground group-hover/playlist:inline"
-                    title="Rename library playlist"
+                    title="Rename project library playlist"
                   >
                     ✎
                   </button>
@@ -1162,7 +1162,7 @@ export function Sidebar({ width }: { width: number }) {
                     type="button"
                     onClick={(event) => requestDeletePlaylist(event, playlist)}
                     className="ml-1 hidden shrink-0 cursor-pointer rounded px-1 text-xs text-muted hover:text-red-400 group-hover/playlist:inline"
-                    title="Delete library playlist"
+                    title="Delete project library playlist"
                   >
                     ×
                   </button>
@@ -1182,7 +1182,7 @@ export function Sidebar({ width }: { width: number }) {
                 if (e.key === "Enter") createPlaylist();
                 if (e.key === "Escape") setCreating(false);
               }}
-              placeholder="Library playlist name"
+              placeholder="Project library playlist name"
               className="w-full rounded-md border border-border bg-background px-2 py-1 text-sm"
             />
             <div className="flex gap-2">
@@ -1205,12 +1205,12 @@ export function Sidebar({ width }: { width: number }) {
             onClick={() => setCreating(true)}
             className="mt-1 w-full rounded-md px-3 py-2 text-left text-sm text-muted hover:bg-surface-hover/60 hover:text-foreground"
           >
-            + New library playlist
+            + New project library playlist
           </button>
         )}
 
         <div className="mb-2 mt-4 px-3 text-xs font-medium uppercase tracking-wide text-muted">
-          {isTrackDragging ? "Drop on a library taglist sublist" : "Library Taglists"}
+          {isTrackDragging ? "Drop on a project library taglist sublist" : "Project library taglists"}
         </div>
 
         {taglists.map((taglist) => (
@@ -1242,7 +1242,7 @@ export function Sidebar({ width }: { width: number }) {
                 if (e.key === "Enter") void createTaglist();
                 if (e.key === "Escape") setCreatingTaglist(false);
               }}
-              placeholder="Library taglist name"
+              placeholder="Project library taglist name"
               className="w-full rounded-md border border-border bg-background px-2 py-1 text-sm"
             />
             <input
@@ -1299,15 +1299,15 @@ export function Sidebar({ width }: { width: number }) {
             onClick={() => setCreatingTaglist(true)}
             className="mt-1 w-full rounded-md px-3 py-2 text-left text-sm text-muted hover:bg-surface-hover/60 hover:text-foreground"
           >
-            + New library taglist
+            + New project library taglist
           </button>
         )}
       </nav>
 
       {pendingDeletePlaylist ? (
         <ConfirmDialog
-          title="Delete library playlist"
-          message={`Delete "${pendingDeletePlaylist.name}"? This will remove the library playlist but not the tracks.`}
+          title="Delete project library playlist"
+          message={`Delete "${pendingDeletePlaylist.name}"? This will remove the project library playlist but not the tracks.`}
           confirmLabel="Delete"
           cancelLabel="Cancel"
           destructive

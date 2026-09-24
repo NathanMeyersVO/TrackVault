@@ -478,7 +478,7 @@ export function UploadTracksPhoneSection({
 
     mode === "library"
 
-      ? `Adding ${sourcePaths.length} file${sourcePaths.length === 1 ? "" : "s"} to library…`
+      ? `Adding ${sourcePaths.length} file${sourcePaths.length === 1 ? "" : "s"} to project library…`
 
       : `Adding ${sourcePaths.length} file${sourcePaths.length === 1 ? "" : "s"} to collection…`;
 
@@ -498,7 +498,7 @@ export function UploadTracksPhoneSection({
 
           Send tracks from your phone. Files are added to{" "}
 
-          {mode === "library" ? "your library" : "this collection"} automatically after upload.
+          {mode === "library" ? "your project library" : "this collection"} automatically after upload.
 
         </p>
 
@@ -548,7 +548,7 @@ export function UploadTracksPhoneSection({
 
             mode === "library"
 
-              ? "Uploading to your library"
+              ? "Uploading to your project library"
 
               : collectionName
 

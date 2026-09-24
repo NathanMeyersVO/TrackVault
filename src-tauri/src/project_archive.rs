@@ -161,7 +161,7 @@ pub fn import_project(app_data: &Path, source: &Path) -> Result<ProjectSummary, 
     let library_src = temp_dir.join(LIBRARY_SUBDIR);
     if !library_src.is_dir() {
         cleanup();
-        return Err("Archive is missing library folder".to_string());
+        return Err("Archive is missing project library folder".to_string());
     }
 
     if let Ok(meta_data) = fs::read_to_string(temp_dir.join(ARCHIVE_META_NAME)) {

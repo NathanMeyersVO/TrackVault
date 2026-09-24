@@ -74,7 +74,7 @@ export function TaglistView({ taglistId, value }: TaglistViewProps) {
     ? formatTaglistLabel(nextSublist.value, nextSublist.display_title)
     : null;
   const footerLabel =
-    nextSublistLabel != null ? `Next library taglist (${nextSublistLabel})` : null;
+    nextSublistLabel != null ? `Next project library taglist (${nextSublistLabel})` : null;
 
   const refreshTracks = useCallback(() => {
     api

@@ -50,7 +50,7 @@ pub fn check_upload_conflicts(
     let library_folder = db
         .get_library_folder()
         .map_err(|e| e.to_string())?
-        .ok_or_else(|| "No library folder configured".to_string())?;
+        .ok_or_else(|| "No project library folder configured".to_string())?;
 
     let library_root = PathBuf::from(&library_folder);
     let upload_dir = library_root.join(UPLOADED_DIR);
@@ -78,11 +78,11 @@ pub fn upload_tracks(
     let library_folder = db
         .get_library_folder()
         .map_err(|e| e.to_string())?
-        .ok_or_else(|| "No library folder configured".to_string())?;
+        .ok_or_else(|| "No project library folder configured".to_string())?;
 
     let library_root = PathBuf::from(&library_folder);
     if !library_root.exists() {
-        return Err("Library folder does not exist".to_string());
+        return Err("Project library folder does not exist".to_string());
     }
 
     let upload_dir = ensure_upload_dir(&library_root)?;
@@ -211,7 +211,7 @@ mod tests {
         let db = Database::open(std::path::Path::new(":memory:")).expect("in-memory db");
         let result = upload_tracks(&db, &[], false);
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("No library folder configured"));
+        assert!(result.unwrap_err().contains("No project library folder configured"));
     }
 
     #[test]
