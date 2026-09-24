@@ -34,8 +34,11 @@ rustc --version
 
 ## Getting started
 
+Replace `OWNER/REPO` with your GitHub repository path after you publish this project.
+
 ```bash
-cd Projects/trackvault
+git clone https://github.com/OWNER/REPO.git
+cd REPO
 npm install
 npm run tauri dev
 ```
@@ -47,7 +50,15 @@ npm run tauri build
 ```
 
 - Windows output: `src-tauri/target/release/bundle/`
-- macOS output: build on macOS (or CI) for `.app` / `.dmg`
+- macOS output: build on macOS for `.app` / `.dmg` (release installers are not built in CI)
+
+### Publishing to GitHub
+
+1. Create an empty repository on GitHub (`OWNER/REPO`).
+2. Add it as a remote and push `main` (this repo keeps its existing `origin` unless you change it).
+3. After the first push, confirm the **CI** workflow passes on GitHub.
+
+If line endings look wrong locally after cloning, run `git add --renormalize .` once (see [`.gitattributes`](.gitattributes)).
 
 ## Usage
 
@@ -86,4 +97,4 @@ src-tauri/src/       Rust backend
 
 ## License
 
-See repository defaults; adjust as needed for your fork.
+[MIT](LICENSE) — Copyright (c) 2026 Nathan Meyers

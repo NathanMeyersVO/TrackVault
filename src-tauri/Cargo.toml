@@ -2,7 +2,9 @@
 name = "trackvault"
 version = "0.1.0"
 description = "TrackVault — local music library player"
-authors = ["you"]
+authors = ["Nathan Meyers"]
+license = "MIT"
+repository = "https://github.com/OWNER/REPO"
 edition = "2021"
 default-run = "trackvault"
 

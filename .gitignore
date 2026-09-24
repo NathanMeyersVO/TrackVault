@@ -12,6 +12,14 @@ dist
 dist-ssr
 *.local
 
+# Secrets / env
+.env
+.env.*
+!.env.example
+
+# OS
+Thumbs.db
+
 # Rust / Tauri
 src-tauri/target
 
