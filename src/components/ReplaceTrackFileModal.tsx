@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import {
@@ -16,7 +16,24 @@ import { LocalFileAudioPreview } from "./LocalFileAudioPreview";
 import { ReplaceTrackPhoneSection } from "./ReplaceTrackPhoneSection";
 import { TrackDeliveryOptionSection } from "./TrackDeliveryOptionSection";
 import { AUDIO_FILE_DIALOG_FILTER } from "../lib/audioExtensions";
+import { getPartitionTagKey } from "../lib/applicationConfig";
 import { trackDeliveryIntro } from "../lib/trackDeliveryCopy";
+
+function replaceTagKeysForCommit(
+  selected: Set<string>,
+  lockedPartitionTagKey: string | null,
+  existingTagKeys: string[],
+): string[] {
+  const keys = [...selected];
+  if (
+    lockedPartitionTagKey &&
+    existingTagKeys.includes(lockedPartitionTagKey) &&
+    !keys.includes(lockedPartitionTagKey)
+  ) {
+    keys.push(lockedPartitionTagKey);
+  }
+  return keys;
+}
 
 interface ReplaceTrackFileModalProps {
   track: Track;
@@ -38,10 +55,27 @@ function libraryDirectory(fullPath: string): string {
   return slash >= 0 ? fullPath.slice(0, slash) : fullPath;
 }
 
+const REPLACE_FILE_NAME_KEY = "__fileName__";
+
+function replaceTagSelectionState(keys: string[], selected: Set<string>) {
+  if (keys.length === 0) {
+    return { all: false, some: false };
+  }
+  let count = 0;
+  for (const key of keys) {
+    if (selected.has(key)) count += 1;
+  }
+  return {
+    all: count === keys.length,
+    some: count > 0 && count < keys.length,
+  };
+}
+
 export function ReplaceTrackFileModal({ track, onClose }: ReplaceTrackFileModalProps) {
   const { refresh } = useLibrary();
   const { phoneUploadReady } = usePhoneUploadSettings();
   const patchTrack = usePlayerStore((state) => state.patchTrack);
+  const activeProject = usePlayerStore((state) => state.activeProject);
   const [preview, setPreview] = useState<ReplaceTrackFilePreview | null>(null);
   const [sourcePath, setSourcePath] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -49,6 +83,9 @@ export function ReplaceTrackFileModal({ track, onClose }: ReplaceTrackFileModalP
   const [error, setError] = useState<string | null>(null);
   const [dropError, setDropError] = useState<string | null>(null);
   const [phoneBusy, setPhoneBusy] = useState(false);
+  const [selectedReplaceTags, setSelectedReplaceTags] = useState<Set<string>>(() => new Set());
+  const [replaceFileName, setReplaceFileName] = useState(true);
+  const replaceTagsHeaderRef = useRef<HTMLInputElement>(null);
 
   const handleClose = useCallback(() => {
     void api.stopReplaceRemoteUpload();
@@ -72,6 +109,76 @@ export function ReplaceTrackFileModal({ track, onClose }: ReplaceTrackFileModalP
     () => (preview ? tagValueMap(preview.replacement.tags) : new Map()),
     [preview],
   );
+
+  const replaceableTagKeys = useMemo(() => {
+    if (!preview) return [];
+    return [...new Set(preview.existing.tags.map((tag) => tag.key))].sort((a, b) =>
+      a.localeCompare(b),
+    );
+  }, [preview]);
+
+  const lockedPartitionTagKey = useMemo(
+    () => getPartitionTagKey(activeProject?.application_id),
+    [activeProject?.application_id],
+  );
+
+  const toggleableReplaceTagKeys = useMemo(() => {
+    if (!lockedPartitionTagKey) return replaceableTagKeys;
+    return replaceableTagKeys.filter((key) => key !== lockedPartitionTagKey);
+  }, [lockedPartitionTagKey, replaceableTagKeys]);
+
+  const canReplaceFileName = useMemo(() => {
+    if (!preview) return false;
+    return preview.existing.file_name !== preview.replacement.file_name;
+  }, [preview]);
+
+  const replaceableItemKeys = useMemo(() => {
+    const keys = [...toggleableReplaceTagKeys];
+    if (canReplaceFileName) keys.unshift(REPLACE_FILE_NAME_KEY);
+    return keys;
+  }, [canReplaceFileName, toggleableReplaceTagKeys]);
+
+  const selectedReplaceItems = useMemo(() => {
+    const selected = new Set(selectedReplaceTags);
+    if (replaceFileName && canReplaceFileName) {
+      selected.add(REPLACE_FILE_NAME_KEY);
+    }
+    return selected;
+  }, [canReplaceFileName, replaceFileName, selectedReplaceTags]);
+
+  const { all: allReplaceSelected, some: someReplaceSelected } = useMemo(
+    () => replaceTagSelectionState(replaceableItemKeys, selectedReplaceItems),
+    [replaceableItemKeys, selectedReplaceItems],
+  );
+
+  const afterFileName = useMemo(() => {
+    if (!preview) return "";
+    if (replaceFileName || !canReplaceFileName) return preview.existing.file_name;
+    return preview.replacement.file_name;
+  }, [canReplaceFileName, preview, replaceFileName]);
+
+  const afterLibraryPath = useMemo(() => {
+    if (!preview) return "";
+    if (replaceFileName || !canReplaceFileName) return preview.library_path_before;
+    return preview.library_path_after;
+  }, [canReplaceFileName, preview, replaceFileName]);
+
+  useEffect(() => {
+    if (!preview) {
+      setSelectedReplaceTags(new Set());
+      setReplaceFileName(true);
+      return;
+    }
+    setSelectedReplaceTags(new Set(preview.existing.tags.map((tag) => tag.key)));
+    setReplaceFileName(true);
+  }, [preview]);
+
+  useEffect(() => {
+    const el = replaceTagsHeaderRef.current;
+    if (el) {
+      el.indeterminate = someReplaceSelected && !allReplaceSelected;
+    }
+  }, [allReplaceSelected, someReplaceSelected]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -134,7 +241,17 @@ export function ReplaceTrackFileModal({ track, onClose }: ReplaceTrackFileModalP
     setCommitting(true);
     setError(null);
     try {
-      const updated = await api.replaceLibraryTrackFile(track.id, sourcePath);
+      const updated = await api.replaceLibraryTrackFile(
+        track.id,
+        sourcePath,
+        replaceTagKeysForCommit(
+          selectedReplaceTags,
+          lockedPartitionTagKey,
+          replaceableTagKeys,
+        ),
+        // API flag: use the replacement file's name (inverse of checked "Replace" in the dialog).
+        canReplaceFileName && !replaceFileName,
+      );
       patchTrack(updated);
       invalidateTrackTags(track.id);
       await refresh();
@@ -144,10 +261,23 @@ export function ReplaceTrackFileModal({ track, onClose }: ReplaceTrackFileModalP
     } finally {
       setCommitting(false);
     }
-  }, [handleClose, patchTrack, refresh, sourcePath, track.id]);
+  }, [
+    canReplaceFileName,
+    handleClose,
+    lockedPartitionTagKey,
+    patchTrack,
+    refresh,
+    replaceFileName,
+    replaceableTagKeys,
+    selectedReplaceTags,
+    sourcePath,
+    track.id,
+  ]);
 
   const busy = loading || committing || phoneBusy;
   const deliveryOptions = phoneUploadReady ? 3 : 2;
+  const confirmBlockedByCollision =
+    preview?.path_collision && canReplaceFileName && !replaceFileName;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
@@ -250,12 +380,13 @@ export function ReplaceTrackFileModal({ track, onClose }: ReplaceTrackFileModalP
                     </li>
                   )}
                   <li>
-                    Tag values from the current project library file will be written onto the
-                    project library copy, replacing tags on the copied file.
+                    Tag values and the project library file name you enable below from the current
+                    project library file will be applied to the copy. Disabled rows keep the
+                    replacement file&apos;s values instead.
                   </li>
                   <li>
                     After the copy is ready, the current project library file will be removed from
-                    disk (see paths below if the filename changes).
+                    disk when the library path changes (see paths below).
                   </li>
                   <li>
                     Project library playlists and taglists that include this track keep the same entry.
@@ -263,7 +394,10 @@ export function ReplaceTrackFileModal({ track, onClose }: ReplaceTrackFileModalP
                 </ul>
               </div>
 
-              {preview.path_collision && preview.collision_message && (
+              {preview.path_collision &&
+                preview.collision_message &&
+                canReplaceFileName &&
+                !replaceFileName && (
                 <p className="text-sm text-red-400">{preview.collision_message}</p>
               )}
 
@@ -280,12 +414,41 @@ export function ReplaceTrackFileModal({ track, onClose }: ReplaceTrackFileModalP
                 <table className="w-full min-w-[28rem] text-left text-xs">
                   <thead>
                     <tr className="border-b border-border bg-background/50">
-                      <th className="px-3 py-2 font-medium text-muted"> </th>
+                      <th className="px-3 py-2 font-medium text-muted">Tag</th>
                       <th className="px-3 py-2 font-medium text-foreground">
                         Current project library file
                       </th>
                       <th className="px-3 py-2 font-medium text-foreground">
                         New project library file (after copy)
+                      </th>
+                      <th className="w-28 px-3 py-2 font-medium text-foreground">
+                        <label className="flex items-center justify-center gap-1.5 text-xs font-medium">
+                          <input
+                            ref={replaceTagsHeaderRef}
+                            type="checkbox"
+                            checked={allReplaceSelected}
+                            disabled={replaceableItemKeys.length === 0 || busy}
+                            onChange={() => {
+                              const selectAll = !allReplaceSelected;
+                              setReplaceFileName(selectAll && canReplaceFileName);
+                              if (selectAll) {
+                                setSelectedReplaceTags(new Set(replaceableTagKeys));
+                              } else {
+                                setSelectedReplaceTags(
+                                  new Set(
+                                    lockedPartitionTagKey &&
+                                      replaceableTagKeys.includes(lockedPartitionTagKey)
+                                      ? [lockedPartitionTagKey]
+                                      : [],
+                                  ),
+                                );
+                              }
+                            }}
+                            className="shrink-0"
+                            aria-label="Replace all from current project library file"
+                          />
+                          Replace
+                        </label>
                       </th>
                     </tr>
                   </thead>
@@ -293,12 +456,33 @@ export function ReplaceTrackFileModal({ track, onClose }: ReplaceTrackFileModalP
                     <tr className="border-b border-border">
                       <td className="px-3 py-2 text-muted">File name</td>
                       <td className="px-3 py-2">{preview.existing.file_name}</td>
-                      <td className="px-3 py-2">{preview.replacement.file_name}</td>
+                      <td className="px-3 py-2">{afterFileName}</td>
+                      <td className="px-3 py-2 text-center">
+                        {canReplaceFileName ? (
+                          <input
+                            type="checkbox"
+                            checked={replaceFileName}
+                            disabled={busy}
+                            onChange={() => setReplaceFileName((prev) => !prev)}
+                            className="shrink-0"
+                            aria-label="Replace file name from current project library file"
+                          />
+                        ) : (
+                          <span className="text-muted" aria-hidden>
+                            —
+                          </span>
+                        )}
+                      </td>
                     </tr>
                     <tr className="border-b border-border">
                       <td className="px-3 py-2 text-muted">Project library path</td>
                       <td className="px-3 py-2 break-all">{preview.library_path_before}</td>
-                      <td className="px-3 py-2 break-all">{preview.library_path_after}</td>
+                      <td className="px-3 py-2 break-all">{afterLibraryPath}</td>
+                      <td className="px-3 py-2 text-center">
+                        <span className="text-muted" aria-hidden>
+                          —
+                        </span>
+                      </td>
                     </tr>
                     <tr className="border-b border-border">
                       <td className="px-3 py-2 text-muted">Length</td>
@@ -316,22 +500,66 @@ export function ReplaceTrackFileModal({ track, onClose }: ReplaceTrackFileModalP
                         {formatFileSize(preview.replacement.file_size_bytes)}
                       </td>
                     </tr>
-                    {tagKeys.map((key) => (
-                      <tr key={key} className="border-b border-border last:border-b-0">
-                        <td className="px-3 py-2 text-muted">{key}</td>
-                        <td className="px-3 py-2">{existingTags.get(key) ?? "—"}</td>
-                        <td className="px-3 py-2">{replacementTags.get(key) ?? "—"}</td>
-                      </tr>
-                    ))}
+                    {tagKeys.map((key) => {
+                      const isLockedPartitionTag =
+                        lockedPartitionTagKey != null && key === lockedPartitionTagKey;
+                      const canReplace =
+                        replaceableTagKeys.includes(key) && !isLockedPartitionTag;
+                      const replaceChecked =
+                        isLockedPartitionTag || selectedReplaceTags.has(key);
+                      const afterValue =
+                        replaceChecked
+                          ? (existingTags.get(key) ?? "—")
+                          : (replacementTags.get(key) ?? "—");
+                      return (
+                        <tr key={key} className="border-b border-border last:border-b-0">
+                          <td className="px-3 py-2 text-muted">{key}</td>
+                          <td className="px-3 py-2">{existingTags.get(key) ?? "—"}</td>
+                          <td className="px-3 py-2">{afterValue}</td>
+                          <td className="px-3 py-2 text-center">
+                            {isLockedPartitionTag ? (
+                              <input
+                                type="checkbox"
+                                checked
+                                disabled
+                                className="shrink-0"
+                                title="Always kept from current project library file for this application"
+                                aria-label={`Replace tag ${key} from current project library file (required)`}
+                              />
+                            ) : canReplace ? (
+                              <input
+                                type="checkbox"
+                                checked={replaceChecked}
+                                disabled={busy}
+                                onChange={() => {
+                                  setSelectedReplaceTags((prev) => {
+                                    const next = new Set(prev);
+                                    if (next.has(key)) next.delete(key);
+                                    else next.add(key);
+                                    return next;
+                                  });
+                                }}
+                                className="shrink-0"
+                                aria-label={`Replace tag ${key} from current project library file`}
+                              />
+                            ) : (
+                              <span className="text-muted" aria-hidden>
+                                —
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
               {sourcePath && (
                 <p className="text-xs text-muted">
-                  Selected file (unchanged):{" "}
+                  Selected file:{" "}
                   <span className="break-all text-foreground">{sourcePath}</span>
-                  . Tag values in the “New project library file” column are from the selected file
-                  before tags are copied from the current project library file.
+                  . The “New project library file” column shows values after replace, based on your
+                  Replace selections.
                 </p>
               )}
             </div>
@@ -353,7 +581,7 @@ export function ReplaceTrackFileModal({ track, onClose }: ReplaceTrackFileModalP
             <button
               type="button"
               onClick={() => void handleConfirm()}
-              disabled={busy || preview.path_collision}
+              disabled={busy || confirmBlockedByCollision}
               className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-40"
             >
               {committing ? "Replacing…" : "OK"}

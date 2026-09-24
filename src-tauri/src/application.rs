@@ -55,6 +55,13 @@ pub fn supports_schedule_delivery(application: ApplicationId) -> bool {
     matches!(application, ApplicationId::UsFigureSkatingEms)
 }
 
+pub fn partition_tag_key(application: ApplicationId) -> Option<&'static str> {
+    match application {
+        ApplicationId::None => None,
+        ApplicationId::UsFigureSkatingEms => Some(crate::library_setup::EVENTS_PARTITION_TAG_KEY),
+    }
+}
+
 pub fn resolve_delivery_application(
     app_data: &Path,
     project_id: Option<&str>,

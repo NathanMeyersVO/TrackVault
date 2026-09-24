@@ -292,8 +292,18 @@ export const api = {
       trackId,
       sourcePath,
     }),
-  replaceLibraryTrackFile: (trackId: number, sourcePath: string) =>
-    invoke<Track>("replace_library_track_file", { trackId, sourcePath }),
+  replaceLibraryTrackFile: (
+    trackId: number,
+    sourcePath: string,
+    replaceTagKeys: string[],
+    replaceFileName: boolean,
+  ) =>
+    invoke<Track>("replace_library_track_file", {
+      trackId,
+      sourcePath,
+      replaceTagKeys,
+      replaceFileName,
+    }),
   startReplaceRemoteUpload: (trackId: number) =>
     invoke<ReplaceRemoteUploadStartInfo>("start_replace_remote_upload", { trackId }),
   startLibraryRemoteUpload: () =>

@@ -302,6 +302,8 @@ pub fn replace_library_track_file(
     state: State<'_, AppState>,
     track_id: i64,
     source_path: String,
+    replace_tag_keys: Vec<String>,
+    replace_file_name: bool,
 ) -> Result<Track, String> {
     if state.player.state().track_id == Some(track_id) {
         state.player.stop();
@@ -311,8 +313,11 @@ pub fn replace_library_track_file(
         let db = state.db.lock();
         crate::replace_track::replace_library_track_file(
             &db,
+            &state.app_data_dir,
             track_id,
             Path::new(&source_path),
+            &replace_tag_keys,
+            replace_file_name,
         )?
     };
 

@@ -6,8 +6,10 @@ use crate::application::ApplicationId;
 use crate::db::Database;
 use crate::title_map;
 
+pub const EVENTS_PARTITION_TAG_KEY: &str = "Composer";
+
 const EVENTS_TAGLIST_NAME: &str = "Events";
-const EVENTS_TAG_KEY: &str = "Composer";
+const EVENTS_TAG_KEY: &str = EVENTS_PARTITION_TAG_KEY;
 const EVENTS_ENTRY_TAG_KEY: &str = "Track Title";
 const EVENTS_VALUE_SINGULAR_NAME: &str = "Event";
 

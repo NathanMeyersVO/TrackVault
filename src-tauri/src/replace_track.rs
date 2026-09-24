@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::fs;
 
 use std::path::{Path, PathBuf};
@@ -122,9 +123,15 @@ pub fn replace_library_track_file(
 
     db: &Database,
 
+    app_data: &Path,
+
     track_id: i64,
 
     source_path: &Path,
+
+    replace_tag_keys: &[String],
+
+    replace_file_name: bool,
 
 ) -> Result<crate::models::Track, String> {
 
@@ -136,9 +143,13 @@ pub fn replace_library_track_file(
 
     let dest_path_buf = PathBuf::from(&dest_path);
 
-    let (target_path, collision_message) =
-
-        resolve_target_path(db, track_id, &dest_path_buf, source_path)?;
+    let (target_path, collision_message) = target_path_for_replace(
+        db,
+        track_id,
+        &dest_path_buf,
+        source_path,
+        replace_file_name,
+    )?;
 
     if let Some(message) = collision_message {
 
@@ -150,13 +161,10 @@ pub fn replace_library_track_file(
 
     let tag_pairs = read_human_tag_pairs(&dest_path_buf)?;
 
-    let fields: Vec<TagFieldInput> = tag_pairs
+    let replace_tag_keys =
+        merge_required_partition_tag_keys(db, app_data, replace_tag_keys, &tag_pairs)?;
 
-        .into_iter()
-
-        .map(|(key, value)| TagFieldInput { key, value })
-
-        .collect();
+    let fields = tag_fields_to_copy(tag_pairs, &replace_tag_keys);
 
 
 
@@ -313,6 +321,20 @@ fn install_replacement_file(
 }
 
 
+
+fn target_path_for_replace(
+    db: &Database,
+    track_id: i64,
+    dest_path: &Path,
+    source_path: &Path,
+    replace_file_name: bool,
+) -> Result<(PathBuf, Option<String>), String> {
+    if replace_file_name {
+        resolve_target_path(db, track_id, dest_path, source_path)
+    } else {
+        Ok((dest_path.to_path_buf(), None))
+    }
+}
 
 fn resolve_target_path(
 
@@ -628,6 +650,60 @@ fn build_side(path: &Path) -> Result<ReplaceTrackFileSide, String> {
 
 
 
+fn merge_required_partition_tag_keys(
+    db: &Database,
+    app_data: &Path,
+    replace_tag_keys: &[String],
+    tag_pairs: &[(String, String)],
+) -> Result<Vec<String>, String> {
+    if let Some(required) = required_partition_tag_key_for_active_project(db, app_data)? {
+        let merged = merge_replace_tag_key_set(replace_tag_keys, &required, tag_pairs);
+        return Ok(merged.into_iter().collect());
+    }
+    Ok(replace_tag_keys.to_vec())
+}
+
+fn merge_replace_tag_key_set(
+    replace_tag_keys: &[String],
+    required_key: &str,
+    tag_pairs: &[(String, String)],
+) -> HashSet<String> {
+    let mut keys: HashSet<String> = replace_tag_keys.iter().cloned().collect();
+    if tag_pairs.iter().any(|(key, _)| key == required_key) {
+        keys.insert(required_key.to_string());
+    }
+    keys
+}
+
+fn required_partition_tag_key_for_active_project(
+    db: &Database,
+    app_data: &Path,
+) -> Result<Option<String>, String> {
+    let Some(project_id) = crate::projects::get_active_project_id(db)? else {
+        return Ok(None);
+    };
+    let project_root = crate::projects::project_dir(app_data, &project_id);
+    let manifest = crate::projects::load_manifest(&project_root)?;
+    Ok(
+        crate::application::partition_tag_key(crate::application::normalize_application_id(
+            &manifest.application_id,
+        ))
+        .map(str::to_string),
+    )
+}
+
+fn tag_fields_to_copy(
+    tag_pairs: Vec<(String, String)>,
+    replace_tag_keys: &[String],
+) -> Vec<TagFieldInput> {
+    let copy_keys: HashSet<&str> = replace_tag_keys.iter().map(String::as_str).collect();
+    tag_pairs
+        .into_iter()
+        .filter(|(key, _)| copy_keys.contains(key.as_str()))
+        .map(|(key, value)| TagFieldInput { key, value })
+        .collect()
+}
+
 fn temp_replace_path(target: &Path) -> PathBuf {
     let stem = target
         .file_stem()
@@ -658,6 +734,30 @@ mod tests {
         let target = base.join("new.mp3");
         assert!(!paths_are_same_file(&dest, &target).unwrap());
         let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn merge_required_partition_tag_keys_inserts_when_present() {
+        let pairs = vec![
+            ("Composer".to_string(), "01".to_string()),
+            ("Track Title".to_string(), "Short Program".to_string()),
+        ];
+        let merged = merge_replace_tag_key_set(&["Track Title".to_string()], "Composer", &pairs);
+        assert!(merged.contains("Composer"));
+        assert!(merged.contains("Track Title"));
+    }
+
+    #[test]
+    fn tag_fields_to_copy_filters_by_key() {
+        let pairs = vec![
+            ("title".to_string(), "Old Title".to_string()),
+            ("artist".to_string(), "Old Artist".to_string()),
+            ("album".to_string(), "Old Album".to_string()),
+        ];
+        let fields = tag_fields_to_copy(pairs, &["title".to_string(), "album".to_string()]);
+        assert_eq!(fields.len(), 2);
+        assert_eq!(fields[0].key, "title");
+        assert_eq!(fields[1].key, "album");
     }
 
     #[test]
