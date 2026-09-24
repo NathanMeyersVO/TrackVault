@@ -4,9 +4,11 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+use super::progress::DeliveryProgressCtx;
 use super::staging::{collect_audio_relative, find_schedule_xlsx};
 use super::{DeliveryChange, DeliveryChangeKind};
 use crate::application::{self, ApplicationId};
+use crate::models::DeliveryProgressPhase;
 use crate::config;
 use crate::project_config::autosave_trackvault_json;
 use crate::projects::{self, ProjectManifest};
@@ -33,6 +35,7 @@ pub fn apply_delivery(
     selected_ids: &HashSet<String>,
     apply_mode: ApplyMode,
     application: ApplicationId,
+    progress: &DeliveryProgressCtx,
 ) -> Result<ApplyDeliveryResult, String> {
     let library_root = projects::library_dir(project_root);
     fs::create_dir_all(&library_root).map_err(|e| e.to_string())?;
@@ -48,8 +51,19 @@ pub fn apply_delivery(
 
     let mut applied = 0u32;
     let skipped = (changes.len().saturating_sub(selected.len())) as u32;
+    let total = selected.len() as u32;
+    if total > 0 {
+        progress.emit(DeliveryProgressPhase::Applying, 0, total, false, None);
+    }
 
-    for change in &selected {
+    for (index, change) in selected.iter().enumerate() {
+        progress.emit(
+            DeliveryProgressPhase::Applying,
+            index as u32,
+            total,
+            false,
+            Some(change.summary.clone()),
+        );
         match change.kind {
             DeliveryChangeKind::AudioRemove => {
                 let rel = change.details.trim();
@@ -82,6 +96,13 @@ pub fn apply_delivery(
                 // Handled in batch after loop
             }
         }
+        progress.emit(
+            DeliveryProgressPhase::Applying,
+            index as u32 + 1,
+            total,
+            false,
+            Some(change.summary.clone()),
+        );
     }
 
     let schedule_selected = selected.iter().any(|c| {
@@ -246,6 +267,7 @@ fn import_schedule_merge<'a>(
 mod tests {
     use super::*;
     use crate::delivery::diff::stable_change_id;
+    use crate::delivery::progress::DeliveryProgressCtx;
     use crate::delivery::{DeliveryChange, DeliveryChangeKind};
     use crate::projects::ProjectManifest;
     use std::io::Write;
@@ -295,6 +317,7 @@ mod tests {
             &selected,
             ApplyMode::Merge,
             crate::application::ApplicationId::None,
+            &DeliveryProgressCtx::none(),
         )
         .unwrap();
 

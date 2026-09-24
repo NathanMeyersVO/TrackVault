@@ -16,7 +16,8 @@ use crate::delivery::{
     apply_delivery, append_full_replace_removals, browse_delivery_folder_at, build_preview,
     map_selected_change_ids,
     default_delivery_browse_root, stage_delivery_sources, ApplyDeliveryResult, ApplyMode,
-    DeliveryFolderBrowseResult, DeliveryPreview, DeliverySessionStore, StagingSession,
+    DeliveryFolderBrowseResult, DeliveryPreview, DeliveryProgressCtx, DeliverySessionStore,
+    StagingSession,
 };
 use crate::projects::{self, ProjectManifest, ProjectSummary};
 use crate::project_config::{autosave_trackvault_json, load_trackvault_json_if_present};
@@ -101,7 +102,7 @@ pub fn set_library_folder(
         Err(e) => {
             let _progress = {
                 let db = state.db.lock();
-                scanner::scan_library_folder(&db, &app)?
+                scanner::scan_library_folder(&db, &app, None)?
             };
             let _ = app.emit("library-updated", ());
             state.audio_cache.kick();
@@ -113,7 +114,7 @@ pub fn set_library_folder(
 
     let progress = {
         let db = state.db.lock();
-        scanner::scan_library_folder(&db, &app)?
+        scanner::scan_library_folder(&db, &app, None)?
     };
 
     if let Some(config) = pending_config {
@@ -1659,11 +1660,13 @@ fn session_delivery_application(
 
 #[tauri::command]
 pub fn stage_delivery(
+    app: AppHandle,
     state: State<'_, AppState>,
     source_paths: Vec<String>,
     project_id: Option<String>,
     application_id: Option<String>,
 ) -> Result<DeliveryPreview, String> {
+    let progress = DeliveryProgressCtx::from_app(&app);
     if source_paths.is_empty() {
         return Err("Select a delivery folder".to_string());
     }
@@ -1678,6 +1681,7 @@ pub fn stage_delivery(
         state.delivery_sessions.sessions_dir(),
         &session_id,
         &source_paths,
+        &progress,
     )?;
 
     let delivery_application = crate::application::resolve_delivery_application(
@@ -1697,6 +1701,7 @@ pub fn stage_delivery(
             true,
             existing_schedule.as_deref(),
             delivery_application,
+            &progress,
         )?
     } else {
         let empty = state.app_data_dir.join("_empty_preview");
@@ -1708,6 +1713,7 @@ pub fn stage_delivery(
             false,
             None,
             delivery_application,
+            &progress,
         )?
     };
 
@@ -1728,6 +1734,7 @@ pub fn stage_delivery(
         created: std::time::Instant::now(),
     });
 
+    progress.finish();
     Ok(preview)
 }
 
@@ -1759,6 +1766,7 @@ pub fn preview_delivery_with_mode(
         for_update,
         existing_schedule.as_deref(),
         delivery_application,
+        &DeliveryProgressCtx::none(),
     )?;
     if apply_mode == "full_replace" && for_update {
         append_full_replace_removals(&mut preview, &session.staging_root, &library)?;
@@ -1779,6 +1787,7 @@ pub fn apply_staged_delivery(
     new_project_name: Option<String>,
     application_id: Option<String>,
 ) -> Result<ApplyDeliveryResult, String> {
+    let progress = DeliveryProgressCtx::from_app(&app);
     let session = state
         .delivery_sessions
         .get(&staging_session_id)
@@ -1826,6 +1835,7 @@ pub fn apply_staged_delivery(
         for_update,
         existing_schedule.as_deref(),
         delivery_application,
+        &progress,
     )?;
     if matches!(mode, ApplyMode::FullReplace) && for_update {
         append_full_replace_removals(&mut preview, &session.staging_root, &library_root)?;
@@ -1879,6 +1889,7 @@ pub fn apply_staged_delivery(
             &selected,
             mode,
             delivery_application,
+            &progress,
         )?
     };
 
@@ -1892,13 +1903,14 @@ pub fn apply_staged_delivery(
 
     {
         let db = state.db.lock();
-        scanner::scan_library_folder(&db, &app)?;
+        scanner::scan_library_folder(&db, &app, Some(&progress))?;
     }
 
     state.delivery_sessions.remove(&staging_session_id);
     try_autosave_project_config(&state);
     let _ = app.emit("library-updated", ());
     state.audio_cache.kick();
+    progress.finish();
     Ok(result)
 }
 
@@ -1924,7 +1936,7 @@ fn open_project_internal(app: &AppHandle, state: &AppState, project_id: &str) ->
         projects::set_active_project_id(&db, project_id)?;
     }
 
-    scanner::scan_library_folder(&state.db.lock(), app)?;
+    scanner::scan_library_folder(&state.db.lock(), app, None)?;
 
     {
         let db = state.db.lock();

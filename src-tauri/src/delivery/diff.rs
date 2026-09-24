@@ -1,10 +1,12 @@
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
+use super::progress::DeliveryProgressCtx;
 use super::staging::{collect_audio_relative, find_schedule_xlsx};
 use super::{DeliveryChange, DeliveryChangeKind};
 use crate::application::{self, ApplicationId};
 use crate::file_hash::sha256_file;
+use crate::models::DeliveryProgressPhase;
 use crate::scanner;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -37,9 +39,20 @@ pub fn build_preview(
     for_update: bool,
     existing_library_schedule: Option<&Path>,
     application: ApplicationId,
+    progress: &DeliveryProgressCtx,
 ) -> Result<DeliveryPreview, String> {
     let staged = collect_audio_relative(staging_root)?;
-    let library = collect_library_audio(library_root)?;
+    let library_paths = if library_root.is_dir() {
+        collect_audio_relative(library_root)?
+    } else {
+        Vec::new()
+    };
+    let total = (staged.len() + library_paths.len()) as u32;
+    let mut done = 0u32;
+    if total > 0 {
+        progress.emit(DeliveryProgressPhase::Analyzing, 0, total, false, None);
+    }
+    let library = collect_library_audio_hashes(&library_paths, progress, &mut done, total)?;
 
     let mut lib_by_rel: HashMap<String, LibraryFile> = HashMap::new();
     let mut lib_by_hash: HashMap<String, Vec<String>> = HashMap::new();
@@ -56,7 +69,15 @@ pub fn build_preview(
     let mut unchanged_audio_count: u32 = 0;
 
     for (rel, abs) in &staged {
+        progress.emit(
+            DeliveryProgressPhase::Analyzing,
+            done,
+            total,
+            false,
+            Some(rel.clone()),
+        );
         let staged_hash = sha256_file(abs).ok();
+        done += 1;
         if let Some(existing) = lib_by_rel.get(rel) {
             let same_hash = staged_hash.as_deref() == existing.hash.as_deref();
             if same_hash {
@@ -229,10 +250,34 @@ fn collect_library_audio(library_root: &Path) -> Result<Vec<LibraryFile>, String
     if !library_root.is_dir() {
         return Ok(Vec::new());
     }
+    let paths = collect_audio_relative(library_root)?;
+    let mut done = 0u32;
+    let total = paths.len() as u32;
+    collect_library_audio_hashes(&paths, &DeliveryProgressCtx::none(), &mut done, total)
+}
+
+fn collect_library_audio_hashes(
+    paths: &[(String, PathBuf)],
+    progress: &DeliveryProgressCtx,
+    done: &mut u32,
+    total: u32,
+) -> Result<Vec<LibraryFile>, String> {
     let mut out = Vec::new();
-    for (rel, abs) in collect_audio_relative(library_root)? {
-        let hash = sha256_file(&abs).ok();
-        out.push(LibraryFile { rel, abs, hash });
+    for (rel, abs) in paths {
+        progress.emit(
+            DeliveryProgressPhase::Analyzing,
+            *done,
+            total,
+            false,
+            Some(rel.clone()),
+        );
+        let hash = sha256_file(abs).ok();
+        *done += 1;
+        out.push(LibraryFile {
+            rel: rel.clone(),
+            abs: abs.clone(),
+            hash,
+        });
     }
     Ok(out)
 }
@@ -301,6 +346,7 @@ impl Clone for LibraryFile {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::delivery::progress::DeliveryProgressCtx;
     use std::fs;
 
     #[test]
@@ -315,7 +361,16 @@ mod tests {
         fs::write(library.join("tracks/01.mp3"), bytes).expect("write library");
 
         let preview =
-            build_preview("sess", &staging, &library, true, None, ApplicationId::None).expect("preview");
+            build_preview(
+                "sess",
+                &staging,
+                &library,
+                true,
+                None,
+                ApplicationId::None,
+                &DeliveryProgressCtx::none(),
+            )
+            .expect("preview");
         assert_eq!(preview.staged_audio_count, 1);
         assert_eq!(preview.library_audio_count, 1);
         assert_eq!(preview.unchanged_audio_count, 1);
@@ -348,9 +403,26 @@ mod tests {
         fs::write(staging.join("new.mp3"), b"new").expect("write");
 
         let a =
-            build_preview("sess", &staging, &library, true, None, ApplicationId::None).expect("preview a");
-        let b =
-            build_preview("sess", &staging, &library, true, None, ApplicationId::None).expect("preview b");
+            build_preview(
+                "sess",
+                &staging,
+                &library,
+                true,
+                None,
+                ApplicationId::None,
+                &DeliveryProgressCtx::none(),
+            )
+            .expect("preview a");
+        let b = build_preview(
+            "sess",
+            &staging,
+            &library,
+            true,
+            None,
+            ApplicationId::None,
+            &DeliveryProgressCtx::none(),
+        )
+        .expect("preview b");
         assert_eq!(a.changes.len(), 1);
         assert_eq!(a.changes[0].change_id, b.changes[0].change_id);
         assert_eq!(
@@ -389,6 +461,7 @@ mod tests {
             false,
             None,
             ApplicationId::None,
+            &DeliveryProgressCtx::none(),
         )
         .expect("preview");
         assert!(
@@ -421,6 +494,7 @@ mod tests {
             false,
             None,
             ApplicationId::UsFigureSkatingEms,
+            &DeliveryProgressCtx::none(),
         )
         .expect("preview");
         assert!(

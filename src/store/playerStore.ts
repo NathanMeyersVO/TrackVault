@@ -10,6 +10,7 @@ import type {
   Taglist,
   Track,
   AudioCacheProgress,
+  DeliveryProgress,
 } from "../lib/tauri";
 
 export type View =
@@ -113,6 +114,7 @@ interface PlayerStore {
   scanning: boolean;
   deliveryStaging: boolean;
   deliveryStagingApplicationId: ApplicationId | null;
+  deliveryProgress: DeliveryProgress | null;
   libraryFolder: string | null;
   activeProject: ProjectSummary | null;
   audioCacheProgress: AudioCacheProgress;
@@ -142,6 +144,7 @@ interface PlayerStore {
   setPlayback: (playback: PlaybackState) => void;
   setScanning: (scanning: boolean) => void;
   setDeliveryStaging: (deliveryStaging: boolean, applicationId?: ApplicationId | null) => void;
+  setDeliveryProgress: (deliveryProgress: DeliveryProgress | null) => void;
   setLibraryFolder: (libraryFolder: string | null) => void;
   setActiveProject: (activeProject: ProjectSummary | null) => void;
   setAudioCacheProgress: (progress: AudioCacheProgress) => void;
@@ -201,6 +204,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   scanning: false,
   deliveryStaging: false,
   deliveryStagingApplicationId: null,
+  deliveryProgress: null,
   libraryFolder: null,
   activeProject: null,
   audioCacheProgress: { done: 0, total: 0, finished: true },
@@ -242,7 +246,9 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
             applicationId ?? state.activeProject?.application_id,
           )
         : null,
+      deliveryProgress: null,
     })),
+  setDeliveryProgress: (deliveryProgress) => set({ deliveryProgress }),
   setLibraryFolder: (libraryFolder) => set({ libraryFolder }),
   setActiveProject: (activeProject) => set({ activeProject }),
   setAudioCacheProgress: (audioCacheProgress) => set({ audioCacheProgress }),

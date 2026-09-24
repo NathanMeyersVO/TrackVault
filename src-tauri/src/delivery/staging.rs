@@ -7,6 +7,9 @@ use serde::{Deserialize, Serialize};
 use tar::Archive;
 use walkdir::WalkDir;
 
+use super::progress::{short_path_label, DeliveryProgressCtx};
+use crate::models::DeliveryProgressPhase;
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum DeliveryEntryKind {
@@ -169,10 +172,154 @@ pub fn default_delivery_browse_root() -> PathBuf {
     PathBuf::from(".")
 }
 
+enum StagingWorkItem {
+    ExtractArchive(PathBuf),
+    CopyTopLevelFile(PathBuf),
+    CopyRelative { src: PathBuf, rel: PathBuf },
+}
+
+fn staging_item_step_count(item: &StagingWorkItem) -> Result<u32, String> {
+    match item {
+        StagingWorkItem::ExtractArchive(path) => {
+            if is_tar_archive(path) {
+                count_tar_archive_steps(path)
+            } else if is_zip_archive(path) {
+                let file = fs::File::open(path).map_err(|e| e.to_string())?;
+                let archive = zip::ZipArchive::new(BufReader::new(file))
+                    .map_err(|e| format!("Invalid zip: {e}"))?;
+                Ok(archive.len() as u32)
+            } else {
+                Ok(1)
+            }
+        }
+        StagingWorkItem::CopyTopLevelFile(_) | StagingWorkItem::CopyRelative { .. } => Ok(1),
+    }
+}
+
+fn count_tar_archive_steps(archive_path: &Path) -> Result<u32, String> {
+    let reader = open_tar_reader(archive_path)?;
+    let mut archive = Archive::new(reader);
+    let mut count = 0u32;
+    for entry in archive.entries().map_err(|e| e.to_string())? {
+        entry.map_err(|e| e.to_string())?;
+        count += 1;
+    }
+    Ok(count.max(1))
+}
+
+fn staging_step(
+    progress: &DeliveryProgressCtx,
+    done: &mut u32,
+    total: u32,
+    current: String,
+    work: impl FnOnce() -> Result<(), String>,
+) -> Result<(), String> {
+    progress.emit(
+        DeliveryProgressPhase::Staging,
+        *done,
+        total,
+        false,
+        Some(current.clone()),
+    );
+    work()?;
+    *done += 1;
+    progress.emit(
+        DeliveryProgressPhase::Staging,
+        *done,
+        total,
+        false,
+        Some(current),
+    );
+    Ok(())
+}
+
+fn collect_staging_work(source_paths: &[String]) -> Result<Vec<StagingWorkItem>, String> {
+    let mut work = Vec::new();
+    for source in source_paths {
+        let path = PathBuf::from(source);
+        if !path.exists() {
+            return Err(format!("Path not found: {}", path.display()));
+        }
+        if path.is_dir() {
+            collect_work_from_tree(&path, &mut work)?;
+        } else if is_tar_archive(&path) || is_zip_archive(&path) {
+            work.push(StagingWorkItem::ExtractArchive(path));
+        } else if path.is_file() {
+            work.push(StagingWorkItem::CopyTopLevelFile(path));
+        } else {
+            return Err(format!("Unsupported path: {}", path.display()));
+        }
+    }
+    Ok(work)
+}
+
+fn collect_work_from_tree(from: &Path, work: &mut Vec<StagingWorkItem>) -> Result<(), String> {
+    for entry in WalkDir::new(from)
+        .follow_links(false)
+        .into_iter()
+        .filter_map(|e| e.ok())
+    {
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        if is_tar_archive(path) {
+            work.push(StagingWorkItem::ExtractArchive(path.to_path_buf()));
+        } else if is_zip_archive(path) {
+            work.push(StagingWorkItem::ExtractArchive(path.to_path_buf()));
+        } else if is_schedule_spreadsheet(path) || crate::scanner::is_audio_file(path) {
+            let rel = path.strip_prefix(from).map_err(|e| e.to_string())?;
+            work.push(StagingWorkItem::CopyRelative {
+                src: path.to_path_buf(),
+                rel: rel.to_path_buf(),
+            });
+        }
+    }
+    Ok(())
+}
+
+fn execute_staging_work(
+    item: &StagingWorkItem,
+    staging_root: &Path,
+    progress: &DeliveryProgressCtx,
+    done: &mut u32,
+    staging_total: u32,
+) -> Result<(), String> {
+    match item {
+        StagingWorkItem::ExtractArchive(p) => {
+            if is_tar_archive(p) {
+                extract_tar_into(p, staging_root, progress, done, staging_total)?;
+            } else {
+                extract_zip_into(p, staging_root, progress, done, staging_total)?;
+            }
+        }
+        StagingWorkItem::CopyTopLevelFile(p) => {
+            let label = short_path_label(p);
+            staging_step(progress, done, staging_total, label, || {
+                let name = p
+                    .file_name()
+                    .ok_or_else(|| format!("Invalid file: {}", p.display()))?;
+                fs::copy(p, staging_root.join(name)).map_err(|e| e.to_string())?;
+                Ok(())
+            })?;
+        }
+        StagingWorkItem::CopyRelative { src, rel } => {
+            let label = rel.to_string_lossy().replace('\\', "/");
+            let src = src.clone();
+            let rel = rel.clone();
+            staging_step(progress, done, staging_total, label, || {
+                copy_file_preserving_relative(&src, staging_root, &rel)
+            })?;
+        }
+    }
+    Ok(())
+}
+
 pub fn stage_delivery_sources(
     sessions_dir: &Path,
     session_id: &str,
     source_paths: &[String],
+    progress: &DeliveryProgressCtx,
 ) -> Result<PathBuf, String> {
     let staging_root = sessions_dir.join(session_id).join("staging");
     if staging_root.exists() {
@@ -180,26 +327,18 @@ pub fn stage_delivery_sources(
     }
     fs::create_dir_all(&staging_root).map_err(|e| e.to_string())?;
 
-    for source in source_paths {
-        let path = PathBuf::from(source);
-        if !path.exists() {
-            return Err(format!("Path not found: {}", path.display()));
-        }
-        if path.is_dir() {
-            ingest_delivery_folder(&path, &staging_root)?;
-        } else if is_tar_archive(&path) {
-            extract_tar_into(&path, &staging_root)?;
-        } else if is_zip_archive(&path) {
-            extract_zip_into(&path, &staging_root)?;
-        } else if path.is_file() {
-            let name = path
-                .file_name()
-                .ok_or_else(|| format!("Invalid file: {}", path.display()))?;
-            fs::copy(&path, staging_root.join(name)).map_err(|e| e.to_string())?;
-        } else {
-            return Err(format!("Unsupported path: {}", path.display()));
-        }
+    progress.emit(DeliveryProgressPhase::Scanning, 0, 0, false, None);
+    let work = collect_staging_work(source_paths)?;
+    let staging_total = work
+        .iter()
+        .map(staging_item_step_count)
+        .try_fold(0u32, |acc, n| n.map(|steps| acc + steps))?;
+    let mut done = 0u32;
+
+    for item in &work {
+        execute_staging_work(item, &staging_root, progress, &mut done, staging_total)?;
     }
+
     Ok(staging_root)
 }
 
@@ -220,35 +359,57 @@ fn is_tar_archive(path: &Path) -> bool {
     }
 }
 
-fn extract_tar_into(archive_path: &Path, dest: &Path) -> Result<(), String> {
+fn open_tar_reader(archive_path: &Path) -> Result<Box<dyn std::io::Read>, String> {
     let file = fs::File::open(archive_path).map_err(|e| e.to_string())?;
-    let reader: Box<dyn std::io::Read> =
-        if archive_path
-            .to_string_lossy()
-            .to_lowercase()
-            .ends_with(".gz")
-            && !archive_path
-                .to_string_lossy()
-                .to_lowercase()
-                .ends_with(".tar")
-        {
-            Box::new(GzDecoder::new(BufReader::new(file)))
-        } else if archive_path
-            .extension()
-            .and_then(|e| e.to_str())
-            .map(|e| e.eq_ignore_ascii_case("gz"))
-            .unwrap_or(false)
-        {
-            Box::new(GzDecoder::new(BufReader::new(file)))
-        } else {
-            Box::new(BufReader::new(file))
-        };
+    let lower = archive_path.to_string_lossy().to_lowercase();
+    let reader: Box<dyn std::io::Read> = if lower.ends_with(".gz") && !lower.ends_with(".tar") {
+        Box::new(GzDecoder::new(BufReader::new(file)))
+    } else if archive_path
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.eq_ignore_ascii_case("gz"))
+        .unwrap_or(false)
+    {
+        Box::new(GzDecoder::new(BufReader::new(file)))
+    } else {
+        Box::new(BufReader::new(file))
+    };
+    Ok(reader)
+}
+
+fn extract_tar_into(
+    archive_path: &Path,
+    dest: &Path,
+    progress: &DeliveryProgressCtx,
+    done: &mut u32,
+    staging_total: u32,
+) -> Result<(), String> {
+    let archive_label = short_path_label(archive_path);
+    let reader = open_tar_reader(archive_path)?;
     let mut archive = Archive::new(reader);
-    archive.unpack(dest).map_err(|e| e.to_string())?;
+    for entry in archive.entries().map_err(|e| e.to_string())? {
+        let mut entry = entry.map_err(|e| e.to_string())?;
+        let path = entry.path().map_err(|e| e.to_string())?;
+        let entry_label = path.to_string_lossy().replace('\\', "/");
+        let current = format!("{archive_label} › {entry_label}");
+        staging_step(progress, done, staging_total, current, || {
+            entry
+                .unpack_in(dest)
+                .map_err(|e| e.to_string())
+                .map(|_| ())
+        })?;
+    }
     Ok(())
 }
 
-fn extract_zip_into(archive_path: &Path, dest: &Path) -> Result<(), String> {
+fn extract_zip_into(
+    archive_path: &Path,
+    dest: &Path,
+    progress: &DeliveryProgressCtx,
+    done: &mut u32,
+    staging_total: u32,
+) -> Result<(), String> {
+    let archive_label = short_path_label(archive_path);
     let file = fs::File::open(archive_path).map_err(|e| e.to_string())?;
     let mut archive =
         zip::ZipArchive::new(BufReader::new(file)).map_err(|e| format!("Invalid zip: {e}"))?;
@@ -256,6 +417,8 @@ fn extract_zip_into(archive_path: &Path, dest: &Path) -> Result<(), String> {
         let mut entry = archive
             .by_index(i)
             .map_err(|e| format!("Zip entry {i}: {e}"))?;
+        let entry_name = entry.name().replace('\\', "/");
+        let current = format!("{archive_label} › {entry_name}");
         let Some(rel) = entry.enclosed_name() else {
             return Err(format!(
                 "Zip entry has an unsafe path: {}",
@@ -263,15 +426,30 @@ fn extract_zip_into(archive_path: &Path, dest: &Path) -> Result<(), String> {
             ));
         };
         let target = dest.join(rel);
+        progress.emit(
+            DeliveryProgressPhase::Staging,
+            *done,
+            staging_total,
+            false,
+            Some(current.clone()),
+        );
         if entry.is_dir() || entry.name().ends_with('/') {
             fs::create_dir_all(&target).map_err(|e| e.to_string())?;
-            continue;
+        } else {
+            if let Some(parent) = target.parent() {
+                fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+            }
+            let mut out = fs::File::create(&target).map_err(|e| e.to_string())?;
+            copy(&mut entry, &mut out).map_err(|e| e.to_string())?;
         }
-        if let Some(parent) = target.parent() {
-            fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-        }
-        let mut out = fs::File::create(&target).map_err(|e| e.to_string())?;
-        copy(&mut entry, &mut out).map_err(|e| e.to_string())?;
+        *done += 1;
+        progress.emit(
+            DeliveryProgressPhase::Staging,
+            *done,
+            staging_total,
+            false,
+            Some(current),
+        );
     }
     Ok(())
 }
@@ -297,9 +475,11 @@ pub fn ingest_delivery_folder(from: &Path, dest: &Path) -> Result<(), String> {
             continue;
         }
         if is_tar_archive(path) {
-            extract_tar_into(path, dest)?;
+            let mut done = 0u32;
+            extract_tar_into(path, dest, &DeliveryProgressCtx::none(), &mut done, 1)?;
         } else if is_zip_archive(path) {
-            extract_zip_into(path, dest)?;
+            let mut done = 0u32;
+            extract_zip_into(path, dest, &DeliveryProgressCtx::none(), &mut done, 1)?;
         } else if is_schedule_spreadsheet(path) || crate::scanner::is_audio_file(path) {
             let rel = path.strip_prefix(from).map_err(|e| e.to_string())?;
             copy_file_preserving_relative(path, dest, rel)?;
@@ -392,9 +572,13 @@ mod tests {
         write_test_zip(&zip_path, "tracks/01.mp3", b"fake-mp3");
 
         let sessions = base.join("sessions");
-        let staging_root =
-            stage_delivery_sources(&sessions, "test-session", &[zip_path.to_string_lossy().into()])
-                .expect("stage");
+        let staging_root = stage_delivery_sources(
+            &sessions,
+            "test-session",
+            &[zip_path.to_string_lossy().into()],
+            &DeliveryProgressCtx::none(),
+        )
+            .expect("stage");
 
         let audio = collect_audio_relative(&staging_root).expect("collect");
         assert_eq!(audio.len(), 1);
@@ -429,6 +613,7 @@ mod tests {
             &sessions,
             "folder-session",
             &[drop.to_string_lossy().into()],
+            &DeliveryProgressCtx::none(),
         )
         .expect("stage");
 

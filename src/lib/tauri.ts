@@ -82,6 +82,21 @@ export interface AudioCacheProgress {
   finished: boolean;
 }
 
+export type DeliveryProgressPhase =
+  | "scanning"
+  | "staging"
+  | "analyzing"
+  | "applying"
+  | "scanning_library";
+
+export interface DeliveryProgress {
+  phase: DeliveryProgressPhase;
+  done: number;
+  total: number;
+  finished: boolean;
+  current?: string;
+}
+
 export interface AudioCacheTrackReady {
   track_id: number;
 }

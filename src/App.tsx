@@ -61,6 +61,7 @@ function MainContent() {
 
 export default function App() {
   const deliveryStaging = usePlayerStore((state) => state.deliveryStaging);
+  const deliveryProgress = usePlayerStore((state) => state.deliveryProgress);
   const deliveryStagingApplicationId = usePlayerStore(
     (state) => state.deliveryStagingApplicationId,
   );
@@ -96,10 +97,7 @@ export default function App() {
   return (
     <div className="flex h-full flex-col">
       {deliveryStaging ? (
-        <DeliveryBusyOverlay
-          title={stagingTitle}
-          detail="Extracting archives and preparing preview."
-        />
+        <DeliveryBusyOverlay title={stagingTitle} progress={deliveryProgress} />
       ) : null}
       <AppMenuBar />
       <div className="flex min-h-0 flex-1">

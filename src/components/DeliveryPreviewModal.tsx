@@ -11,6 +11,7 @@ import {
   groupSelectionState,
 } from "../lib/deliveryPreviewGroups";
 import { getDeliveryCopy } from "../lib/applicationConfig";
+import { usePlayerStore } from "../store/playerStore";
 import { DeliveryBusyOverlay } from "./DeliveryBusyOverlay";
 
 export interface DeliveryPreviewModalProps {
@@ -40,6 +41,8 @@ export function DeliveryPreviewModal({
   const [previewRefreshing, setPreviewRefreshing] = useState(mode === "update");
   const [error, setError] = useState<string | null>(null);
   const deliveryCopy = getDeliveryCopy(applicationId);
+  const deliveryProgress = usePlayerStore((s) => s.deliveryProgress);
+  const setDeliveryProgress = usePlayerStore((s) => s.setDeliveryProgress);
 
   const groups = useMemo(() => groupDeliveryChanges(preview.changes), [preview.changes]);
 
@@ -148,6 +151,7 @@ export function DeliveryPreviewModal({
       setError(String(e));
     } finally {
       setBusy(false);
+      setDeliveryProgress(null);
     }
   };
 
@@ -156,7 +160,7 @@ export function DeliveryPreviewModal({
       {busy ? (
         <DeliveryBusyOverlay
           title={mode === "create" ? "Creating project…" : deliveryCopy.applyingBusyTitle}
-          detail="Copying files and updating the project library."
+          progress={deliveryProgress}
         />
       ) : null}
       <div className="flex max-h-[90vh] w-full max-w-2xl flex-col rounded-lg border border-border bg-surface shadow-xl">

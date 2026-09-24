@@ -1,7 +1,10 @@
 mod apply;
 mod diff;
+mod progress;
 mod session;
 mod staging;
+
+pub use progress::DeliveryProgressCtx;
 
 pub use apply::{apply_delivery, ApplyDeliveryResult, ApplyMode};
 pub use diff::{

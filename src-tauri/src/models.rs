@@ -98,6 +98,26 @@ pub struct AudioCacheProgress {
     pub finished: bool,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum DeliveryProgressPhase {
+    Scanning,
+    Staging,
+    Analyzing,
+    Applying,
+    ScanningLibrary,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeliveryProgress {
+    pub phase: DeliveryProgressPhase,
+    pub done: u32,
+    pub total: u32,
+    pub finished: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub current: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AudioCacheTrackReady {
     pub track_id: i64,
