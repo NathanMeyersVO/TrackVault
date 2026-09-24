@@ -34,14 +34,11 @@ export function AppMenuBar() {
     applyDeliveryPickerModal,
     deliveryFolderConfirmModal,
     deliveryUpdateModal,
-    uploadToLibrary,
-    uploadToCollection,
-    phoneUploadReady,
+    openLibraryUpload,
+    openCollectionUpload,
     openPhoneUploadSettings,
     phoneUploadSettingsModal,
-    openLibraryRemoteUpload,
-    openCollectionRemoteUpload,
-    remoteImportModal,
+    uploadTracksModal,
     exportProject,
     importCollection,
     actionsDisabled,
@@ -70,22 +67,12 @@ export function AppMenuBar() {
       disabled: libraryActionsDisabled || deliveryStaging,
     },
     {
-      label: libraryUploading ? "Uploading to library…" : "Upload to Library",
-      title: "Copy audio files into the library folder and add them to the index.",
+      label: libraryUploading ? "Uploading to library…" : "Upload to Library…",
+      title:
+        "Copy audio files into the library folder (choose files, drag and drop, or upload from phone).",
       disabled: libraryUploadDisabled,
-      onClick: () => void uploadToLibrary(),
+      onClick: () => openLibraryUpload(),
     },
-    ...(phoneUploadReady
-      ? [
-          {
-            label: "Upload to library from phone…",
-            title:
-              "Open a Cloudflare tunnel session and receive audio from your phone into the library.",
-            onClick: () => openLibraryRemoteUpload(),
-            disabled: libraryUploadDisabled,
-          } satisfies MenuEntry,
-        ]
-      : []),
     {
       label: exportingProject ? "Exporting project…" : "Export Project…",
       title: "Save the open project (library audio, schedule, and trackvault.json) to a .tgz archive.",
@@ -107,19 +94,8 @@ export function AppMenuBar() {
         : collectionUploadLabel,
       title: "Copy audio files into the active stored collection.",
       disabled: collectionUploadDisabled,
-      onClick: () => void uploadToCollection(),
+      onClick: () => openCollectionUpload(),
     },
-    ...(phoneUploadReady
-      ? [
-          {
-            label: "Upload to collection from phone…",
-            title:
-              "Open a Cloudflare tunnel session and receive audio from your phone into the active collection.",
-            onClick: () => openCollectionRemoteUpload(),
-            disabled: collectionUploadDisabled,
-          } satisfies MenuEntry,
-        ]
-      : []),
   ];
 
   const fileItems: MenuEntry[] = [
@@ -205,7 +181,7 @@ export function AppMenuBar() {
       </header>
       {libraryUploadConfirmDialog}
       {collectionUploadConfirmDialog}
-      {remoteImportModal}
+      {uploadTracksModal}
       {phoneUploadSettingsModal}
       {projectHubModal}
       {applyDeliveryPickerModal}

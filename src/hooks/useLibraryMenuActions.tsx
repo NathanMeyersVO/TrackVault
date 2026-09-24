@@ -14,7 +14,7 @@ import { DeliveryPreviewModal } from "../components/DeliveryPreviewModal";
 import { useDeliveryFolderConfirm } from "./useDeliveryFolderConfirm";
 import { ProjectHubModal } from "../components/ProjectHubModal";
 import { PhoneUploadSettingsModal } from "../components/PhoneUploadSettingsModal";
-import { RemoteImportFromPhoneModal } from "../components/RemoteImportFromPhoneModal";
+import { UploadTracksModal } from "../components/UploadTracksModal";
 import { usePhoneUploadSettings } from "./usePhoneUploadSettings";
 import { getDeliveryCopy, normalizeApplicationId } from "../lib/applicationConfig";
 import { api, type DeliveryPreview } from "../lib/tauri";
@@ -58,7 +58,7 @@ export function useLibraryMenuActions() {
   const libraryUpload = useUploadTracks();
   const collectionUpload = useCollectionUpload(collectionId);
   const {
-    uploadTracks: uploadToLibrary,
+    uploadFromPaths: uploadLibraryFromPaths,
     uploading: libraryUploading,
     uploadMessage: libraryUploadMessage,
     uploadError: libraryUploadError,
@@ -68,7 +68,7 @@ export function useLibraryMenuActions() {
     showUploadError: showLibraryUploadError,
   } = libraryUpload;
   const {
-    uploadTracks: uploadToCollection,
+    uploadFromPaths: uploadCollectionFromPaths,
     uploading: collectionUploading,
     uploadMessage: collectionUploadMessage,
     uploadError: collectionUploadError,
@@ -110,7 +110,7 @@ export function useLibraryMenuActions() {
   const [changeLibraryConfirmOpen, setChangeLibraryConfirmOpen] = useState(false);
   const [pendingLibraryFolder, setPendingLibraryFolder] = useState<string | null>(null);
   const [importingCollection, setImportingCollection] = useState(false);
-  const [remoteImportMode, setRemoteImportMode] = useState<
+  const [uploadModalTarget, setUploadModalTarget] = useState<
     "library" | "collection" | null
   >(null);
   const [projectHubOpen, setProjectHubOpen] = useState(false);
@@ -379,62 +379,43 @@ export function useLibraryMenuActions() {
     setPhoneUploadSettingsOpen(false);
   }, []);
 
-  const ensurePhoneUploadReady = useCallback((): boolean => {
-    if (phoneUploadReady) return true;
-    setConfigError("Configure phone upload in View → Phone upload setup.");
-    setPhoneUploadSettingsOpen(true);
-    return false;
-  }, [phoneUploadReady]);
-
-  const openLibraryRemoteUpload = useCallback(() => {
+  const openLibraryUpload = useCallback(() => {
     if (!libraryFolder) {
       showLibraryUploadError("Choose a library folder before uploading tracks.");
       return;
     }
-    if (!ensurePhoneUploadReady()) return;
     clearUploadFeedback();
-    setRemoteImportMode("library");
-  }, [
-    clearUploadFeedback,
-    ensurePhoneUploadReady,
-    libraryFolder,
-    showLibraryUploadError,
-  ]);
+    setUploadModalTarget("library");
+  }, [clearUploadFeedback, libraryFolder, showLibraryUploadError]);
 
-  const openCollectionRemoteUpload = useCallback(() => {
+  const openCollectionUpload = useCallback(() => {
     if (collectionId == null) {
       showCollectionUploadError("Open a stored collection before uploading tracks.");
       return;
     }
-    if (!ensurePhoneUploadReady()) return;
     clearUploadFeedback();
-    setRemoteImportMode("collection");
-  }, [
-    clearUploadFeedback,
-    collectionId,
-    ensurePhoneUploadReady,
-    showCollectionUploadError,
-  ]);
+    setUploadModalTarget("collection");
+  }, [clearUploadFeedback, collectionId, showCollectionUploadError]);
 
-  const closeRemoteImport = useCallback(() => {
-    setRemoteImportMode(null);
+  const closeUploadModal = useCallback(() => {
+    setUploadModalTarget(null);
   }, []);
 
-  const handleRemoteImportUploaded = useCallback(
+  const handlePhoneUploadComplete = useCallback(
     (message: string) => {
       clearUploadFeedback();
-      if (remoteImportMode === "collection") {
+      if (uploadModalTarget === "collection") {
         showCollectionUploadMessage(message);
       } else {
         showLibraryUploadMessage(message);
       }
-      setRemoteImportMode(null);
+      setUploadModalTarget(null);
     },
     [
       clearUploadFeedback,
-      remoteImportMode,
       showCollectionUploadMessage,
       showLibraryUploadMessage,
+      uploadModalTarget,
     ],
   );
 
@@ -499,7 +480,7 @@ export function useLibraryMenuActions() {
     />
   ) : null;
 
-  const remoteImportOpen = remoteImportMode != null;
+  const uploadModalOpen = uploadModalTarget != null;
 
   const projectHubModal = projectHubOpen ? (
     <ProjectHubModal onClose={closeProjectHub} />
@@ -541,24 +522,7 @@ export function useLibraryMenuActions() {
     />
   ) : null;
 
-  const remoteImportModal =
-    remoteImportMode === "library" ? (
-      <RemoteImportFromPhoneModal
-        mode="library"
-        onClose={closeRemoteImport}
-        onUploaded={handleRemoteImportUploaded}
-      />
-    ) : remoteImportMode === "collection" && collectionId != null ? (
-      <RemoteImportFromPhoneModal
-        mode="collection"
-        collectionId={collectionId}
-        collectionName={collectionName}
-        onClose={closeRemoteImport}
-        onUploaded={handleRemoteImportUploaded}
-      />
-    ) : null;
-
-  const fileOperationBusy =
+  const coreFileOperationBusy =
     scanning ||
     deliveryStaging ||
     uploading ||
@@ -566,12 +530,40 @@ export function useLibraryMenuActions() {
     loadingConfig ||
     closingLibrary ||
     importingCollection ||
-    exportingProject ||
-    remoteImportOpen;
+    exportingProject;
+  const fileOperationBusy = coreFileOperationBusy || uploadModalOpen;
   const actionsDisabled = fileOperationBusy;
   const libraryActionsDisabled = fileOperationBusy || !libraryFolder;
   const libraryUploadDisabled = fileOperationBusy || !libraryFolder;
   const collectionUploadDisabled = fileOperationBusy || collectionId == null;
+  const libraryUploadModalEnabled = !coreFileOperationBusy && !!libraryFolder;
+  const collectionUploadModalEnabled =
+    !coreFileOperationBusy && collectionId != null;
+
+  const uploadTracksModal =
+    uploadModalTarget === "library" ? (
+      <UploadTracksModal
+        mode="library"
+        phoneUploadReady={phoneUploadReady}
+        enabled={libraryUploadModalEnabled}
+        uploading={libraryUploading}
+        onClose={closeUploadModal}
+        onUploadFromPaths={uploadLibraryFromPaths}
+        onPhoneUploaded={handlePhoneUploadComplete}
+      />
+    ) : uploadModalTarget === "collection" && collectionId != null ? (
+      <UploadTracksModal
+        mode="collection"
+        collectionId={collectionId}
+        collectionName={collectionName}
+        phoneUploadReady={phoneUploadReady}
+        enabled={collectionUploadModalEnabled}
+        uploading={collectionUploading}
+        onClose={closeUploadModal}
+        onUploadFromPaths={uploadCollectionFromPaths}
+        onPhoneUploaded={handlePhoneUploadComplete}
+      />
+    ) : null;
 
   return {
     libraryFolder,
@@ -604,14 +596,12 @@ export function useLibraryMenuActions() {
     applyDeliveryPickerModal,
     deliveryFolderConfirmModal,
     deliveryUpdateModal,
-    uploadToLibrary,
-    uploadToCollection,
+    openLibraryUpload,
+    openCollectionUpload,
     phoneUploadReady,
     openPhoneUploadSettings,
     phoneUploadSettingsModal,
-    openLibraryRemoteUpload,
-    openCollectionRemoteUpload,
-    remoteImportModal,
+    uploadTracksModal,
     exportProject,
     exportingProject,
     saveConfiguration,

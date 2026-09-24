@@ -1,7 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
-import { openPath } from "@tauri-apps/plugin-opener";
 import {
   api,
   formatDuration,
@@ -12,10 +11,12 @@ import { invalidateTrackTags } from "../lib/trackTagsCache";
 import { useLibrary } from "../hooks/usePlayer";
 import { usePhoneUploadSettings } from "../hooks/usePhoneUploadSettings";
 import { usePlayerStore } from "../store/playerStore";
+import { AudioFilesDropZone } from "./AudioFilesDropZone";
 import { LocalFileAudioPreview } from "./LocalFileAudioPreview";
-import { RemoteUploadPanel } from "./RemoteUploadPanel";
-
-const AUDIO_EXTENSIONS = ["mp3", "flac", "wav", "ogg", "m4a", "aac", "mp4", "aiff"];
+import { ReplaceTrackPhoneSection } from "./ReplaceTrackPhoneSection";
+import { TrackDeliveryOptionSection } from "./TrackDeliveryOptionSection";
+import { AUDIO_FILE_DIALOG_FILTER } from "../lib/audioExtensions";
+import { trackDeliveryIntro } from "../lib/trackDeliveryCopy";
 
 interface ReplaceTrackFileModalProps {
   track: Track;
@@ -46,11 +47,8 @@ export function ReplaceTrackFileModal({ track, onClose }: ReplaceTrackFileModalP
   const [loading, setLoading] = useState(false);
   const [committing, setCommitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [remoteUploadUrl, setRemoteUploadUrl] = useState<string | null>(null);
-  const [remoteWaiting, setRemoteWaiting] = useState(false);
-  const [remoteStarting, setRemoteStarting] = useState(false);
-  const [remoteLogPath, setRemoteLogPath] = useState<string | null>(null);
-  const remoteStartInFlight = useRef(false);
+  const [dropError, setDropError] = useState<string | null>(null);
+  const [phoneBusy, setPhoneBusy] = useState(false);
 
   const handleClose = useCallback(() => {
     void api.stopReplaceRemoteUpload();
@@ -82,19 +80,6 @@ export function ReplaceTrackFileModal({ track, onClose }: ReplaceTrackFileModalP
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [committing, handleClose]);
 
-  useEffect(() => {
-    void api.getReplaceRemoteUploadLogPath().then(setRemoteLogPath).catch(() => {});
-  }, []);
-
-  const openLogsFolder = useCallback(async () => {
-    try {
-      const dir = await api.getReplaceRemoteUploadLogsDir();
-      await openPath(dir);
-    } catch {
-      setError("Could not open the diagnostics log folder.");
-    }
-  }, []);
-
   const applySourcePath = useCallback(
     async (selected: string) => {
       setError(null);
@@ -103,8 +88,6 @@ export function ReplaceTrackFileModal({ track, onClose }: ReplaceTrackFileModalP
       try {
         const result = await api.previewReplaceLibraryTrackFile(track.id, selected);
         setPreview(result);
-        setRemoteWaiting(false);
-        setRemoteUploadUrl(null);
       } catch (err) {
         setSourcePath(null);
         setPreview(null);
@@ -131,56 +114,17 @@ export function ReplaceTrackFileModal({ track, onClose }: ReplaceTrackFileModalP
     };
   }, [applySourcePath, track.id]);
 
-  useEffect(() => {
-    if (!remoteWaiting || preview) return;
-
-    const interval = window.setInterval(() => {
-      void api.getReplaceRemoteUploadStatus().then((status) => {
-        if (status.status === "failed" && status.error) {
-          setError(status.error);
-          setRemoteWaiting(false);
-          setRemoteUploadUrl(null);
-        }
-      });
-    }, 2000);
-
-    return () => window.clearInterval(interval);
-  }, [preview, remoteWaiting]);
-
   const chooseFile = useCallback(async () => {
     setError(null);
-    setRemoteUploadUrl(null);
-    setRemoteWaiting(false);
     const selected = await open({
       multiple: false,
       title: "Choose replacement audio file",
-      filters: [{ name: "Audio", extensions: AUDIO_EXTENSIONS }],
+      filters: [AUDIO_FILE_DIALOG_FILTER],
     });
     if (selected == null || Array.isArray(selected)) return;
 
     await applySourcePath(selected);
   }, [applySourcePath]);
-
-  const startRemoteUpload = useCallback(async () => {
-    if (remoteStartInFlight.current) return;
-    remoteStartInFlight.current = true;
-    setError(null);
-    setRemoteStarting(true);
-    try {
-      const info = await api.startReplaceRemoteUpload(track.id);
-      setRemoteUploadUrl(info.uploadUrl);
-      setRemoteLogPath(info.logFilePath);
-      setRemoteWaiting(true);
-    } catch (err) {
-      setRemoteUploadUrl(null);
-      setRemoteLogPath(null);
-      setRemoteWaiting(false);
-      setError(String(err));
-    } finally {
-      remoteStartInFlight.current = false;
-      setRemoteStarting(false);
-    }
-  }, [track.id]);
 
   const handleConfirm = useCallback(async () => {
     if (!sourcePath) return;
@@ -199,7 +143,8 @@ export function ReplaceTrackFileModal({ track, onClose }: ReplaceTrackFileModalP
     }
   }, [handleClose, patchTrack, refresh, sourcePath, track.id]);
 
-  const busy = loading || committing || remoteStarting;
+  const busy = loading || committing || phoneBusy;
+  const deliveryOptions = phoneUploadReady ? 3 : 2;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
@@ -227,40 +172,60 @@ export function ReplaceTrackFileModal({ track, onClose }: ReplaceTrackFileModalP
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
           {!preview ? (
             <div className="space-y-3 text-sm text-foreground">
-              <p>
-                Choose a new audio file to replace{" "}
-                <span className="font-medium">{track.title}</span> in the library.
-              </p>
-              <p className="text-muted">
-                After you select a file, TrackVault will verify it is valid audio. You will
-                then see a confirmation step before the library file is changed. The file you
-                choose stays where it is on your computer—only a copy in the library folder
-                will be updated.
-              </p>
-              {remoteLogPath && (
-                <p className="text-xs text-muted">
-                  Diagnostics log:{" "}
-                  <span className="break-all text-foreground">{remoteLogPath}</span>{" "}
-                  <button
-                    type="button"
-                    onClick={() => void openLogsFolder()}
-                    className="text-accent hover:underline"
-                  >
-                    Open log folder
-                  </button>
+              <div className="space-y-1 text-xs text-muted">
+                <p className="text-sm text-foreground">
+                  {trackDeliveryIntro(deliveryOptions, false)} Replacing{" "}
+                  <span className="font-medium text-foreground">{track.title}</span> in the
+                  library.
                 </p>
-              )}
-              {sourcePath && loading && (
-                <p className="text-muted">Verifying selected file…</p>
-              )}
-              {phoneUploadReady ? (
-                <RemoteUploadPanel
-                  uploadUrl={remoteUploadUrl}
-                  waiting={remoteWaiting && !loading}
-                  busy={busy}
-                  destinationHint={`Replacing “${track.title}”`}
-                  onCopyError={setError}
+                <p>
+                  TrackVault will verify the file, then show a confirmation step before the
+                  library copy is updated. Your original file on disk is not moved or deleted.
+                </p>
+              </div>
+
+              <TrackDeliveryOptionSection title="Choose file">
+                <button
+                  type="button"
+                  onClick={() => void chooseFile()}
+                  disabled={busy}
+                  className="w-full rounded-md bg-accent px-3 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-40"
+                >
+                  Choose file…
+                </button>
+              </TrackDeliveryOptionSection>
+
+              <TrackDeliveryOptionSection title="Drag and drop">
+                <AudioFilesDropZone
+                  label="Drop replacement audio file here"
+                  enabled={!busy}
+                  multiple={false}
+                  onAudioPathsDropped={(paths) => {
+                    setDropError(null);
+                    void applySourcePath(paths[0]);
+                  }}
+                  onRejected={() =>
+                    setDropError(
+                      "Drop a single audio file (mp3, flac, wav, and similar formats).",
+                    )
+                  }
                 />
+                {dropError && <p className="text-sm text-red-400">{dropError}</p>}
+                {sourcePath && loading && (
+                  <p className="text-muted">Verifying selected file…</p>
+                )}
+              </TrackDeliveryOptionSection>
+
+              {phoneUploadReady ? (
+                <TrackDeliveryOptionSection title="Upload from phone">
+                  <ReplaceTrackPhoneSection
+                    trackId={track.id}
+                    trackTitle={track.title}
+                    enabled={!loading}
+                    onError={setError}
+                    onBusyChange={setPhoneBusy}
+                  />
+                </TrackDeliveryOptionSection>
               ) : null}
             </div>
           ) : (
@@ -381,32 +346,7 @@ export function ReplaceTrackFileModal({ track, onClose }: ReplaceTrackFileModalP
           >
             Cancel
           </button>
-          {!preview ? (
-            <>
-              {phoneUploadReady ? (
-                <button
-                  type="button"
-                  onClick={() => void startRemoteUpload()}
-                  disabled={busy || remoteWaiting}
-                  className="rounded-md border border-border px-3 py-1.5 text-sm text-foreground hover:bg-surface-hover disabled:opacity-40"
-                >
-                  {remoteStarting
-                    ? "Starting tunnel…"
-                    : remoteWaiting
-                      ? "Waiting for phone…"
-                      : "Upload from phone…"}
-                </button>
-              ) : null}
-              <button
-                type="button"
-                onClick={() => void chooseFile()}
-                disabled={busy}
-                className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-40"
-              >
-                Choose file…
-              </button>
-            </>
-          ) : (
+          {preview ? (
             <button
               type="button"
               onClick={() => void handleConfirm()}
@@ -415,7 +355,7 @@ export function ReplaceTrackFileModal({ track, onClose }: ReplaceTrackFileModalP
             >
               {committing ? "Replacing…" : "OK"}
             </button>
-          )}
+          ) : null}
         </div>
       </div>
     </div>

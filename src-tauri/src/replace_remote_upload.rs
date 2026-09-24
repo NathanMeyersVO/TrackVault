@@ -971,6 +971,13 @@ async fn receive_upload(
         );
     }
 
+    if matches!(
+        session_kind,
+        SessionKind::LibraryImport | SessionKind::CollectionImport { .. }
+    ) {
+        return finish_import_upload(&ctx, &session_kind, &temp_dir, uploads).await;
+    }
+
     let mut last_response = html_message(
         StatusCode::BAD_REQUEST,
         "Upload failed",
@@ -998,8 +1005,7 @@ async fn receive_upload(
             );
         }
 
-        last_response = match &session_kind {
-        SessionKind::Replace { track_id } => {
+        last_response = if let SessionKind::Replace { track_id } = &session_kind {
             let validation_error = {
                 let db = ctx.db.lock();
                 replace_track::validate_replacement_source(&db, *track_id, &temp_path)
@@ -1064,77 +1070,123 @@ async fn receive_upload(
             };
 
             html_message(StatusCode::OK, "Upload received", &success_detail)
-        }
-        SessionKind::LibraryImport | SessionKind::CollectionImport { .. } => {
-            if !is_audio_file(&temp_path) {
-                let _ = std::fs::remove_file(&temp_path);
-                if let Some(log) = &ctx.log {
-                    log.event(
-                        &ctx.session_log_id,
-                        "WARN",
-                        "upload_rejected",
-                        &format!("file=\"{safe_name}\" err=\"unsupported file type\""),
-                    );
-                }
-                return html_message(
-                    StatusCode::BAD_REQUEST,
-                    "Invalid audio file",
-                    "Choose a supported audio format (MP3, FLAC, WAV, and similar).",
-                );
-            }
-
-            let (mode, collection_id, all_paths) = {
-                let mut session = ctx.session.lock();
-                let Some(record) = session.as_mut() else {
-                    let _ = std::fs::remove_file(&temp_path);
-                    return html_message(
-                        StatusCode::GONE,
-                        "Upload session ended",
-                        "Return to TrackVault and start upload again.",
-                    );
-                };
-                record.received_paths.push(temp_path);
-                record.error = None;
-                let paths: Vec<String> = record
-                    .received_paths
-                    .iter()
-                    .map(|p| p.to_string_lossy().into_owned())
-                    .collect();
-                (
-                    record.kind.mode_str().to_string(),
-                    record.kind.collection_id(),
-                    paths,
-                )
-            };
-
-            if let Some(log) = &ctx.log {
-                log.event(
-                    &ctx.session_log_id,
-                    "INFO",
-                    "import_file_received",
-                    &format!("file=\"{safe_name}\" total={}", all_paths.len()),
-                );
-            }
-
-            let _ = ctx.app.emit(
-                "remote-import-upload-updated",
-                serde_json::json!({
-                    "mode": mode,
-                    "collectionId": collection_id,
-                    "sourcePaths": all_paths,
-                }),
-            );
-
+        } else {
+            let _ = std::fs::remove_file(&temp_path);
             html_message(
-                StatusCode::OK,
-                "Upload received",
-                "You can upload more files or return to TrackVault and tap Upload.",
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Upload failed",
+                "Unexpected upload session type.",
             )
-        }
         };
     }
 
     last_response
+}
+
+async fn finish_import_upload(
+    ctx: &Arc<ServerContext>,
+    session_kind: &SessionKind,
+    temp_dir: &Path,
+    uploads: Vec<(String, Vec<u8>)>,
+) -> Response {
+    let mut saved_paths: Vec<PathBuf> = Vec::new();
+
+    for (raw_name, data) in uploads {
+        let safe_name = sanitize_file_name(&raw_name);
+        let byte_len = data.len();
+        if let Some(log) = &ctx.log {
+            log.event(
+                &ctx.session_log_id,
+                "INFO",
+                "upload_received",
+                &format!("file=\"{safe_name}\" bytes={byte_len}"),
+            );
+        }
+
+        let temp_path = unique_temp_path(temp_dir, &safe_name);
+        if let Err(error) = std::fs::write(&temp_path, &data) {
+            for path in &saved_paths {
+                let _ = std::fs::remove_file(path);
+            }
+            return html_message(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Save failed",
+                &format!("Could not save upload: {error}"),
+            );
+        }
+
+        if !is_audio_file(&temp_path) {
+            let _ = std::fs::remove_file(&temp_path);
+            for path in &saved_paths {
+                let _ = std::fs::remove_file(path);
+            }
+            if let Some(log) = &ctx.log {
+                log.event(
+                    &ctx.session_log_id,
+                    "WARN",
+                    "upload_rejected",
+                    &format!("file=\"{safe_name}\" err=\"unsupported file type\""),
+                );
+            }
+            return html_message(
+                StatusCode::BAD_REQUEST,
+                "Invalid audio file",
+                "Choose a supported audio format (MP3, FLAC, WAV, and similar).",
+            );
+        }
+
+        saved_paths.push(temp_path);
+    }
+
+    let (mode, collection_id, all_paths) = {
+        let mut session = ctx.session.lock();
+        let Some(record) = session.as_mut() else {
+            for path in &saved_paths {
+                let _ = std::fs::remove_file(path);
+            }
+            return html_message(
+                StatusCode::GONE,
+                "Upload session ended",
+                "Return to TrackVault and start upload again.",
+            );
+        };
+        record.received_paths.extend(saved_paths);
+        record.error = None;
+        let paths: Vec<String> = record
+            .received_paths
+            .iter()
+            .map(|p| p.to_string_lossy().into_owned())
+            .collect();
+        (
+            record.kind.mode_str().to_string(),
+            record.kind.collection_id(),
+            paths,
+        )
+    };
+
+    if let Some(log) = &ctx.log {
+        log.event(
+            &ctx.session_log_id,
+            "INFO",
+            "import_batch_received",
+            &format!("files={} total={}", session_kind.mode_str(), all_paths.len()),
+        );
+    }
+
+    let _ = ctx.app.emit(
+        "remote-import-upload-updated",
+        serde_json::json!({
+            "mode": mode,
+            "collectionId": collection_id,
+            "sourcePaths": all_paths,
+        }),
+    );
+
+    html_message(
+        StatusCode::OK,
+        "Upload received",
+        "TrackVault is adding these files—you can close this page.",
+    )
 }
 
 fn token_matches(ctx: &ServerContext, token: &str) -> bool {
@@ -1439,7 +1491,7 @@ fn render_import_upload_page(ctx: &UploadPageContext, allow_multiple: bool) -> S
     };
 
     let instructions = if allow_multiple {
-        "Select one or more audio files (maximum 500 MB each). You can submit again to add more files."
+        "Select one or more audio files (maximum 500 MB each). TrackVault will import them automatically."
     } else {
         "Select one audio file to send to TrackVault (maximum 500 MB)."
     };
