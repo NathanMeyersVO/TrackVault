@@ -783,36 +783,6 @@ pub fn reorder_taglist_tracks(
         .map_err(|e| e.to_string())
 }
 
-fn write_partition_tag_for_track(
-    db: &Database,
-    track_id: i64,
-    path: &Path,
-    partition_key: &str,
-    partition_value: &str,
-) -> Result<Track, String> {
-    let metadata = crate::tags::write_track_tags(
-        db,
-        path,
-        &[crate::tags::TagFieldInput {
-            key: partition_key.to_string(),
-            value: partition_value.to_string(),
-        }],
-    )?;
-    let track = db
-        .update_track_metadata(
-            track_id,
-            &metadata.title,
-            &metadata.artist,
-            &metadata.album,
-            metadata.track_number,
-        )
-        .map_err(|e| e.to_string())?;
-    crate::tag_index::index_track_tags(db, track_id, path)?;
-    db.sync_taglist_order_for_track(track_id)
-        .map_err(|e| e.to_string())?;
-    Ok(track)
-}
-
 #[tauri::command]
 pub fn list_taglist_swap_targets(
     state: State<'_, AppState>,
@@ -827,6 +797,28 @@ pub fn list_taglist_swap_targets(
 }
 
 #[tauri::command]
+pub fn preview_swap_taglist_entries(
+    state: State<'_, AppState>,
+    taglist_id: i64,
+    source_value: Option<String>,
+    target_value: Option<String>,
+    source_track_id: i64,
+    swap_library_paths: bool,
+    swap_basenames: bool,
+) -> Result<crate::taglist_swap::SwapTaglistPreview, String> {
+    let db = state.db.lock();
+    crate::taglist_swap::preview_swap_taglist_entries(
+        &db,
+        taglist_id,
+        source_value.as_deref(),
+        target_value.as_deref(),
+        source_track_id,
+        swap_library_paths,
+        swap_basenames,
+    )
+}
+
+#[tauri::command]
 pub fn swap_taglist_entries(
     app: AppHandle,
     state: State<'_, AppState>,
@@ -834,128 +826,45 @@ pub fn swap_taglist_entries(
     source_value: Option<String>,
     target_value: Option<String>,
     source_track_id: i64,
+    swap_tag_keys: Vec<String>,
+    swap_library_paths: bool,
+    swap_basenames: bool,
 ) -> Result<Vec<Track>, String> {
-    let (
-        partition_key,
-        source_path,
-        partner_id,
-        partner_path,
-        partition_a,
-        partition_b,
-        source_order,
-        target_order,
-    ) = {
-        let db = state.db.lock();
-        crate::tag_index::backfill_unindexed_tracks(&db)?;
-        let taglist = db
-            .get_taglist(taglist_id)
-            .map_err(|e| e.to_string())?
-            .ok_or("Taglist not found")?;
-        if taglist.entry_tag_key.trim().is_empty() {
-            return Err("Taglist has no entry tag configured".to_string());
-        }
-
-        let partner_id = db
-            .resolve_taglist_swap_partner(
-                taglist_id,
-                source_value.as_deref(),
-                target_value.as_deref(),
-                source_track_id,
-            )
-            .map_err(|e| e.to_string())?;
-
-        let partition_a = db
-            .require_single_tag_value(source_track_id, &taglist.tag_key)
-            .map_err(|e| e.to_string())?;
-        let partition_b = db
-            .require_single_tag_value(partner_id, &taglist.tag_key)
-            .map_err(|e| e.to_string())?;
-
-        let source_track = db
-            .get_track(source_track_id)
-            .map_err(|e| e.to_string())?
-            .ok_or("Source track not found")?;
-        let partner_track = db
-            .get_track(partner_id)
-            .map_err(|e| e.to_string())?
-            .ok_or("Partner track not found")?;
-
-        let source_tracks = db
-            .list_taglist_tracks(
-                taglist_id,
-                &taglist.tag_key,
-                source_value.as_deref(),
-            )
-            .map_err(|e| e.to_string())?;
-        let target_tracks = db
-            .list_taglist_tracks(
-                taglist_id,
-                &taglist.tag_key,
-                target_value.as_deref(),
-            )
-            .map_err(|e| e.to_string())?;
-        let source_order: Vec<i64> = source_tracks.iter().map(|t| t.id).collect();
-        let target_order: Vec<i64> = target_tracks.iter().map(|t| t.id).collect();
-
-        (
-            taglist.tag_key,
-            source_track.path,
-            partner_id,
-            partner_track.path,
-            partition_a,
-            partition_b,
-            source_order,
-            target_order,
-        )
-    };
-
-    let track_a = {
-        let db = state.db.lock();
-        write_partition_tag_for_track(
-            &db,
-            source_track_id,
-            Path::new(&source_path),
-            &partition_key,
-            &partition_b,
-        )?
-    };
-
-    let track_b = match write_partition_tag_for_track(
-        &state.db.lock(),
-        partner_id,
-        Path::new(&partner_path),
-        &partition_key,
-        &partition_a,
-    ) {
-        Ok(track) => track,
-        Err(err) => {
-            let _ = write_partition_tag_for_track(
-                &state.db.lock(),
-                source_track_id,
-                Path::new(&source_path),
-                &partition_key,
-                &partition_a,
-            );
-            return Err(err);
-        }
-    };
-
     {
         let db = state.db.lock();
-        db.apply_taglist_swap_order_slots(
+        crate::tag_index::backfill_unindexed_tracks(&db)?;
+        if let Ok(partner_id) = db.resolve_taglist_swap_partner(
             taglist_id,
             source_value.as_deref(),
             target_value.as_deref(),
             source_track_id,
-            partner_id,
-            &source_order,
-            &target_order,
-        )
-        .map_err(|e| e.to_string())?;
+        ) {
+            let playing = state.player.state().track_id;
+            if playing == Some(source_track_id) || playing == Some(partner_id) {
+                state.player.stop();
+            }
+        } else if state.player.state().track_id == Some(source_track_id) {
+            state.player.stop();
+        }
     }
 
+    let tracks = {
+        let db = state.db.lock();
+        crate::taglist_swap::swap_taglist_entries(
+            &db,
+            taglist_id,
+            source_value.as_deref(),
+            target_value.as_deref(),
+            source_track_id,
+            &swap_tag_keys,
+            swap_library_paths,
+            swap_basenames,
+        )?
+    };
+
     let _ = app.emit("library-updated", ());
-    Ok(vec![track_a, track_b])
+    state.audio_cache.kick();
+    Ok(tracks)
 }
 
 #[tauri::command]

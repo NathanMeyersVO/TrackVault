@@ -597,6 +597,10 @@ fn paths_are_same_file(a: &Path, b: &Path) -> Result<bool, String> {
 
 
 fn build_side(path: &Path) -> Result<ReplaceTrackFileSide, String> {
+    build_track_file_side(path)
+}
+
+pub fn build_track_file_side(path: &Path) -> Result<ReplaceTrackFileSide, String> {
 
     let file_name = path
 

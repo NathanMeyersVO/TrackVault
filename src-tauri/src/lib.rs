@@ -25,6 +25,7 @@ mod tags;
 mod title_map;
 mod upload;
 mod replace_track;
+mod taglist_swap;
 mod replace_upload_log;
 mod replace_remote_upload;
 mod phone_upload_settings;
@@ -49,7 +50,7 @@ use commands::{
     pause_playback, play_track, remove_track_from_playlist, rename_collection, rename_playlist,
     reorder_collection_tracks, reorder_collections, reorder_playlist_tracks, reorder_playlists,
     reorder_taglist_tracks, reorder_taglist_values, resume_playback, load_library_config,
-    list_taglist_swap_targets, swap_taglist_entries,
+    list_taglist_swap_targets, preview_swap_taglist_entries, swap_taglist_entries,
     save_collection_playback_state, save_library_config, seek_playback,
     set_app_settings, set_application_settings, set_collection_continuous_volume, set_collection_playback_mode,
     set_library_folder, set_taglist_value_title, set_volume, stop_playback, update_track_tags, upload_collection_tracks, upload_tracks,
@@ -156,6 +157,7 @@ pub fn run() {
             reorder_taglist_tracks,
             reorder_taglist_values,
             list_taglist_swap_targets,
+            preview_swap_taglist_entries,
             swap_taglist_entries,
             play_track,
             pause_playback,

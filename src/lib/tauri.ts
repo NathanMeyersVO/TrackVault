@@ -128,6 +128,21 @@ export interface ReplaceTrackFilePreview {
   collision_message: string | null;
 }
 
+export interface SwapTaglistPreview {
+  source: ReplaceTrackFileSide;
+  partner: ReplaceTrackFileSide;
+  source_library_path: string;
+  partner_library_path: string;
+  source_path_after: string;
+  partner_path_after: string;
+  partition_key: string;
+  partner_track_id: number;
+  partner_title: string;
+  different_parent_dirs: boolean;
+  path_swap_collision: boolean;
+  collision_message: string | null;
+}
+
 export interface ReplaceRemoteUploadStartInfo {
   uploadUrl: string;
   publicUploadUrl?: string | null;
@@ -461,17 +476,39 @@ export const api = {
       sourceValue,
       sourceTrackId,
     }),
+  previewSwapTaglistEntries: (
+    taglistId: number,
+    sourceValue: string | null,
+    targetValue: string | null,
+    sourceTrackId: number,
+    swapLibraryPaths: boolean,
+    swapBasenames: boolean,
+  ) =>
+    invoke<SwapTaglistPreview>("preview_swap_taglist_entries", {
+      taglistId,
+      sourceValue,
+      targetValue,
+      sourceTrackId,
+      swapLibraryPaths,
+      swapBasenames,
+    }),
   swapTaglistEntries: (
     taglistId: number,
     sourceValue: string | null,
     targetValue: string | null,
     sourceTrackId: number,
+    swapTagKeys: string[],
+    swapLibraryPaths: boolean,
+    swapBasenames: boolean,
   ) =>
     invoke<Track[]>("swap_taglist_entries", {
       taglistId,
       sourceValue,
       targetValue,
       sourceTrackId,
+      swapTagKeys,
+      swapLibraryPaths,
+      swapBasenames,
     }),
   playTrack: (trackId: number, startMs?: number, autoplay = true) =>
     invoke<PlaybackState>("play_track", { trackId, startMs, autoplay }),

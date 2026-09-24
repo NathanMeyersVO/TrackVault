@@ -129,11 +129,16 @@ export function useTagDropConfirm() {
     setError(null);
     try {
       if (pending.swapPartner && dropMode === "swap") {
+        const tagInfo = await api.getTrackTags(pending.trackId);
+        const swapTagKeys = tagInfo.fields.map((field) => field.key);
         const updated = await api.swapTaglistEntries(
           pending.taglist.id,
           pending.sourcePartitionValue,
           pending.targetValue,
           pending.trackId,
+          swapTagKeys,
+          true,
+          true,
         );
         for (const track of updated) {
           patchTrack(track);
