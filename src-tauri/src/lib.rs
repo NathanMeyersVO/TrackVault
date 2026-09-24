@@ -32,6 +32,7 @@ mod replace_remote_upload;
 mod phone_upload_settings;
 mod phone_upload_probe;
 mod project_load;
+mod project_library_search;
 mod upload_relay;
 mod waveform;
 
@@ -51,7 +52,8 @@ use commands::{
     list_collections, list_playlists, list_taglist_values, list_taglists, list_tracks,
     pause_playback, play_track, remove_track_from_playlist, rename_collection, rename_playlist,
     reorder_collection_tracks, reorder_collections, reorder_playlist_tracks, reorder_playlists,
-    reorder_taglist_tracks, reorder_taglist_values, resume_playback, load_library_config,
+    reorder_taglist_tracks, reorder_taglist_values, resume_playback, search_project_library,
+    load_library_config,
     list_taglist_swap_targets, preview_swap_taglist_entries, swap_taglist_entries,
     save_collection_playback_state, save_library_config, seek_playback,
     set_app_settings, set_application_settings, set_collection_continuous_volume, set_collection_playback_mode,
@@ -180,6 +182,7 @@ pub fn run() {
             set_app_settings,
             get_application_settings,
             set_application_settings,
+            search_project_library,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

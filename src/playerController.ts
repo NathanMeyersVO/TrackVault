@@ -322,9 +322,15 @@ function syncTracklistContext(
   const store = usePlayerStore.getState();
   if (serializeView(store.view) !== viewKey) return;
 
-  const contextTrackId = getContextTrackId(store);
-  if (contextTrackId != null && trackIds.includes(contextTrackId)) {
-    return;
+  if (target == null) {
+    const cursorTrackId = store.cursorTrackId;
+    if (cursorTrackId != null && trackIds.includes(cursorTrackId)) {
+      return;
+    }
+    const contextTrackId = getContextTrackId(store);
+    if (contextTrackId != null && trackIds.includes(contextTrackId)) {
+      return;
+    }
   }
 
   if (trackIds.length === 0) {

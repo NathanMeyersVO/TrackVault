@@ -34,6 +34,8 @@ export interface ApplicationConfig {
   supportsScheduleDelivery: boolean;
   /** Tag key always copied from the library file on replace (application partition). */
   partitionTagKey: string | null;
+  /** Tag key used for project library search matching; null means match on filename. */
+  entryTagKey: string | null;
   titleImportDialog?: TitleImportDialogConfig;
   deliveryCopy: DeliveryCopy;
 }
@@ -95,12 +97,14 @@ export const APPLICATION_CONFIG: Record<ApplicationId, ApplicationConfig> = {
     supportsTitleImport: false,
     supportsScheduleDelivery: false,
     partitionTagKey: null,
+    entryTagKey: null,
     deliveryCopy: NONE_DELIVERY_COPY,
   },
   usfs_ems: {
     supportsTitleImport: true,
     supportsScheduleDelivery: true,
     partitionTagKey: "Composer",
+    entryTagKey: "Track Title",
     titleImportDialog: {
       title: "Choose event schedule",
       filters: [{ name: "Schedule", extensions: ["xls", "xlsx", "csv"] }],
@@ -121,6 +125,12 @@ export function getPartitionTagKey(
   applicationId: string | null | undefined,
 ): string | null {
   return getApplicationConfig(normalizeApplicationId(applicationId)).partitionTagKey;
+}
+
+export function getEntryTagKey(
+  applicationId: string | null | undefined,
+): string | null {
+  return getApplicationConfig(normalizeApplicationId(applicationId)).entryTagKey;
 }
 
 export function getDeliveryCopy(applicationId: string | null | undefined): DeliveryCopy {

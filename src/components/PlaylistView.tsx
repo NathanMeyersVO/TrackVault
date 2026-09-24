@@ -5,11 +5,11 @@ import { api, type Track } from "../lib/tauri";
 import { usePlayer } from "../hooks/usePlayer";
 import { useDeleteTrack } from "../hooks/useDeleteTrack";
 import { useReplaceLibraryTrackFile } from "../hooks/useReplaceLibraryTrackFile";
-import { useTrackSearch } from "../hooks/useTrackSearch";
+import { useProjectLibrarySearch } from "../hooks/useProjectLibrarySearch";
 import { usePlayerStore, serializeView } from "../store/playerStore";
 import { playerController } from "../playerController";
 import { TagEditorModal } from "./TagEditorModal";
-import { TrackSearchInput } from "./TrackSearchInput";
+import { ProjectLibrarySearchPanel } from "./ProjectLibrarySearchPanel";
 import { TrackTable } from "./TrackTable";
 
 interface PlaylistViewProps {
@@ -28,7 +28,16 @@ export function PlaylistView({ playlistId }: PlaylistViewProps) {
   const { requestDeleteTrack, confirmDialog: deleteConfirmDialog } = useDeleteTrack();
   const { requestReplaceFile, replaceFileModal } = useReplaceLibraryTrackFile();
   const [editingTrackId, setEditingTrackId] = useState<number | null>(null);
-  const { query, setQuery, filteredTracks, isSearching } = useTrackSearch(tracks);
+  const {
+    query,
+    setQuery,
+    filteredTracks,
+    isSearching,
+    hits,
+    searchLoading,
+    searchError,
+    globalHitCount,
+  } = useProjectLibrarySearch(tracks);
 
   const playlist = playlists.find((p) => p.id === playlistId);
 
@@ -86,12 +95,19 @@ export function PlaylistView({ playlistId }: PlaylistViewProps) {
         </h2>
         <p className="text-xs text-muted">
           {isSearching
-            ? `${filteredTracks.length} of ${tracks.length} track${tracks.length === 1 ? "" : "s"}`
+            ? `${filteredTracks.length} in view · ${globalHitCount} project-wide`
             : `${tracks.length} track${tracks.length === 1 ? "" : "s"}`}
         </p>
       </div>
       <div className="border-b border-border px-4 py-2">
-        <TrackSearchInput value={query} onChange={setQuery} />
+        <ProjectLibrarySearchPanel
+          query={query}
+          onQueryChange={setQuery}
+          hits={hits}
+          isSearching={isSearching}
+          searchLoading={searchLoading}
+          searchError={searchError}
+        />
       </div>
       <div className="min-h-0 flex-1">
         <TrackTable

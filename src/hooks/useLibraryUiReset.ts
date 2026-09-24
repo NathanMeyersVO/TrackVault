@@ -15,6 +15,10 @@ export function useLibraryUiReset() {
   const clearPendingPausedLoad = usePlayerStore((s) => s.clearPendingPausedLoad);
   const setLibraryFolder = usePlayerStore((s) => s.setLibraryFolder);
   const setActiveProject = usePlayerStore((s) => s.setActiveProject);
+  const setProjectLibrarySearchQuery = usePlayerStore(
+    (s) => s.setProjectLibrarySearchQuery,
+  );
+  const setPendingPartitionFocus = usePlayerStore((s) => s.setPendingPartitionFocus);
 
   const resetLibraryUi = useCallback(
     (playback: PlaybackState) => {
@@ -28,6 +32,8 @@ export function useLibraryUiReset() {
         setActiveTrackIds([]);
         setTaglistNav(null);
         setCursorTaglistFooter(false);
+        setProjectLibrarySearchQuery("");
+        setPendingPartitionFocus(null);
         clearPendingPlayIntent();
       }
       clearPendingPausedLoad();
@@ -41,7 +47,9 @@ export function useLibraryUiReset() {
       setCursorTaglistFooter,
       setCursorTrackId,
       setLibraryFolder,
+      setPendingPartitionFocus,
       setPlayback,
+      setProjectLibrarySearchQuery,
       setTaglistNav,
       setView,
     ],

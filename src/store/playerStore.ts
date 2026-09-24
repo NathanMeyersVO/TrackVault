@@ -66,6 +66,12 @@ export interface TaglistNav {
   activateNextSublist: () => void;
 }
 
+export interface PendingPartitionFocus {
+  taglistId: number;
+  value: string | null;
+  trackId: number;
+}
+
 export interface PlayIntent {
   trackId: number;
   startMs: number;
@@ -133,6 +139,8 @@ interface PlayerStore {
   volume: number;
   taglistNav: TaglistNav | null;
   cursorTaglistFooter: boolean;
+  projectLibrarySearchQuery: string;
+  pendingPartitionFocus: PendingPartitionFocus | null;
   continuousPlaybackCollectionId: number | null;
   continuousPlaybackTrackIds: number[];
   previewPositionMs: number;
@@ -168,6 +176,8 @@ interface PlayerStore {
   patchTrack: (track: Track) => void;
   setTaglistNav: (nav: TaglistNav | null) => void;
   setCursorTaglistFooter: (active: boolean) => void;
+  setProjectLibrarySearchQuery: (query: string) => void;
+  setPendingPartitionFocus: (focus: PendingPartitionFocus | null) => void;
   setContinuousPlaybackContext: (
     collectionId: number | null,
     trackIds: number[],
@@ -225,6 +235,8 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   volume: 1,
   taglistNav: null,
   cursorTaglistFooter: false,
+  projectLibrarySearchQuery: "",
+  pendingPartitionFocus: null,
   continuousPlaybackCollectionId: null,
   continuousPlaybackTrackIds: [],
   previewPositionMs: 0,
@@ -367,6 +379,9 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       cursorTaglistFooter: active,
       cursorTrackId: active ? null : state.cursorTrackId,
     })),
+  setProjectLibrarySearchQuery: (projectLibrarySearchQuery) =>
+    set({ projectLibrarySearchQuery }),
+  setPendingPartitionFocus: (pendingPartitionFocus) => set({ pendingPartitionFocus }),
   setContinuousPlaybackContext: (continuousPlaybackCollectionId, continuousPlaybackTrackIds) =>
     set({ continuousPlaybackCollectionId, continuousPlaybackTrackIds }),
   setPreviewPositionMs: (previewPositionMs) => set({ previewPositionMs }),

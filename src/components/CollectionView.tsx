@@ -6,10 +6,10 @@ import { api, type CollectionPlaybackMode, type Track } from "../lib/tauri";
 import { useDeleteCollectionTrack } from "../hooks/useDeleteCollectionTrack";
 import { useLibrary, usePlayer } from "../hooks/usePlayer";
 import { playerController } from "../playerController";
-import { useTrackSearch } from "../hooks/useTrackSearch";
+import { useProjectLibrarySearch } from "../hooks/useProjectLibrarySearch";
 import { usePlayerStore, serializeView } from "../store/playerStore";
 import { TagEditorModal } from "./TagEditorModal";
-import { TrackSearchInput } from "./TrackSearchInput";
+import { ProjectLibrarySearchPanel } from "./ProjectLibrarySearchPanel";
 import { TrackTable } from "./TrackTable";
 
 interface CollectionViewProps {
@@ -30,7 +30,16 @@ export function CollectionView({ collectionId }: CollectionViewProps) {
     useDeleteCollectionTrack();
   const [editingTrackId, setEditingTrackId] = useState<number | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
-  const { query, setQuery, filteredTracks, isSearching } = useTrackSearch(tracks);
+  const {
+    query,
+    setQuery,
+    filteredTracks,
+    isSearching,
+    hits,
+    searchLoading,
+    searchError,
+    globalHitCount,
+  } = useProjectLibrarySearch(tracks);
 
   const collection = collections.find((entry) => entry.id === collectionId);
   const playbackMode = collection?.playback_mode ?? "discrete";
@@ -142,7 +151,7 @@ export function CollectionView({ collectionId }: CollectionViewProps) {
             </h2>
             <p className="text-xs text-muted">
               {isSearching
-                ? `${filteredTracks.length} of ${tracks.length} track${tracks.length === 1 ? "" : "s"}`
+                ? `${filteredTracks.length} in view · ${globalHitCount} project-wide`
                 : `${tracks.length} track${tracks.length === 1 ? "" : "s"}`}
             </p>
           </div>
@@ -195,7 +204,14 @@ export function CollectionView({ collectionId }: CollectionViewProps) {
         ) : null}
       </div>
       <div className="border-b border-border px-4 py-2">
-        <TrackSearchInput value={query} onChange={setQuery} />
+        <ProjectLibrarySearchPanel
+          query={query}
+          onQueryChange={setQuery}
+          hits={hits}
+          isSearching={isSearching}
+          searchLoading={searchLoading}
+          searchError={searchError}
+        />
       </div>
       <div className="min-h-0 flex-1">
         <TrackTable

@@ -1,16 +1,18 @@
 interface TrackSearchInputProps {
   value: string;
   onChange: (value: string) => void;
+  onKeyDown?: (event: import("react").KeyboardEvent<HTMLInputElement>) => void;
 }
 
-export function TrackSearchInput({ value, onChange }: TrackSearchInputProps) {
+export function TrackSearchInput({ value, onChange, onKeyDown }: TrackSearchInputProps) {
   return (
     <input
       type="search"
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      placeholder="Search by title…"
-      aria-label="Search tracks by title"
+      onKeyDown={onKeyDown}
+      placeholder="Search project library…"
+      aria-label="Search project library by entry tag or filename"
       className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground"
     />
   );

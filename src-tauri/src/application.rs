@@ -62,6 +62,13 @@ pub fn partition_tag_key(application: ApplicationId) -> Option<&'static str> {
     }
 }
 
+pub fn entry_tag_key(application: ApplicationId) -> Option<&'static str> {
+    match application {
+        ApplicationId::None => None,
+        ApplicationId::UsFigureSkatingEms => Some(crate::library_setup::EVENTS_ENTRY_TAG_KEY),
+    }
+}
+
 pub fn resolve_delivery_application(
     app_data: &Path,
     project_id: Option<&str>,

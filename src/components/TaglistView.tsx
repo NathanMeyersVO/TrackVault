@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 
 import { api, type TaglistValue, type Track } from "../lib/tauri";
@@ -6,14 +6,15 @@ import { formatTaglistLabel, getTaglistValueSingularLabel } from "../lib/taglist
 import { usePlayer } from "../hooks/usePlayer";
 import { useDeleteTrack } from "../hooks/useDeleteTrack";
 import { useReplaceLibraryTrackFile } from "../hooks/useReplaceLibraryTrackFile";
-import { useTrackSearch } from "../hooks/useTrackSearch";
+import { useProjectLibrarySearch } from "../hooks/useProjectLibrarySearch";
+import { scrollToTrackRowWithRetry } from "../hooks/useProjectLibrarySearchNavigation";
 import { usePlayerStore, serializeView } from "../store/playerStore";
 import { playerController } from "../playerController";
 import { scrollSidebarItem, sidebarSublistId } from "../lib/sidebarNavigation";
 import { ChangeTaglistValueModal } from "./ChangeTaglistValueModal";
 import { SwapTaglistEntryModal } from "./SwapTaglistEntryModal";
+import { ProjectLibrarySearchPanel } from "./ProjectLibrarySearchPanel";
 import { TagEditorModal } from "./TagEditorModal";
-import { TrackSearchInput } from "./TrackSearchInput";
 import { TrackTable } from "./TrackTable";
 
 interface TaglistViewProps {
@@ -31,6 +32,8 @@ export function TaglistView({ taglistId, value }: TaglistViewProps) {
     setView,
     setTaglistNav,
     setCursorTaglistFooter,
+    pendingPartitionFocus,
+    setPendingPartitionFocus,
   } = usePlayerStore();
   const { playTrack, selectTrack } = usePlayer();
   const { requestDeleteTrack, confirmDialog: deleteConfirmDialog } = useDeleteTrack();
@@ -41,7 +44,17 @@ export function TaglistView({ taglistId, value }: TaglistViewProps) {
   const [editingTrackId, setEditingTrackId] = useState<number | null>(null);
   const [changingTrackId, setChangingTrackId] = useState<number | null>(null);
   const [swappingTrackId, setSwappingTrackId] = useState<number | null>(null);
-  const { query, setQuery, filteredTracks, isSearching } = useTrackSearch(tracks);
+  const tracksFetchGenRef = useRef(0);
+  const {
+    query,
+    setQuery,
+    filteredTracks,
+    isSearching,
+    hits,
+    searchLoading,
+    searchError,
+    globalHitCount,
+  } = useProjectLibrarySearch(tracks);
 
   const taglist = taglists.find((entry) => entry.id === taglistId);
   const changeTaglistValueLabel = taglist
@@ -77,9 +90,11 @@ export function TaglistView({ taglistId, value }: TaglistViewProps) {
     nextSublistLabel != null ? `Next project library taglist (${nextSublistLabel})` : null;
 
   const refreshTracks = useCallback(() => {
+    const generation = ++tracksFetchGenRef.current;
     api
       .getTaglistTracks(taglistId, value)
       .then((loaded) => {
+        if (generation !== tracksFetchGenRef.current) return;
         setTracks(loaded);
         setTracksLoaded(true);
       })
@@ -93,6 +108,7 @@ export function TaglistView({ taglistId, value }: TaglistViewProps) {
   useEffect(() => {
     setTracks([]);
     setTracksLoaded(false);
+    tracksFetchGenRef.current += 1;
   }, [taglistId, value]);
 
   const activateNextSublist = useCallback(() => {
@@ -126,16 +142,37 @@ export function TaglistView({ taglistId, value }: TaglistViewProps) {
 
   useEffect(() => {
     if (!tracksLoaded) return;
-    const trackIds = filteredTracks.map((track) => track.id);
-    setActiveTrackIds(trackIds);
-    playerController.syncTracklistContext(
-      serializeView({ taglistId, value }),
-      trackIds,
-    );
+
+    const partitionTrackIds = tracks.map((track) => track.id);
+    const visibleTrackIds = filteredTracks.map((track) => track.id);
+    setActiveTrackIds(visibleTrackIds);
+
+    const viewKey = serializeView({ taglistId, value });
+    const focus = pendingPartitionFocus;
+    if (
+      focus != null &&
+      focus.taglistId === taglistId &&
+      focus.value === value &&
+      partitionTrackIds.includes(focus.trackId)
+    ) {
+      playerController.syncTracklistContext(viewKey, visibleTrackIds, {
+        trackId: focus.trackId,
+        startMs: 0,
+      });
+      playerController.selectTrack(focus.trackId);
+      scrollToTrackRowWithRetry(focus.trackId);
+      setPendingPartitionFocus(null);
+      return;
+    }
+
+    playerController.syncTracklistContext(viewKey, visibleTrackIds);
   }, [
     filteredTracks,
+    pendingPartitionFocus,
     setActiveTrackIds,
+    setPendingPartitionFocus,
     taglistId,
+    tracks,
     tracksLoaded,
     value,
   ]);
@@ -200,12 +237,19 @@ export function TaglistView({ taglistId, value }: TaglistViewProps) {
               } · `
             : ""}
           {isSearching
-            ? `${filteredTracks.length} of ${tracks.length} track${tracks.length === 1 ? "" : "s"}`
+            ? `${filteredTracks.length} in view · ${globalHitCount} project-wide`
             : `${tracks.length} track${tracks.length === 1 ? "" : "s"}`}
         </p>
       </div>
       <div className="border-b border-border px-4 py-2">
-        <TrackSearchInput value={query} onChange={setQuery} />
+        <ProjectLibrarySearchPanel
+          query={query}
+          onQueryChange={setQuery}
+          hits={hits}
+          isSearching={isSearching}
+          searchLoading={searchLoading}
+          searchError={searchError}
+        />
       </div>
       <div className="min-h-0 flex-1">
         <TrackTable

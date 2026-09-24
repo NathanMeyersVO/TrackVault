@@ -57,6 +57,15 @@ export interface TaglistValue {
   display_title?: string | null;
 }
 
+export interface ProjectLibrarySearchHit {
+  track_id: number;
+  taglist_id: number;
+  taglist_name: string;
+  partition_value: string | null;
+  partition_display_title: string | null;
+  match_label: string;
+}
+
 export interface PlaybackState {
   track_id: number | null;
   position_ms: number;
@@ -304,6 +313,8 @@ export interface DeliveryFolderBrowseResult {
 
 export const api = {
   listTracks: () => invoke<Track[]>("list_tracks"),
+  searchProjectLibrary: (query: string) =>
+    invoke<ProjectLibrarySearchHit[]>("search_project_library", { query }),
   getTrack: (trackId: number) => invoke<Track>("get_track", { trackId }),
   getLibraryFolder: () => invoke<string | null>("get_library_folder"),
   setLibraryFolder: (path: string) =>

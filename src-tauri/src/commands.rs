@@ -1048,6 +1048,21 @@ pub fn get_application_settings(
 }
 
 #[tauri::command]
+pub fn search_project_library(
+    state: State<'_, AppState>,
+    query: String,
+) -> Result<Vec<crate::project_library_search::ProjectLibrarySearchHit>, String> {
+    let db = state.db.lock();
+    let application = crate::application::get_application(&db)?;
+    crate::project_library_search::search_project_library(
+        &db,
+        application,
+        &query,
+        crate::project_library_search::SEARCH_RESULT_LIMIT,
+    )
+}
+
+#[tauri::command]
 pub fn set_application_settings(
     app: AppHandle,
     state: State<'_, AppState>,
