@@ -15,6 +15,11 @@ import { useSidebarWidth } from "./hooks/useSidebarWidth";
 import { useTrackCursor } from "./hooks/useTrackCursor";
 import { getDeliveryCopy } from "./lib/applicationConfig";
 import {
+  archiveExportPercent,
+  archiveExportTitle,
+  formatArchiveExportDetail,
+} from "./lib/archiveExportProgress";
+import {
   formatProjectLoadProgressDetail,
   projectLoadProgressPercent,
 } from "./lib/projectLoadProgress";
@@ -71,13 +76,17 @@ export default function App() {
   );
   const projectLoadChecked = usePlayerStore((state) => state.projectLoadChecked);
   const projectLoadProgress = usePlayerStore((state) => state.projectLoadProgress);
+  const archiveExportProgress = usePlayerStore((state) => state.archiveExportProgress);
   const activeProject = usePlayerStore((state) => state.activeProject);
   const stagingTitle = getDeliveryCopy(
     deliveryStagingApplicationId ?? activeProject?.application_id,
   ).stagingBusyTitle;
   const projectLoadActive =
     projectLoadProgress != null && !projectLoadProgress.finished;
-  const showProjectLoad = !deliveryStaging && (!projectLoadChecked || projectLoadActive);
+  const archiveExportActive =
+    archiveExportProgress != null && !archiveExportProgress.finished;
+  const showProjectLoad =
+    !deliveryStaging && !archiveExportActive && (!projectLoadChecked || projectLoadActive);
   const projectLoadTitle =
     projectLoadActive && projectLoadProgress.project_name
       ? `Loading ${projectLoadProgress.project_name}`
@@ -111,6 +120,12 @@ export default function App() {
     <div className="flex h-full flex-col">
       {deliveryStaging ? (
         <DeliveryBusyOverlay title={stagingTitle} progress={deliveryProgress} />
+      ) : archiveExportActive && archiveExportProgress ? (
+        <DeliveryBusyOverlay
+          title={archiveExportTitle(archiveExportProgress)}
+          detail={formatArchiveExportDetail(archiveExportProgress)}
+          percent={archiveExportPercent(archiveExportProgress)}
+        />
       ) : showProjectLoad ? (
         <DeliveryBusyOverlay
           title={projectLoadTitle}

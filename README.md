@@ -86,8 +86,8 @@ Use tag names like `v0.9.0` that match the app version `0.9.0`.
 2. Open a project. TrackVault scans the project library for MP3, FLAC, WAV, OGG, and M4A files and reads tags. Playlists and taglists load from the project library’s `library/trackvault.json` (kept up to date automatically).
 3. Double-click a track (or select and press play) to start playback.
 4. Use **Library → Apply EMS Download…** to stage a folder of EMS downloads, preview changes, and apply updates to the open project.
-5. **Library → Export Project…** saves the open project to a `.tgz` archive. In the Projects hub, **Import project archive…** restores a copy as a **new** project (new ID).
-6. Create stored collections from the sidebar; import/export `.tgz` stored collections separately from full projects.
+5. **Library → Export Project…** saves the open project to a `.tvproject.zip` archive. In the Projects hub, **Import from archive** (file picker or drop zone) restores a copy as a **new** project (new ID).
+6. Create stored collections from the sidebar; import/export `.tvcollection.zip` stored collections separately from full projects.
 
 ### Privacy / demo copies
 
@@ -124,7 +124,7 @@ src-tauri/src/       Rust backend
   db.rs              SQLite project library index + playlists
   scanner.rs         Folder scan + tag reading
   projects.rs        Managed project folders + manifests
-  project_archive.rs Project .tgz export/import
+  project_archive.rs Project .tvproject.zip export/import
   delivery/          Vendor delivery staging, preview, apply
   player.rs          Audio playback
 ```

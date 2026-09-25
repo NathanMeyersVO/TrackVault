@@ -1270,17 +1270,33 @@ pub fn delete_collection_track(
 
 #[tauri::command]
 pub fn export_collection(
+    app: AppHandle,
     state: State<'_, AppState>,
     collection_id: i64,
     destination: String,
 ) -> Result<(), String> {
+    let label = {
+        let db = state.db.lock();
+        db.get_collection(collection_id)
+            .map_err(|e| e.to_string())?
+            .ok_or_else(|| "Collection not found".to_string())?
+            .name
+    };
+    let mut progress = crate::archive_export_progress::ArchiveExportProgressCtx::from_app(
+        &app,
+        crate::models::ArchiveExportKind::Collection,
+        label,
+    );
     let db = state.db.lock();
-    crate::collections::export_collection(
+    let result = crate::collections::export_collection(
         &db,
         &state.app_data_dir,
         collection_id,
         Path::new(&destination),
-    )
+        &mut progress,
+    );
+    progress.finish();
+    result
 }
 
 #[tauri::command]
@@ -1420,6 +1436,7 @@ pub fn open_project(app: AppHandle, state: State<'_, AppState>, project_id: Stri
 
 #[tauri::command]
 pub fn export_project(
+    app: AppHandle,
     state: State<'_, AppState>,
     project_id: String,
     destination: String,
@@ -1432,11 +1449,23 @@ pub fn export_project(
     if is_active {
         try_autosave_project_config(&state);
     }
-    crate::project_archive::export_project(
+    let label = {
+        let root = projects::project_dir(&state.app_data_dir, &project_id);
+        projects::load_manifest(&root)?.name
+    };
+    let mut progress = crate::archive_export_progress::ArchiveExportProgressCtx::from_app(
+        &app,
+        crate::models::ArchiveExportKind::Project,
+        label,
+    );
+    let result = crate::project_archive::export_project(
         &state.app_data_dir,
         &project_id,
         Path::new(&destination),
-    )
+        &mut progress,
+    );
+    progress.finish();
+    result
 }
 
 #[tauri::command]

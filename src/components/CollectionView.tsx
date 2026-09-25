@@ -2,6 +2,10 @@ import { useCallback, useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { open, save } from "@tauri-apps/plugin-dialog";
 
+import {
+  COLLECTION_ARCHIVE_DIALOG_FILTER,
+  collectionArchiveFileName,
+} from "../lib/collectionArchive";
 import { api, type CollectionPlaybackMode, type Track } from "../lib/tauri";
 import { useDeleteCollectionTrack } from "../hooks/useDeleteCollectionTrack";
 import { useLibrary, usePlayer } from "../hooks/usePlayer";
@@ -31,6 +35,7 @@ export function CollectionView({ collectionId }: CollectionViewProps) {
     useDeleteCollectionTrack();
   const [editingTrackId, setEditingTrackId] = useState<number | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [exportingCollection, setExportingCollection] = useState(false);
   const {
     query,
     setQuery,
@@ -126,18 +131,21 @@ export function CollectionView({ collectionId }: CollectionViewProps) {
 
   const exportCollection = async () => {
     setExportError(null);
-    const defaultName = `${collection?.name ?? "collection"}.tgz`;
+    const defaultName = collectionArchiveFileName(collection?.name ?? "collection");
     const destination = await save({
       title: "Export stored collection",
       defaultPath: defaultName,
-      filters: [{ name: "TrackVault stored collection", extensions: ["tgz"] }],
+      filters: [COLLECTION_ARCHIVE_DIALOG_FILTER],
     });
     if (destination == null) return;
 
+    setExportingCollection(true);
     try {
       await api.exportCollection(collectionId, destination);
     } catch (error) {
       setExportError(String(error));
+    } finally {
+      setExportingCollection(false);
     }
   };
 
@@ -192,10 +200,11 @@ export function CollectionView({ collectionId }: CollectionViewProps) {
             ) : null}
             <button
               type="button"
+              disabled={exportingCollection}
               onClick={() => void exportCollection()}
-              className="rounded-md border border-border px-2 py-1 text-xs text-foreground hover:bg-surface-hover"
+              className="rounded-md border border-border px-2 py-1 text-xs text-foreground hover:bg-surface-hover disabled:opacity-40"
             >
-              Export…
+              {exportingCollection ? "Exporting…" : "Export…"}
             </button>
           </div>
         </div>
@@ -242,7 +251,7 @@ export async function importCollectionFromDialog(): Promise<number | null> {
   const source = await open({
     multiple: false,
     title: "Import stored collection",
-    filters: [{ name: "TrackVault stored collection", extensions: ["tgz"] }],
+    filters: [COLLECTION_ARCHIVE_DIALOG_FILTER],
   });
   if (source == null || Array.isArray(source)) return null;
   return api.importCollection(source);

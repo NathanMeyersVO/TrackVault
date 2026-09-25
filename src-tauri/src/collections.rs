@@ -1,13 +1,13 @@
 use std::fs::File;
-use std::io::{copy, Read};
+use std::io::{copy, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 
-use flate2::read::GzDecoder;
-use flate2::write::GzEncoder;
-use flate2::Compression;
 use serde::{Deserialize, Serialize};
-use tar::{Archive, Builder};
+use zip::write::SimpleFileOptions;
+use zip::ZipArchive;
+use zip::ZipWriter;
 
+use crate::archive_export_progress::ArchiveExportProgressCtx;
 use crate::db::Database;
 use crate::models::UploadResult;
 use crate::scanner::{is_audio_file, read_tags};
@@ -210,6 +210,7 @@ pub fn export_collection(
     app_data_dir: &Path,
     collection_id: i64,
     destination: &Path,
+    progress: &mut ArchiveExportProgressCtx,
 ) -> Result<(), String> {
     let collection = db
         .get_collection(collection_id)
@@ -241,53 +242,55 @@ pub fn export_collection(
         std::fs::create_dir_all(parent).ok();
     }
 
+    let track_count = tracks.len() as u32;
+    let total = track_count.saturating_add(2);
+    let mut done = 0u32;
+    progress.step(done, total, "Preparing export…");
+
     let file = File::create(destination)
         .map_err(|e| format!("Failed to create archive: {e}"))?;
-    let mut encoder = GzEncoder::new(file, Compression::default());
-    {
-        let mut builder = Builder::new(&mut encoder);
+    let mut zip = ZipWriter::new(file);
+    let options = SimpleFileOptions::default();
 
-        let manifest_json =
-            serde_json::to_string_pretty(&manifest).map_err(|e| e.to_string())?;
-        let mut header = tar::Header::new_gnu();
-        header.set_size(manifest_json.len() as u64);
-        header.set_mode(0o644);
-        header.set_cksum();
-        builder
-            .append_data(
-                &mut header,
-                MANIFEST_NAME,
-                manifest_json.as_bytes(),
-            )
-            .map_err(|e| format!("Failed to write manifest: {e}"))?;
+    let manifest_json =
+        serde_json::to_string_pretty(&manifest).map_err(|e| e.to_string())?;
+    progress.step(done, total, MANIFEST_NAME);
+    zip.start_file(MANIFEST_NAME, options)
+        .map_err(|e| format!("Failed to write manifest: {e}"))?;
+    zip.write_all(manifest_json.as_bytes())
+        .map_err(|e| format!("Failed to write manifest: {e}"))?;
+    done += 1;
+    progress.emit(done, total, false, None);
 
-        let _collection_folder = collection_dir(app_data_dir, collection_id);
-        for track in &tracks {
-            let source = Path::new(&track.path);
-            if !source.is_file() {
-                let file_name = source
-                    .file_name()
-                    .and_then(|name| name.to_str())
-                    .unwrap_or(&track.path);
-                return Err(format!("Missing collection file: {file_name}"));
-            }
+    let _collection_folder = collection_dir(app_data_dir, collection_id);
+    for track in &tracks {
+        let source = Path::new(&track.path);
+        if !source.is_file() {
             let file_name = source
                 .file_name()
                 .and_then(|name| name.to_str())
-                .ok_or_else(|| format!("Invalid file name for {}", track.path))?;
-            let archive_path = format!("{FILES_DIR}/{file_name}");
-            builder
-                .append_path_with_name(source, &archive_path)
-                .map_err(|e| format!("Failed to add {file_name} to archive: {e}"))?;
+                .unwrap_or(&track.path);
+            return Err(format!("Missing collection file: {file_name}"));
         }
-
-        builder
-            .finish()
-            .map_err(|e| format!("Failed to finish archive: {e}"))?;
+        let file_name = source
+            .file_name()
+            .and_then(|name| name.to_str())
+            .ok_or_else(|| format!("Invalid file name for {}", track.path))?;
+        let archive_path = format!("{FILES_DIR}/{file_name}");
+        progress.step(done, total, &archive_path);
+        zip.start_file(&archive_path, options)
+            .map_err(|e| format!("Failed to add {file_name} to archive: {e}"))?;
+        let mut source_file = File::open(source)
+            .map_err(|e| format!("Failed to read {file_name}: {e}"))?;
+        copy(&mut source_file, &mut zip)
+            .map_err(|e| format!("Failed to add {file_name} to archive: {e}"))?;
+        done += 1;
+        progress.emit(done, total, false, None);
     }
-    encoder
-        .finish()
-        .map_err(|e| format!("Failed to finalize archive compression: {e}"))?;
+
+    progress.step(done, total, "Finalizing archive");
+    zip.finish()
+        .map_err(|e| format!("Failed to finish archive: {e}"))?;
     Ok(())
 }
 
@@ -297,8 +300,8 @@ pub fn import_collection(
     source: &Path,
 ) -> Result<i64, String> {
     let file = File::open(source).map_err(|e| format!("Failed to open archive: {e}"))?;
-    let decoder = GzDecoder::new(file);
-    let mut archive = Archive::new(decoder);
+    let mut archive = ZipArchive::new(BufReader::new(file))
+        .map_err(|e| format!("Invalid zip archive: {e}"))?;
 
     let mut manifest: Option<CollectionManifest> = None;
     let temp_dir = std::env::temp_dir().join(format!(
@@ -309,23 +312,14 @@ pub fn import_collection(
     std::fs::create_dir_all(&temp_dir)
         .map_err(|e| format!("Failed to create temp directory: {e}"))?;
 
-    for entry in archive
-        .entries()
-        .map_err(|e| format!("Failed to read archive: {e}"))?
-    {
-        let mut entry = entry.map_err(|e| format!("Invalid archive entry: {e}"))?;
-        let path = entry
-            .path()
-            .map_err(|e| format!("Invalid archive path: {e}"))?
-            .into_owned();
-
-        if path
-            .components()
-            .any(|component| matches!(component, std::path::Component::ParentDir))
-        {
+    for i in 0..archive.len() {
+        let mut entry = archive
+            .by_index(i)
+            .map_err(|e| format!("Invalid archive entry: {e}"))?;
+        let Some(path) = entry.enclosed_name() else {
             let _ = std::fs::remove_dir_all(&temp_dir);
             return Err("Archive contains invalid paths".to_string());
-        }
+        };
 
         if path.as_os_str() == MANIFEST_NAME {
             let mut contents = String::new();
@@ -338,7 +332,7 @@ pub fn import_collection(
             continue;
         }
 
-        if let Some(relative) = path.strip_prefix(FILES_DIR).ok() {
+        if let Ok(relative) = path.strip_prefix(FILES_DIR) {
             if relative.components().count() != 1 {
                 let _ = std::fs::remove_dir_all(&temp_dir);
                 return Err("Archive contains invalid file paths".to_string());
@@ -517,8 +511,15 @@ mod tests {
         )
         .unwrap();
 
-        let archive = app_data.join("pack.tgz");
-        export_collection(&db, &app_data, collection_id, &archive).unwrap();
+        let archive = app_data.join("pack.tvcollection.zip");
+        export_collection(
+            &db,
+            &app_data,
+            collection_id,
+            &archive,
+            &mut ArchiveExportProgressCtx::none(),
+        )
+        .unwrap();
 
         let imported_id = import_collection(&db, &app_data, &archive).unwrap();
         let tracks = db.list_collection_tracks(imported_id).unwrap();
@@ -551,8 +552,15 @@ mod tests {
         )
         .unwrap();
 
-        let archive = app_data.join("ambient.tgz");
-        export_collection(&db, &app_data, collection_id, &archive).unwrap();
+        let archive = app_data.join("ambient.tvcollection.zip");
+        export_collection(
+            &db,
+            &app_data,
+            collection_id,
+            &archive,
+            &mut ArchiveExportProgressCtx::none(),
+        )
+        .unwrap();
 
         let imported_id = import_collection(&db, &app_data, &archive).unwrap();
         let imported = db.get_collection(imported_id).unwrap().expect("collection");

@@ -75,7 +75,7 @@ export function AppMenuBar() {
     },
     {
       label: exportingProject ? "Exporting project…" : "Export Project…",
-      title: "Save the open project (project library audio, schedule, and trackvault.json) to a .tgz archive.",
+      title: "Save the open project (project library audio, schedule, and trackvault.json) to a .tvproject.zip archive.",
       onClick: () => void exportProject(),
       disabled: libraryActionsDisabled || exportingProject,
     },
@@ -84,7 +84,7 @@ export function AppMenuBar() {
   const storedCollectionItems: MenuEntry[] = [
     {
       label: importingCollection ? "Importing…" : "Import stored collection",
-      title: "Import a .tgz stored collection from disk.",
+      title: "Import a .tvcollection.zip stored collection from disk.",
       onClick: () => void importCollection(),
       disabled: actionsDisabled,
     },

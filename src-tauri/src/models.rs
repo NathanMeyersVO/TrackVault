@@ -142,3 +142,21 @@ pub struct ProjectLoadProgress {
 pub struct AudioCacheTrackReady {
     pub track_id: i64,
 }
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ArchiveExportKind {
+    Project,
+    Collection,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ArchiveExportProgress {
+    pub kind: ArchiveExportKind,
+    pub label: String,
+    pub done: u32,
+    pub total: u32,
+    pub finished: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub current: Option<String>,
+}

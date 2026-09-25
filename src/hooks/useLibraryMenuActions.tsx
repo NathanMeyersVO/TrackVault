@@ -9,6 +9,10 @@ import { open, save } from "@tauri-apps/plugin-dialog";
 
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { importCollectionFromDialog } from "../components/CollectionView";
+import {
+  PROJECT_ARCHIVE_DIALOG_FILTER,
+  projectArchiveFileName,
+} from "../lib/projectArchive";
 import { DeliveryFolderPickerModal } from "../components/DeliveryFolderPickerModal";
 import { DeliveryPreviewModal } from "../components/DeliveryPreviewModal";
 import { useDeliveryFolderConfirm } from "./useDeliveryFolderConfirm";
@@ -219,11 +223,10 @@ export function useLibraryMenuActions() {
       setConfigError("Open a project first.");
       return;
     }
-    const safeName = activeProject.name.replace(/[^\w\s-]+/g, "").trim() || "project";
     const destination = await save({
       title: "Export project",
-      defaultPath: `${safeName}.tgz`,
-      filters: [{ name: "TrackVault project archive", extensions: ["tgz"] }],
+      defaultPath: projectArchiveFileName(activeProject.name),
+      filters: [PROJECT_ARCHIVE_DIALOG_FILTER],
     });
     if (destination == null) return;
 

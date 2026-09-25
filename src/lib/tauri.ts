@@ -121,6 +121,17 @@ export interface DeliveryProgress {
   current?: string;
 }
 
+export type ArchiveExportKind = "project" | "collection";
+
+export interface ArchiveExportProgress {
+  kind: ArchiveExportKind;
+  label: string;
+  done: number;
+  total: number;
+  finished: boolean;
+  current?: string;
+}
+
 export interface AudioCacheTrackReady {
   track_id: number;
 }

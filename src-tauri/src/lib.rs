@@ -2,6 +2,7 @@ pub mod anonymize;
 pub mod demo_dataset;
 mod app_settings;
 mod application;
+mod archive_export_progress;
 mod audio_cache;
 mod audio_scan;
 mod collections;

@@ -4,7 +4,13 @@ import { listen } from "@tauri-apps/api/event";
 
 
 
-import { api, type AudioCacheProgress, type DeliveryProgress, type ProjectLoadProgress } from "../lib/tauri";
+import {
+  api,
+  type ArchiveExportProgress,
+  type AudioCacheProgress,
+  type DeliveryProgress,
+  type ProjectLoadProgress,
+} from "../lib/tauri";
 
 import { playerController } from "../playerController";
 
@@ -23,6 +29,7 @@ export function useLibrary() {
     setActiveProject,
     setLibraryScanProgress,
     setDeliveryProgress,
+    setArchiveExportProgress,
     setProjectLoadProgress,
     markProjectLoadChecked,
   } = usePlayerStore();
@@ -147,7 +154,19 @@ export function useLibrary() {
 
   }, [setDeliveryProgress]);
 
+  useEffect(() => {
+    const unlisten = listen<ArchiveExportProgress>("archive-export-progress", (event) => {
+      if (event.payload.finished) {
+        setArchiveExportProgress(null);
+      } else {
+        setArchiveExportProgress(event.payload);
+      }
+    });
 
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, [setArchiveExportProgress]);
 
   return { refresh };
 

@@ -1,15 +1,15 @@
 use std::fs::{self, File};
-use std::io::copy;
-use std::path::{Component, Path};
+use std::io::{copy, BufReader, Write};
+use std::path::{Path, PathBuf};
 
-use flate2::read::GzDecoder;
-use flate2::write::GzEncoder;
-use flate2::Compression;
 use serde::{Deserialize, Serialize};
-use tar::{Archive, Builder};
+use zip::write::SimpleFileOptions;
+use zip::ZipArchive;
+use zip::ZipWriter;
 use uuid::Uuid;
 use walkdir::WalkDir;
 
+use crate::archive_export_progress::ArchiveExportProgressCtx;
 use crate::projects::{
     self, library_dir, load_manifest, ProjectManifest, ProjectSummary,
     LIBRARY_SUBDIR, PROJECT_MANIFEST,
@@ -30,6 +30,7 @@ pub fn export_project(
     app_data: &Path,
     project_id: &str,
     destination: &Path,
+    progress: &mut ArchiveExportProgressCtx,
 ) -> Result<(), String> {
     let root = projects::project_dir(app_data, project_id);
     if !root.is_dir() {
@@ -48,54 +49,72 @@ pub fn export_project(
         project_name: manifest.name.clone(),
     };
 
+    let mut files = collect_project_export_files(&root)?;
+    files.sort_by(|a, b| a.0.cmp(&b.0));
+
+    let file_count = files.len() as u32;
+    let total = file_count.saturating_add(2);
+    let mut done = 0u32;
+    progress.step(done, total, "Preparing export…");
+
     let file = File::create(destination)
         .map_err(|e| format!("Failed to create archive: {e}"))?;
-    let mut encoder = GzEncoder::new(file, Compression::default());
-    {
-        let mut builder = Builder::new(&mut encoder);
+    let mut zip = ZipWriter::new(file);
+    let options = SimpleFileOptions::default();
 
-        let meta_json = serde_json::to_string_pretty(&meta).map_err(|e| e.to_string())?;
-        append_bytes(&mut builder, ARCHIVE_META_NAME, meta_json.as_bytes())?;
+    let meta_json = serde_json::to_string_pretty(&meta).map_err(|e| e.to_string())?;
+    progress.step(done, total, ARCHIVE_META_NAME);
+    zip.start_file(ARCHIVE_META_NAME, options)
+        .map_err(|e| format!("Failed to write {ARCHIVE_META_NAME}: {e}"))?;
+    zip.write_all(meta_json.as_bytes())
+        .map_err(|e| format!("Failed to write {ARCHIVE_META_NAME}: {e}"))?;
+    done += 1;
+    progress.emit(done, total, false, None);
 
-        for entry in WalkDir::new(&root)
-            .follow_links(false)
-            .into_iter()
-            .filter_map(|e| e.ok())
-        {
-            let path = entry.path();
-            if !path.is_file() {
-                continue;
-            }
-            if should_skip_file(path) {
-                continue;
-            }
-            let rel = path
-                .strip_prefix(&root)
-                .map_err(|e| e.to_string())?;
-            let archive_path = rel
-                .components()
-                .map(|c| c.as_os_str().to_string_lossy())
-                .collect::<Vec<_>>()
-                .join("/");
-            builder
-                .append_path_with_name(path, &archive_path)
-                .map_err(|e| format!("Failed to add {} to archive: {e}", path.display()))?;
-        }
-
-        builder
-            .finish()
-            .map_err(|e| format!("Failed to finish archive: {e}"))?;
+    for (archive_path, path) in &files {
+        progress.step(done, total, archive_path);
+        zip.start_file(archive_path, options)
+            .map_err(|e| format!("Failed to add {} to archive: {e}", path.display()))?;
+        let mut source = File::open(path)
+            .map_err(|e| format!("Failed to read {}: {e}", path.display()))?;
+        copy(&mut source, &mut zip)
+            .map_err(|e| format!("Failed to add {} to archive: {e}", path.display()))?;
+        done += 1;
+        progress.emit(done, total, false, None);
     }
-    encoder
-        .finish()
-        .map_err(|e| format!("Failed to finalize archive compression: {e}"))?;
+
+    progress.step(done, total, "Finalizing archive");
+    zip.finish()
+        .map_err(|e| format!("Failed to finish archive: {e}"))?;
     Ok(())
+}
+
+fn collect_project_export_files(root: &Path) -> Result<Vec<(String, PathBuf)>, String> {
+    let mut files = Vec::new();
+    for entry in WalkDir::new(root)
+        .follow_links(false)
+        .into_iter()
+        .filter_map(|e| e.ok())
+    {
+        let path = entry.path();
+        if !path.is_file() || should_skip_file(path) {
+            continue;
+        }
+        let rel = path.strip_prefix(root).map_err(|e| e.to_string())?;
+        let archive_path = rel
+            .components()
+            .map(|c| c.as_os_str().to_string_lossy())
+            .collect::<Vec<_>>()
+            .join("/");
+        files.push((archive_path, path.to_path_buf()));
+    }
+    Ok(files)
 }
 
 pub fn import_project(app_data: &Path, source: &Path) -> Result<ProjectSummary, String> {
     let file = File::open(source).map_err(|e| format!("Failed to open archive: {e}"))?;
-    let decoder = GzDecoder::new(file);
-    let mut archive = Archive::new(decoder);
+    let mut archive = ZipArchive::new(BufReader::new(file))
+        .map_err(|e| format!("Invalid zip archive: {e}"))?;
 
     let temp_dir = std::env::temp_dir().join(format!(
         "trackvault-project-import-{}-{}",
@@ -110,34 +129,25 @@ pub fn import_project(app_data: &Path, source: &Path) -> Result<ProjectSummary, 
     };
 
     let extract_result = (|| -> Result<(), String> {
-        for entry in archive
-            .entries()
-            .map_err(|e| format!("Failed to read archive: {e}"))?
-        {
-            let mut entry = entry.map_err(|e| format!("Invalid archive entry: {e}"))?;
-            let path = entry
-                .path()
-                .map_err(|e| format!("Invalid archive path: {e}"))?
-                .into_owned();
-
-            if path
-                .components()
-                .any(|component| matches!(component, Component::ParentDir))
-            {
+        for i in 0..archive.len() {
+            let mut entry = archive
+                .by_index(i)
+                .map_err(|e| format!("Invalid archive entry: {e}"))?;
+            let Some(path) = entry.enclosed_name() else {
                 return Err("Archive contains invalid paths".to_string());
-            }
+            };
 
             if path.as_os_str().is_empty() {
                 continue;
             }
 
             let destination = temp_dir.join(&path);
-            if let Some(parent) = destination.parent() {
-                fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-            }
-            if entry.header().entry_type().is_dir() {
+            if entry.is_dir() || entry.name().ends_with('/') {
                 fs::create_dir_all(&destination).map_err(|e| e.to_string())?;
                 continue;
+            }
+            if let Some(parent) = destination.parent() {
+                fs::create_dir_all(parent).map_err(|e| e.to_string())?;
             }
             let mut out = File::create(&destination)
                 .map_err(|e| format!("Failed to extract {}: {e}", path.display()))?;
@@ -220,16 +230,6 @@ pub fn import_project(app_data: &Path, source: &Path) -> Result<ProjectSummary, 
         .ok_or_else(|| "Imported project not found".to_string())
 }
 
-fn append_bytes(builder: &mut Builder<&mut GzEncoder<File>>, name: &str, data: &[u8]) -> Result<(), String> {
-    let mut header = tar::Header::new_gnu();
-    header.set_size(data.len() as u64);
-    header.set_mode(0o644);
-    header.set_cksum();
-    builder
-        .append_data(&mut header, name, data)
-        .map_err(|e| format!("Failed to write {name}: {e}"))
-}
-
 fn should_skip_file(path: &Path) -> bool {
     let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
     name == ".DS_Store" || name == "Thumbs.db"
@@ -298,8 +298,14 @@ mod tests {
         let track = library_dir(&root).join("clip.mp3");
         fs::write(&track, b"fake-mp3").unwrap();
 
-        let archive_path = app_data.join("export.tgz");
-        export_project(&app_data, &id, &archive_path).unwrap();
+        let archive_path = app_data.join("export.tvproject.zip");
+        export_project(
+            &app_data,
+            &id,
+            &archive_path,
+            &mut ArchiveExportProgressCtx::none(),
+        )
+        .unwrap();
 
         let imported = import_project(&app_data, &archive_path).unwrap();
         assert_ne!(imported.id, id);

@@ -3,13 +3,19 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { DeliveryFolderDropZone } from "./DeliveryFolderDropZone";
 import { DeliveryPreviewModal } from "./DeliveryPreviewModal";
+import { ProjectArchiveDropZone } from "./ProjectArchiveDropZone";
 import { useDeliveryFolderConfirm } from "../hooks/useDeliveryFolderConfirm";
 import { useLibraryUiReset } from "../hooks/useLibraryUiReset";
 import { useLibrary } from "../hooks/usePlayer";
 import { usePlayerStore } from "../store/playerStore";
 import { getDeliveryCopy } from "../lib/applicationConfig";
 import { APPLICATION_OPTIONS, getApplicationLabel } from "../lib/applicationLabels";
+import {
+  PROJECT_ARCHIVE_DIALOG_FILTER,
+  isProjectArchivePath,
+} from "../lib/projectArchive";
 import { api, type ApplicationId, type DeliveryPreview, type ProjectSummary } from "../lib/tauri";
+
 export interface ProjectHubModalProps {
   onClose: () => void;
 }
@@ -70,26 +76,37 @@ export function ProjectHubModal({ onClose }: ProjectHubModalProps) {
   } = useDeliveryFolderConfirm({ applicationId, onConfirm: stageFromFolder });
 
   const canStartDelivery = Boolean(newName.trim()) && !busy;
+  const canImportArchive = !busy && !importingArchive;
+
+  const importProjectArchiveFromPath = useCallback(
+    async (source: string) => {
+      if (!isProjectArchivePath(source)) {
+        setError("Choose a .tvproject.zip project archive file.");
+        return;
+      }
+      setImportingArchive(true);
+      setError(null);
+      try {
+        const imported = await api.importProjectArchive(source);
+        await reload();
+        setImportOpenTarget(imported);
+      } catch (e) {
+        setError(String(e));
+      } finally {
+        setImportingArchive(false);
+      }
+    },
+    [reload],
+  );
 
   const importProjectArchive = async () => {
     const source = await open({
       title: "Import project archive",
       multiple: false,
-      filters: [{ name: "TrackVault project archive", extensions: ["tgz"] }],
+      filters: [PROJECT_ARCHIVE_DIALOG_FILTER],
     });
     if (typeof source !== "string") return;
-
-    setImportingArchive(true);
-    setError(null);
-    try {
-      const imported = await api.importProjectArchive(source);
-      await reload();
-      setImportOpenTarget(imported);
-    } catch (e) {
-      setError(String(e));
-    } finally {
-      setImportingArchive(false);
-    }
+    await importProjectArchiveFromPath(source);
   };
 
   const openImportedProject = async (project: ProjectSummary) => {
@@ -166,15 +183,18 @@ export function ProjectHubModal({ onClose }: ProjectHubModalProps) {
   return (
     <>
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-        <div className="flex max-h-[90vh] w-full max-w-lg flex-col rounded-lg border border-border bg-surface shadow-xl">
+        <div className="flex max-h-[90vh] w-full max-w-xl flex-col rounded-lg border border-border bg-surface shadow-xl">
           <div className="border-b border-border px-4 py-3">
             <h2 className="text-sm font-semibold text-foreground">Projects</h2>
-            <p className="mt-1 text-xs text-muted">{deliveryCopy.createProjectHint}</p>
           </div>
 
           <div className="space-y-3 border-b border-border px-4 py-3">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-foreground">
+              New project
+            </h3>
+            <p className="text-xs text-muted">{deliveryCopy.createProjectHint}</p>
             <label className="block text-xs text-muted">
-              New project name
+              Project name
               <input
                 type="text"
                 value={newName}
@@ -210,86 +230,109 @@ export function ProjectHubModal({ onClose }: ProjectHubModalProps) {
               enabled={canStartDelivery}
               onFolderDropped={(path) => void loadDeliveryFolderForCreate(path)}
             />
+          </div>
+
+          <div className="space-y-3 border-b border-border px-4 py-3">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-foreground">
+              Import from archive
+            </h3>
+            <p className="text-xs text-muted">
+              Restore a saved project as a new copy (.tvproject.zip).
+            </p>
             <button
               type="button"
-              disabled={busy || importingArchive}
+              disabled={!canImportArchive}
               onClick={() => void importProjectArchive()}
               className="w-full rounded-md border border-border px-3 py-2 text-sm text-foreground hover:bg-surface-hover disabled:opacity-40"
             >
               {importingArchive ? "Importing…" : "Import project archive…"}
             </button>
+            <ProjectArchiveDropZone
+              label="Drop project archive (.tvproject.zip) here"
+              enabled={canImportArchive}
+              onArchiveDropped={(path) => void importProjectArchiveFromPath(path)}
+              onInvalidDrop={(message) => setError(message)}
+            />
           </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-2">
-            {loading ? (
-              <p className="text-xs text-muted">Loading…</p>
-            ) : projects.length === 0 ? (
-              <p className="text-xs text-muted">No projects yet.</p>
-            ) : (
-              <ul className="space-y-1">
-                {projects.map((p) => (
-                  <li
-                    key={p.id}
-                    className="flex flex-col gap-2 rounded border border-border px-2 py-2 sm:flex-row sm:items-center sm:justify-between"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-medium text-foreground">
-                        {p.name}
-                        {activeProjectId === p.id ? (
-                          <span className="ml-1.5 text-xs font-normal text-muted">(open)</span>
-                        ) : null}
+          <div className="flex min-h-0 flex-1 flex-col px-4 py-3">
+            <h3 className="mb-2 shrink-0 text-xs font-semibold uppercase tracking-wide text-foreground">
+              Open existing project
+            </h3>
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              {loading ? (
+                <p className="text-xs text-muted">Loading…</p>
+              ) : projects.length === 0 ? (
+                <p className="text-xs text-muted">No projects yet.</p>
+              ) : (
+                <ul className="space-y-1">
+                  {projects.map((p) => (
+                    <li
+                      key={p.id}
+                      className="flex flex-col gap-2 rounded border border-border px-2 py-2 sm:flex-row sm:items-center sm:justify-between"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-sm font-medium text-foreground">
+                          {p.name}
+                          {activeProjectId === p.id ? (
+                            <span className="ml-1.5 text-xs font-normal text-muted">(open)</span>
+                          ) : null}
+                        </div>
+                        <div className="text-xs text-muted">
+                          {p.track_count} tracks ·{" "}
+                          {getApplicationLabel(
+                            p.application_id === "usfs_ems" ? "usfs_ems" : "none",
+                          )}
+                        </div>
+                        <label className="mt-1.5 block text-xs text-muted">
+                          Application
+                          <select
+                            value={p.application_id === "usfs_ems" ? "usfs_ems" : "none"}
+                            disabled={busy}
+                            onChange={(e) =>
+                              void changeProjectApplication(
+                                p,
+                                e.target.value as ApplicationId,
+                              )
+                            }
+                            className="mt-0.5 w-full max-w-xs rounded border border-border bg-background px-2 py-1 text-xs text-foreground"
+                          >
+                            {APPLICATION_OPTIONS.map((opt) => (
+                              <option key={opt.id} value={opt.id}>
+                                {opt.label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
                       </div>
-                      <div className="text-xs text-muted">
-                        {p.track_count} tracks · {getApplicationLabel(
-                          p.application_id === "usfs_ems" ? "usfs_ems" : "none",
-                        )}
-                      </div>
-                      <label className="mt-1.5 block text-xs text-muted">
-                        Application
-                        <select
-                          value={p.application_id === "usfs_ems" ? "usfs_ems" : "none"}
+                      <div className="flex shrink-0 gap-1 self-end sm:self-center">
+                        <button
+                          type="button"
                           disabled={busy}
-                          onChange={(e) =>
-                            void changeProjectApplication(
-                              p,
-                              e.target.value as ApplicationId,
-                            )
-                          }
-                          className="mt-0.5 w-full max-w-xs rounded border border-border bg-background px-2 py-1 text-xs text-foreground"
+                          onClick={() => void openProject(p.id)}
+                          className="rounded px-2 py-1 text-xs text-accent hover:bg-surface-hover"
                         >
-                          {APPLICATION_OPTIONS.map((opt) => (
-                            <option key={opt.id} value={opt.id}>
-                              {opt.label}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                    </div>
-                    <div className="flex shrink-0 gap-1 self-end sm:self-center">
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() => void openProject(p.id)}
-                        className="rounded px-2 py-1 text-xs text-accent hover:bg-surface-hover"
-                      >
-                        Open
-                      </button>
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() => setDeleteTarget(p)}
-                        className="rounded px-2 py-1 text-xs text-red-400 hover:bg-surface-hover"
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
+                          Open
+                        </button>
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => setDeleteTarget(p)}
+                          className="rounded px-2 py-1 text-xs text-red-400 hover:bg-surface-hover"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           </div>
 
-          {error && <p className="border-t border-border px-4 py-2 text-xs text-red-400">{error}</p>}
+          {error && (
+            <p className="border-t border-border px-4 py-2 text-xs text-red-400">{error}</p>
+          )}
 
           <div className="flex justify-end border-t border-border px-4 py-3">
             <button
