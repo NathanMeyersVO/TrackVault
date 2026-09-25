@@ -49,7 +49,7 @@ export function AboutDialog({ onClose }: AboutDialogProps) {
           <p className="text-lg font-semibold text-foreground">{APP_NAME}</p>
           <p className="text-sm text-muted">Version {version}</p>
           <div className="space-y-1 text-sm text-foreground">
-            <p>Created by {APP_AUTHOR}</p>
+            <p>© 2026 {APP_AUTHOR}</p>
             <a
               href={`mailto:${APP_EMAIL}`}
               className="text-accent hover:text-accent-hover hover:underline"
