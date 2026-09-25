@@ -308,7 +308,7 @@ mod tests {
         let db = Database::open(std::path::Path::new(":memory:")).expect("in-memory db");
         let library = std::env::temp_dir().join(format!(
             "trackvault-config-test-{}",
-            std::process::id()
+            uuid::Uuid::new_v4()
         ));
         std::fs::create_dir_all(&library).expect("create library dir");
         let library = library.canonicalize().unwrap_or(library);

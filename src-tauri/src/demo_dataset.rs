@@ -522,25 +522,31 @@ pub fn pick_pool_track_random_walk(
     for _ in 0..MAX_WALK_ATTEMPTS {
         let mut dir = pool_root.to_path_buf();
         loop {
+            let files = index
+                .eligible_files
+                .get(&dir)
+                .map(|v| v.as_slice())
+                .unwrap_or(&[]);
+            let candidates: Vec<&PathBuf> = files.iter().filter(|p| !used.contains(*p)).collect();
             let children = index
                 .subdirs
                 .get(&dir)
                 .map(|v| v.as_slice())
                 .unwrap_or(&[]);
+
+            if !candidates.is_empty()
+                && (children.is_empty() || rng.gen_bool(0.5))
+            {
+                let pick = candidates[rng.gen_range(0..candidates.len())];
+                used.insert(pick.clone());
+                return Ok(pick.clone());
+            }
+
             if children.is_empty() {
                 break;
             }
             dir = children[rng.gen_range(0..children.len())].clone();
         }
-
-        let files = index.eligible_files.get(&dir).map(|v| v.as_slice()).unwrap_or(&[]);
-        let candidates: Vec<&PathBuf> = files.iter().filter(|p| !used.contains(*p)).collect();
-        if candidates.is_empty() {
-            continue;
-        }
-        let pick = candidates[rng.gen_range(0..candidates.len())];
-        used.insert(pick.clone());
-        return Ok(pick.clone());
     }
 
     Err(
