@@ -15,8 +15,10 @@
   "homepage": "https://github.com/NathanMeyersVO/TrackVault#readme",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build",
+    "brand:sync": "node scripts/sync-brand-assets.mjs",
+    "icons:regenerate": "npm run tauri icon brand/trackvault-logo.png",
+    "dev": "npm run brand:sync && vite",
+    "build": "npm run brand:sync && tsc && vite build",
     "preview": "vite preview",
     "test": "vitest run",
     "tauri": "tauri"

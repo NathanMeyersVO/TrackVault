@@ -6,6 +6,7 @@ import { AboutDialog } from "./AboutDialog";
 import { KeyboardShortcutsModal } from "./KeyboardShortcutsModal";
 import { MenuBarStatus, MenuDropdown, type MenuEntry } from "./MenuDropdown";
 import { useProjectMenuActions } from "../hooks/useProjectMenuActions";
+import { AppLogo } from "./AppLogo";
 
 export function AppMenuBar() {
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
@@ -152,9 +153,7 @@ export function AppMenuBar() {
   return (
     <>
       <header className="flex shrink-0 items-center gap-4 border-b border-border bg-surface px-4 py-2">
-        <h1 className="shrink-0 text-sm font-semibold tracking-tight text-foreground">
-          TrackVault
-        </h1>
+        <AppLogo className="h-8 w-auto max-w-[11rem] shrink-0 object-contain object-left" />
         <nav className="flex shrink-0 items-center gap-1">
           <MenuDropdown label="File" items={fileItems} />
           <MenuDropdown label="Project" items={projectItems} />

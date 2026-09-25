@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { getVersion } from "@tauri-apps/api/app";
 
 import { APP_AUTHOR, APP_EMAIL, APP_NAME } from "../lib/appInfo";
+import { AppLogo } from "./AppLogo";
 
 interface AboutDialogProps {
   onClose: () => void;
@@ -46,7 +47,7 @@ export function AboutDialog({ onClose }: AboutDialogProps) {
           </h2>
         </div>
         <div className="space-y-3 px-4 py-6 text-center">
-          <p className="text-lg font-semibold text-foreground">{APP_NAME}</p>
+          <AppLogo className="mx-auto h-28 w-auto max-w-full object-contain" />
           <p className="text-sm text-muted">Version {version}</p>
           <div className="space-y-1 text-sm text-foreground">
             <p>© 2026 {APP_AUTHOR}</p>
