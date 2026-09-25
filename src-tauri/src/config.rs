@@ -371,7 +371,34 @@ mod tests {
             .unwrap();
         db.reorder_taglist_values(taglist_id, &["02".to_string(), "01".to_string()])
             .unwrap();
-        db.reorder_taglist_tracks(taglist_id, Some("01"), &[tracks[0].id])
+
+        let track_c_path = library.join("03-bridge.mp3");
+        std::fs::write(&track_c_path, b"track-c").expect("write track c");
+        let track_c_path = track_c_path.canonicalize().unwrap_or(track_c_path);
+        db.upsert_track(
+            track_c_path.to_str().unwrap(),
+            "Bridge",
+            "Artist",
+            "Album",
+            1500,
+            Some(3),
+        )
+        .expect("insert track c");
+        let all_tracks = db.list_tracks().unwrap();
+        let track_c = all_tracks
+            .iter()
+            .find(|t| t.title == "Bridge")
+            .expect("track c");
+        let track_intro = all_tracks
+            .iter()
+            .find(|t| t.title == "Intro")
+            .expect("track intro");
+        db.replace_track_tags(
+            track_c.id,
+            &[("Comment".to_string(), "01".to_string())],
+        )
+        .unwrap();
+        db.reorder_taglist_tracks(taglist_id, Some("01"), &[track_c.id, track_intro.id])
             .unwrap();
 
         let exported = export_config(&db, &library).unwrap();
@@ -387,6 +414,13 @@ mod tests {
         assert_eq!(
             exported.taglists[0].value_order,
             vec!["02".to_string(), "01".to_string()]
+        );
+        assert_eq!(
+            exported.taglists[0].track_order.get("01"),
+            Some(&vec![
+                "03-bridge.mp3".to_string(),
+                "01-intro.mp3".to_string()
+            ])
         );
 
         db.clear_user_config().unwrap();
@@ -412,6 +446,12 @@ mod tests {
             .unwrap();
         assert_eq!(sublists[0].value.as_deref(), Some("02"));
         assert_eq!(sublists[1].value.as_deref(), Some("01"));
+        let sublist_tracks = db
+            .list_taglist_tracks(taglists[0].id, "Comment", Some("01"))
+            .unwrap();
+        assert_eq!(sublist_tracks.len(), 2);
+        assert_eq!(sublist_tracks[0].title, "Bridge");
+        assert_eq!(sublist_tracks[1].title, "Intro");
 
         std::fs::remove_dir_all(&library).ok();
     }

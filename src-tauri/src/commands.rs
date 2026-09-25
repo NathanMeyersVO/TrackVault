@@ -615,6 +615,7 @@ pub fn reorder_playlists(
         .lock()
         .reorder_playlists(&playlist_ids)
         .map_err(|e| e.to_string())?;
+    try_autosave_project_config(&state);
     let _ = app.emit("project-updated", ());
     Ok(())
 }
@@ -766,6 +767,7 @@ pub fn reorder_taglist_values(
         db.reorder_taglist_values(taglist_id, &tag_values)
             .map_err(|e| e.to_string())?;
     }
+    try_autosave_project_config(&state);
     let _ = app.emit("project-updated", ());
     Ok(())
 }
@@ -781,7 +783,9 @@ pub fn reorder_taglist_tracks(
         .db
         .lock()
         .reorder_taglist_tracks(taglist_id, value.as_deref(), &track_ids)
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+    try_autosave_project_config(&state);
+    Ok(())
 }
 
 #[tauri::command]
@@ -1144,7 +1148,9 @@ pub fn reorder_collection_tracks(
         .db
         .lock()
         .reorder_collection_tracks(collection_id, &track_ids)
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+    try_autosave_project_config(&state);
+    Ok(())
 }
 
 #[tauri::command]
@@ -1158,6 +1164,7 @@ pub fn reorder_collections(
         .lock()
         .reorder_collections(&collection_ids)
         .map_err(|e| e.to_string())?;
+    try_autosave_project_config(&state);
     let _ = app.emit("project-updated", ());
     Ok(())
 }
