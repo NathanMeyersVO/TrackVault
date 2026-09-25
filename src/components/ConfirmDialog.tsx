@@ -8,6 +8,7 @@ export interface ConfirmDialogProps {
   secondaryLabel?: string;
   destructive?: boolean;
   busy?: boolean;
+  overlayClassName?: string;
   onConfirm: () => void;
   onCancel: () => void;
   onSecondary?: () => void;
@@ -21,6 +22,7 @@ export function ConfirmDialog({
   secondaryLabel,
   destructive = false,
   busy = false,
+  overlayClassName = "z-50",
   onConfirm,
   onCancel,
   onSecondary,
@@ -34,7 +36,9 @@ export function ConfirmDialog({
   }, [onCancel]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+    <div
+      className={`fixed inset-0 flex items-center justify-center bg-black/60 p-4 ${overlayClassName}`}
+    >
       <div
         className="w-full max-w-md rounded-lg border border-border bg-surface shadow-xl"
         role="dialog"

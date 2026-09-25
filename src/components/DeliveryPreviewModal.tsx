@@ -19,6 +19,7 @@ export interface DeliveryPreviewModalProps {
   mode: "create" | "update";
   projectName: string;
   applicationId: string;
+  overlayClassName?: string;
   onClose: () => void;
   onApplied: () => void;
 }
@@ -28,6 +29,7 @@ export function DeliveryPreviewModal({
   mode,
   projectName,
   applicationId,
+  overlayClassName = "z-50",
   onClose,
   onApplied,
 }: DeliveryPreviewModalProps) {
@@ -156,7 +158,9 @@ export function DeliveryPreviewModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+    <div
+      className={`fixed inset-0 flex items-center justify-center bg-black/60 p-4 ${overlayClassName}`}
+    >
       {busy ? (
         <DeliveryBusyOverlay
           title={mode === "create" ? "Creating project…" : deliveryCopy.applyingBusyTitle}
