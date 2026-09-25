@@ -34,11 +34,9 @@ rustc --version
 
 ## Getting started
 
-Replace `OWNER/REPO` with your GitHub repository path after you publish this project.
-
 ```bash
-git clone https://github.com/OWNER/REPO.git
-cd REPO
+git clone https://github.com/NathanMeyersVO/TrackVault.git
+cd TrackVault
 npm install
 npm run tauri dev
 ```
@@ -52,19 +50,18 @@ npm run tauri build
 - Windows output: `src-tauri/target/release/bundle/`
 - macOS output: build on macOS for `.app` / `.dmg` (release installers are not built in CI)
 
-### Publishing to GitHub
+### Git remotes
 
-1. Create an empty repository on GitHub (`OWNER/REPO`).
-2. Add it as a remote and push `main` (this repo keeps its existing `origin` unless you change it).
-3. After the first push, confirm the **CI** workflow passes on GitHub.
+- **`github`** — [github.com/NathanMeyersVO/TrackVault](https://github.com/NathanMeyersVO/TrackVault) (primary for CI and releases)
+- **`origin`** — local bare backup on your machine (optional mirror: `git push origin main`)
 
-If line endings look wrong locally after cloning, run `git add --renormalize .` once (see [`.gitattributes`](.gitattributes)).
+If line endings look wrong after cloning, run `git add --renormalize .` once (see [`.gitattributes`](.gitattributes)).
 
 ### Windows installers (GitHub Releases)
 
 Pre-built Windows installers are published as [GitHub Release](https://docs.github.com/en/repositories/releasing-projects-on-github/about-releases) assets (after the repo is on GitHub):
 
-1. Open **Releases** on `https://github.com/OWNER/REPO/releases` and download the latest installer (`.msi` and/or `.exe` setup, depending on what the build produced).
+1. Open **Releases** on [github.com/NathanMeyersVO/TrackVault/releases](https://github.com/NathanMeyersVO/TrackVault/releases) and download the latest installer (`.msi` and/or `.exe` setup, depending on what the build produced).
 2. Unsigned builds may trigger a SmartScreen warning until the app is code-signed.
 
 **Maintainers — ship a new version**
