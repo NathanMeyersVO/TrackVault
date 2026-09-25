@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  applyPointerAutoScrollStep,
   dropPosition,
   pointerExceededDragThreshold,
   scrollDeltaForPointer,
@@ -37,6 +38,20 @@ describe("scrollDeltaForPointer", () => {
     const shallow = Math.abs(scrollDeltaForPointer(30, rect));
     const deep = Math.abs(scrollDeltaForPointer(0, rect));
     expect(deep).toBeGreaterThan(shallow);
+  });
+});
+
+describe("applyPointerAutoScrollStep", () => {
+  it("increases scrollTop when the pointer is below the viewport", () => {
+    const scrollEl = {
+      scrollTop: 10,
+      scrollHeight: 500,
+      clientHeight: 200,
+      getBoundingClientRect: () => ({ top: 0, bottom: 200 }),
+    } as HTMLElement;
+
+    applyPointerAutoScrollStep(scrollEl, 190);
+    expect(scrollEl.scrollTop).toBeGreaterThan(10);
   });
 });
 

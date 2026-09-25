@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type MouseEvent,
+  type RefObject,
+} from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { listen } from "@tauri-apps/api/event";
 
@@ -53,6 +61,7 @@ function TaglistGroup({
   dragOverTarget,
   supportsTitleImport,
   titleImportDialog,
+  scrollContainerRef,
 }: {
   taglist: Taglist;
   view: View;
@@ -64,6 +73,7 @@ function TaglistGroup({
     title: string;
     filters: { name: string; extensions: string[] }[];
   };
+  scrollContainerRef: RefObject<HTMLElement | null>;
 }) {
   const { refresh } = useProject();
   const [values, setValues] = useState<TaglistValue[]>([]);
@@ -94,6 +104,7 @@ function TaglistGroup({
     usePointerListReorder({
       enabled: taggedValues.length > 1,
       containerRef: sublistContainerRef,
+      scrollContainerRef,
       onCommit: (fromIndex, toIndex, position) => {
         const reordered = reorderItemsByIndex(
           taggedValues,
@@ -384,6 +395,7 @@ export function Sidebar({ width }: { width: number }) {
     useState<Collection | null>(null);
   const [deletingPlaylist, setDeletingPlaylist] = useState(false);
   const [deletingCollection, setDeletingCollection] = useState(false);
+  const browseNavRef = useRef<HTMLElement>(null);
   const collectionListRef = useRef<HTMLDivElement>(null);
   const playlistListRef = useRef<HTMLDivElement>(null);
   const [editingPlaylistId, setEditingPlaylistId] = useState<number | null>(null);
@@ -484,6 +496,7 @@ export function Sidebar({ width }: { width: number }) {
   const collectionReorder = usePointerListReorder({
     enabled: collections.length > 1,
     containerRef: collectionListRef,
+    scrollContainerRef: browseNavRef,
     onCommit: (fromIndex, toIndex, position) => {
       const reordered = reorderItemsByIndex(
         collections,
@@ -498,6 +511,7 @@ export function Sidebar({ width }: { width: number }) {
   const playlistReorder = usePointerListReorder({
     enabled: playlists.length > 1,
     containerRef: playlistListRef,
+    scrollContainerRef: browseNavRef,
     onCommit: (fromIndex, toIndex, position) => {
       const reordered = reorderItemsByIndex(
         playlists,
@@ -514,6 +528,7 @@ export function Sidebar({ width }: { width: number }) {
   usePointerTrackDrop({
     draggingTrackId,
     setDraggingTrackId,
+    scrollContainerRef: browseNavRef,
     taglists,
     setDragOverTaglistTarget: setDragOverTaglistTarget,
     setDragOverPlaylistId,
@@ -641,7 +656,7 @@ export function Sidebar({ width }: { width: number }) {
         <p className="text-xs text-muted">Project tracks, stored collections, project playlists & project taglists</p>
       </div>
 
-      <nav className="flex-1 overflow-y-auto bg-background p-2">
+      <nav ref={browseNavRef} className="flex-1 overflow-y-auto bg-background p-2">
         <div className="mb-2 px-3 text-xs font-medium uppercase tracking-wide text-muted">
           Stored Collections
         </div>
@@ -984,6 +999,7 @@ export function Sidebar({ width }: { width: number }) {
             dragOverTarget={dragOverTaglistTarget}
             supportsTitleImport={applicationConfig.supportsTitleImport}
             titleImportDialog={applicationConfig.titleImportDialog}
+            scrollContainerRef={browseNavRef}
           />
         ))}
 

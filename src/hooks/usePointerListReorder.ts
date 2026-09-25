@@ -10,12 +10,12 @@ import {
   lockDocumentTextSelection,
   unlockDocumentTextSelection,
 } from "../lib/documentTextSelectionLock";
+import { usePointerDragAutoScroll } from "./usePointerDragAutoScroll";
 import {
   findReorderIndexFromPoint,
   findScrollableAncestor,
   pointerExceededDragThreshold,
   REORDER_INDEX_ATTR,
-  scrollDeltaForPointer,
 } from "../lib/pointerDrag";
 
 export type ReorderDropTarget = {
@@ -47,17 +47,8 @@ export function usePointerListReorder(options: {
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const [dropTarget, setDropTarget] = useState<ReorderDropTarget | null>(null);
   const sessionRef = useRef<Session | null>(null);
-  const scrollElRef = useRef<HTMLElement | null>(null);
-  const rafRef = useRef<number | null>(null);
   const onCommitRef = useRef(onCommit);
   onCommitRef.current = onCommit;
-
-  const stopAutoScroll = useCallback(() => {
-    if (rafRef.current != null) {
-      cancelAnimationFrame(rafRef.current);
-      rafRef.current = null;
-    }
-  }, []);
 
   const updateDropTarget = useCallback(
     (clientX: number, clientY: number, fromIndex: number) => {
@@ -80,39 +71,29 @@ export function usePointerListReorder(options: {
     return findScrollableAncestor(containerRef.current);
   }, [containerRef, scrollContainerRef]);
 
-  const tickAutoScroll = useCallback(() => {
-    const session = sessionRef.current;
-    if (!session?.dragging) {
-      rafRef.current = null;
-      return;
-    }
-
-    const scrollEl = scrollElRef.current;
-    if (scrollEl) {
-      const delta = scrollDeltaForPointer(
-        session.lastClientY,
-        scrollEl.getBoundingClientRect(),
-      );
-      if (delta !== 0) {
-        const maxScroll = scrollEl.scrollHeight - scrollEl.clientHeight;
-        scrollEl.scrollTop = Math.min(
-          maxScroll,
-          Math.max(0, scrollEl.scrollTop + delta),
+  const { startAutoScroll, stopAutoScroll, resetScrollEl, ensureScrollEl } =
+    usePointerDragAutoScroll({
+      scrollContainerRef,
+      resolveScrollEl,
+      getPointer: () => {
+        const session = sessionRef.current;
+        if (!session) return null;
+        return {
+          clientX: session.lastClientX,
+          clientY: session.lastClientY,
+        };
+      },
+      isActive: () => sessionRef.current?.dragging === true,
+      onTick: () => {
+        const session = sessionRef.current;
+        if (!session?.dragging) return;
+        updateDropTarget(
+          session.lastClientX,
+          session.lastClientY,
+          session.fromIndex,
         );
-      }
-    }
-
-    updateDropTarget(session.lastClientX, session.lastClientY, session.fromIndex);
-    rafRef.current = requestAnimationFrame(tickAutoScroll);
-  }, [updateDropTarget]);
-
-  const startAutoScroll = useCallback(() => {
-    if (rafRef.current != null) return;
-    if (!scrollElRef.current) {
-      scrollElRef.current = resolveScrollEl();
-    }
-    rafRef.current = requestAnimationFrame(tickAutoScroll);
-  }, [resolveScrollEl, tickAutoScroll]);
+      },
+    });
 
   const clearSession = useCallback(() => {
     stopAutoScroll();
@@ -120,10 +101,10 @@ export function usePointerListReorder(options: {
       unlockDocumentTextSelection();
     }
     sessionRef.current = null;
-    scrollElRef.current = null;
+    resetScrollEl();
     setActiveIndex(null);
     setDropTarget(null);
-  }, [stopAutoScroll]);
+  }, [resetScrollEl, stopAutoScroll]);
 
   const finishSession = useCallback(
     (clientX: number, clientY: number) => {
@@ -165,7 +146,7 @@ export function usePointerListReorder(options: {
       ) {
         session.dragging = true;
         setActiveIndex(session.fromIndex);
-        scrollElRef.current = resolveScrollEl();
+        ensureScrollEl();
       }
 
       if (!session.dragging) return;
@@ -174,7 +155,7 @@ export function usePointerListReorder(options: {
       updateDropTarget(event.clientX, event.clientY, session.fromIndex);
       startAutoScroll();
     },
-    [resolveScrollEl, startAutoScroll, updateDropTarget],
+    [ensureScrollEl, startAutoScroll, updateDropTarget],
   );
 
   const onWindowPointerUp = useCallback(
@@ -207,7 +188,7 @@ export function usePointerListReorder(options: {
           lastClientY: event.clientY,
           dragging: false,
         };
-        scrollElRef.current = null;
+        resetScrollEl();
         event.currentTarget.setPointerCapture(event.pointerId);
         window.addEventListener("pointermove", onWindowPointerMove);
         window.addEventListener("pointerup", onWindowPointerUp);
@@ -215,7 +196,7 @@ export function usePointerListReorder(options: {
       },
       style: { touchAction: "none" as const },
     }),
-    [enabled, onWindowPointerMove, onWindowPointerUp],
+    [enabled, onWindowPointerMove, onWindowPointerUp, resetScrollEl],
   );
 
   const getRowProps = useCallback(

@@ -1,7 +1,8 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, type RefObject } from "react";
 
 import { findTrackDropTargetFromPoint, TRACK_DROP_ATTR } from "../lib/pointerDrag";
 import type { Taglist, TaglistValue } from "../lib/tauri";
+import { usePointerDragAutoScroll } from "./usePointerDragAutoScroll";
 
 function parseTagValue(raw: string | null): string | null {
   if (raw == null || raw === "none") return null;
@@ -11,6 +12,7 @@ function parseTagValue(raw: string | null): string | null {
 export function usePointerTrackDrop(options: {
   draggingTrackId: number | null;
   setDraggingTrackId: (trackId: number | null) => void;
+  scrollContainerRef: RefObject<HTMLElement | null>;
   taglists: Taglist[];
   setDragOverTaglistTarget: (target: {
     taglistId: number;
@@ -23,6 +25,7 @@ export function usePointerTrackDrop(options: {
   const {
     draggingTrackId,
     setDraggingTrackId,
+    scrollContainerRef,
     taglists,
     setDragOverTaglistTarget,
     setDragOverPlaylistId,
@@ -37,10 +40,12 @@ export function usePointerTrackDrop(options: {
   const onPlaylistDropRef = useRef(onPlaylistDrop);
   onPlaylistDropRef.current = onPlaylistDrop;
 
-  useEffect(() => {
-    if (draggingTrackId == null) return;
+  const pointerRef = useRef({ clientX: 0, clientY: 0 });
+  const draggingTrackIdRef = useRef(draggingTrackId);
+  draggingTrackIdRef.current = draggingTrackId;
 
-    const updateHover = (clientX: number, clientY: number) => {
+  const updateHover = useCallback(
+    (clientX: number, clientY: number) => {
       const target = findTrackDropTargetFromPoint(clientX, clientY);
       if (!target) {
         setDragOverTaglistTarget(null);
@@ -82,14 +87,48 @@ export function usePointerTrackDrop(options: {
 
       setDragOverTaglistTarget(null);
       setDragOverPlaylistId(null);
-    };
+    },
+    [setDragOverPlaylistId, setDragOverTaglistTarget],
+  );
+
+  const updateHoverRef = useRef(updateHover);
+  updateHoverRef.current = updateHover;
+
+  const { startAutoScroll, stopAutoScroll, resetScrollEl } =
+    usePointerDragAutoScroll({
+      scrollContainerRef,
+      getPointer: () => pointerRef.current,
+      isActive: () => draggingTrackIdRef.current != null,
+      onTick: () => {
+        const { clientX, clientY } = pointerRef.current;
+        updateHoverRef.current(clientX, clientY);
+      },
+    });
+
+  const startAutoScrollRef = useRef(startAutoScroll);
+  startAutoScrollRef.current = startAutoScroll;
+  const stopAutoScrollRef = useRef(stopAutoScroll);
+  stopAutoScrollRef.current = stopAutoScroll;
+
+  useEffect(() => {
+    if (draggingTrackId == null) {
+      stopAutoScrollRef.current();
+      resetScrollEl();
+      return;
+    }
 
     const onPointerMove = (event: PointerEvent) => {
       event.preventDefault();
-      updateHover(event.clientX, event.clientY);
+      pointerRef.current = {
+        clientX: event.clientX,
+        clientY: event.clientY,
+      };
+      updateHoverRef.current(event.clientX, event.clientY);
+      startAutoScrollRef.current();
     };
 
     const onPointerUp = (event: PointerEvent) => {
+      stopAutoScrollRef.current();
       const trackId = draggingTrackId;
       const target = findTrackDropTargetFromPoint(event.clientX, event.clientY);
       setDragOverTaglistTarget(null);
@@ -132,12 +171,15 @@ export function usePointerTrackDrop(options: {
     window.addEventListener("pointercancel", onPointerUp);
 
     return () => {
+      stopAutoScrollRef.current();
+      resetScrollEl();
       window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerup", onPointerUp);
       window.removeEventListener("pointercancel", onPointerUp);
     };
   }, [
     draggingTrackId,
+    resetScrollEl,
     setDragOverPlaylistId,
     setDragOverTaglistTarget,
     setDraggingTrackId,

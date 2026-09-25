@@ -74,6 +74,22 @@ export function scrollDeltaForPointer(
   return 0;
 }
 
+export function applyPointerAutoScrollStep(
+  scrollEl: HTMLElement,
+  clientY: number,
+): void {
+  const delta = scrollDeltaForPointer(
+    clientY,
+    scrollEl.getBoundingClientRect(),
+  );
+  if (delta === 0) return;
+  const maxScroll = scrollEl.scrollHeight - scrollEl.clientHeight;
+  scrollEl.scrollTop = Math.min(
+    maxScroll,
+    Math.max(0, scrollEl.scrollTop + delta),
+  );
+}
+
 export function findScrollableAncestor(el: Element | null): HTMLElement | null {
   let current: Element | null = el;
   while (current) {
