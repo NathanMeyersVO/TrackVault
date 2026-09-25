@@ -11,7 +11,7 @@ use walkdir::WalkDir;
 
 use crate::archive_export_progress::ArchiveExportProgressCtx;
 use crate::projects::{
-    self, library_dir, load_manifest, ProjectManifest, ProjectSummary,
+    self, library_dir, load_manifest, ProjectManifest, ProjectOrigin, ProjectSummary,
     LIBRARY_SUBDIR, PROJECT_MANIFEST,
 };
 
@@ -202,6 +202,7 @@ pub fn import_project(app_data: &Path, source: &Path) -> Result<ProjectSummary, 
             .to_string(),
         schedule_relative_path: imported.schedule_relative_path,
         schedule_last_imported_mtime: None,
+        origin: ProjectOrigin::Imported,
     };
 
     let project_root = projects::create_project_dirs(app_data, &manifest)?;
@@ -312,6 +313,7 @@ mod tests {
         assert_eq!(imported.name, "Test Event");
         assert_eq!(imported.application_id, "usfs_ems");
         assert_eq!(imported.track_count, 1);
+        assert_eq!(imported.origin, ProjectOrigin::Imported);
 
         let imported_root = projects::project_dir(&app_data, &imported.id);
         assert!(projects::manifest_path(&imported_root).is_file());

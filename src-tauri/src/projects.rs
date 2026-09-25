@@ -11,6 +11,14 @@ pub const DEFAULT_SCHEDULE_REL: &str = "event-schedule.xlsx";
 const SCHEDULE_BASENAME: &str = "event-schedule";
 pub const ACTIVE_PROJECT_KEY: &str = "active_project_id";
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum ProjectOrigin {
+    #[default]
+    Created,
+    Imported,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProjectManifest {
     pub version: u32,
@@ -21,6 +29,8 @@ pub struct ProjectManifest {
     pub schedule_relative_path: String,
     #[serde(default)]
     pub schedule_last_imported_mtime: Option<i64>,
+    #[serde(default)]
+    pub origin: ProjectOrigin,
 }
 
 impl ProjectManifest {
@@ -33,6 +43,7 @@ impl ProjectManifest {
             application_id,
             schedule_relative_path: DEFAULT_SCHEDULE_REL.to_string(),
             schedule_last_imported_mtime: None,
+            origin: ProjectOrigin::Created,
         }
     }
 }
@@ -45,6 +56,7 @@ pub struct ProjectSummary {
     pub application_id: String,
     pub track_count: u32,
     pub last_modified: i64,
+    pub origin: ProjectOrigin,
 }
 
 pub fn projects_root(app_data: &Path) -> PathBuf {
@@ -170,6 +182,7 @@ pub fn list_projects(app_data: &Path) -> Result<Vec<ProjectSummary>, String> {
             application_id: manifest.application_id,
             track_count,
             last_modified,
+            origin: manifest.origin,
         });
     }
     out.sort_by(|a, b| b.last_modified.cmp(&a.last_modified));

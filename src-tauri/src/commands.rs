@@ -1426,6 +1426,7 @@ pub fn create_project(
         application_id: manifest.application_id,
         track_count: 0,
         last_modified: manifest.created_at,
+        origin: manifest.origin,
     })
 }
 

@@ -14,6 +14,7 @@ import {
   PROJECT_ARCHIVE_DIALOG_FILTER,
   isProjectArchivePath,
 } from "../lib/projectArchive";
+import { formatProjectOriginLine } from "../lib/formatProjectTimestamp";
 import { api, type ApplicationId, type DeliveryPreview, type ProjectSummary } from "../lib/tauri";
 
 export interface ProjectHubModalProps {
@@ -279,6 +280,8 @@ export function ProjectHubModal({ onClose }: ProjectHubModalProps) {
                           ) : null}
                         </div>
                         <div className="text-xs text-muted">
+                          {formatProjectOriginLine(p.origin, p.created_at)}
+                          {" · "}
                           {p.track_count} tracks ·{" "}
                           {getApplicationLabel(
                             p.application_id === "usfs_ems" ? "usfs_ems" : "none",

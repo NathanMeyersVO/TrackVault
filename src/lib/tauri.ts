@@ -253,6 +253,8 @@ export interface ApplicationSettings {
   application_id: ApplicationId;
 }
 
+export type ProjectOrigin = "created" | "imported";
+
 export interface ProjectSummary {
   id: string;
   name: string;
@@ -260,6 +262,7 @@ export interface ProjectSummary {
   application_id: string;
   track_count: number;
   last_modified: number;
+  origin: ProjectOrigin;
 }
 
 export type DeliveryChangeKind =
