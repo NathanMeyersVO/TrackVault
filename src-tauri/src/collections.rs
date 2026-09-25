@@ -464,7 +464,7 @@ mod tests {
     }
 
     #[test]
-    fn close_library_keeps_collection_tracks() {
+    fn close_project_keeps_collection_tracks() {
         let (db, app_data) = test_app_data();
         let collection_id = db.create_collection("Keep").unwrap();
         let dir = ensure_collection_dir(&app_data, collection_id).unwrap();
@@ -483,7 +483,7 @@ mod tests {
         db.upsert_track("/library/track.mp3", "Lib", "A", "B", 1000, None)
             .unwrap();
 
-        db.close_library_state().unwrap();
+        db.close_project_state().unwrap();
 
         assert_eq!(db.list_tracks().unwrap().len(), 0);
         assert_eq!(db.list_collection_tracks(collection_id).unwrap().len(), 1);

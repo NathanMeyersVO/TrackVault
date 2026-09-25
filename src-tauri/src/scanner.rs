@@ -69,7 +69,7 @@ fn emit_scan_progress(
     project_load: Option<&ProjectLoadProgressCtx>,
 ) {
     let _ = app.emit(
-        "library-scan-progress",
+        "project-scan-progress",
         AudioCacheProgress {
             done,
             total,
@@ -157,7 +157,7 @@ pub fn scan_folder(
     })
 }
 
-pub fn scan_library_folder(
+pub fn scan_project_folder(
     db: &Database,
     app: &AppHandle,
     delivery: Option<&DeliveryProgressCtx>,
@@ -173,7 +173,7 @@ pub fn scan_library_folder(
         done: true,
     };
 
-    let folder = db.get_library_folder().map_err(|e| e.to_string())?;
+    let folder = db.get_project_folder().map_err(|e| e.to_string())?;
     let Some(folder) = folder else {
         emit_scan_progress(app, 0, 0, true, None, delivery, project_load);
         return Ok(total);
@@ -187,14 +187,14 @@ pub fn scan_library_folder(
     }
 
     let existing = db
-        .list_library_track_paths()
+        .list_project_track_paths()
         .map_err(|e| e.to_string())?;
     let missing: Vec<String> = existing
         .into_iter()
         .filter(|path| !seen.contains(path))
         .collect();
     total.removed = db
-        .delete_library_tracks_by_paths(&missing)
+        .delete_project_tracks_by_paths(&missing)
         .map_err(|e| e.to_string())?;
 
     emit_scan_progress(app, total.scanned, total.scanned, true, None, delivery, project_load);

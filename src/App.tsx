@@ -2,14 +2,14 @@ import { useEffect } from "react";
 import { AppMenuBar } from "./components/AppMenuBar";
 import { Sidebar } from "./components/Sidebar";
 import { SidebarResizeHandle } from "./components/SidebarResizeHandle";
-import { LibraryView } from "./components/LibraryView";
+import { ProjectTracksView } from "./components/ProjectTracksView";
 import { PlaylistView } from "./components/PlaylistView";
 import { TaglistView } from "./components/TaglistView";
 import { CollectionView } from "./components/CollectionView";
 import { NowPlayingBar } from "./components/NowPlayingBar";
 import { AudioCacheBanner } from "./components/AudioCacheBanner";
 import { DeliveryBusyOverlay } from "./components/DeliveryBusyOverlay";
-import { useLibrary, usePlayer } from "./hooks/usePlayer";
+import { useProject, usePlayer } from "./hooks/usePlayer";
 import { initPlayerController } from "./playerController";
 import { useSidebarWidth } from "./hooks/useSidebarWidth";
 import { useTrackCursor } from "./hooks/useTrackCursor";
@@ -42,14 +42,14 @@ function isCollectionView(view: View): view is { collectionId: number } {
 function MainContent() {
   const { view, tracks, activeProject } = usePlayerStore();
   const deliveryCopy = getDeliveryCopy(activeProject?.application_id);
-  useLibrary();
+  useProject();
 
   return (
     <main className="flex min-w-0 flex-1 flex-col">
       <AudioCacheBanner />
       <div className="min-h-0 flex-1">
-        {view === "library" ? (
-          <LibraryView />
+        {view === "project_tracks" ? (
+          <ProjectTracksView />
         ) : isCollectionView(view) ? (
           <CollectionView collectionId={view.collectionId} />
         ) : isTaglistView(view) ? (
@@ -59,7 +59,7 @@ function MainContent() {
         ) : null}
       </div>
 
-      {view === "library" && tracks.length === 0 && (
+      {view === "project_tracks" && tracks.length === 0 && (
         <div className="border-t border-border px-4 py-2 text-xs text-muted">
           {deliveryCopy.appEmptyTracksFooter}
         </div>

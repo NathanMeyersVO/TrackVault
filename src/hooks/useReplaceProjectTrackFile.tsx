@@ -3,7 +3,7 @@ import { useCallback, useState } from "react";
 import { ReplaceTrackFileModal } from "../components/ReplaceTrackFileModal";
 import type { Track } from "../lib/tauri";
 
-export function useReplaceLibraryTrackFile() {
+export function useReplaceProjectTrackFile() {
   const [pendingTrack, setPendingTrack] = useState<Track | null>(null);
 
   const requestReplaceFile = useCallback((track: Track) => {

@@ -193,7 +193,7 @@ fn verify_written_tags(path: &Path, expected: &HashMap<String, String>) -> Resul
     for (key, value) in expected {
         if !field_value_matches(value, actual.get(key).map(String::as_str)) {
             return Err(
-                "Tags were written but could not be verified. Try rescanning the project library."
+                "Tags were written but could not be verified. Try rescanning the project."
                     .to_string(),
             );
         }
@@ -256,7 +256,7 @@ fn check_file_writable(path: &Path) -> Result<(), String> {
 }
 
 fn ensure_writable_watch_path(db: &Database, path: &Path) -> Result<(), String> {
-    crate::library_path::ensure_writable_track_path(db, path)
+    crate::project_path::ensure_writable_track_path(db, path)
 }
 
 fn item_key_label(key: &ItemKey) -> String {

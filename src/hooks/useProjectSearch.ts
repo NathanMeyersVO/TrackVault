@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 
-import { api, type ProjectLibrarySearchHit } from "../lib/tauri";
+import { api, type ProjectSearchHit } from "../lib/tauri";
 import { usePlayerStore } from "../store/playerStore";
 
 const SEARCH_DEBOUNCE_MS = 200;
 
-export function useProjectLibrarySearch() {
-  const query = usePlayerStore((state) => state.projectLibrarySearchQuery);
-  const setQuery = usePlayerStore((state) => state.setProjectLibrarySearchQuery);
-  const [hits, setHits] = useState<ProjectLibrarySearchHit[]>([]);
+export function useProjectSearch() {
+  const query = usePlayerStore((state) => state.projectSearchQuery);
+  const setQuery = usePlayerStore((state) => state.setProjectSearchQuery);
+  const [hits, setHits] = useState<ProjectSearchHit[]>([]);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [searchLoading, setSearchLoading] = useState(false);
   const requestIdRef = useRef(0);
@@ -28,7 +28,7 @@ export function useProjectLibrarySearch() {
     setSearchLoading(true);
     const timer = window.setTimeout(() => {
       void api
-        .searchProjectLibrary(trimmedQuery)
+        .searchProject(trimmedQuery)
         .then((results) => {
           if (requestId !== requestIdRef.current) return;
           setHits(results);

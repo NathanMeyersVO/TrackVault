@@ -5,7 +5,7 @@ const PHASE_LABELS: Record<DeliveryProgress["phase"], string> = {
   staging: "Extracting and copying files",
   analyzing: "Analyzing audio files",
   applying: "Applying changes",
-  scanning_library: "Scanning project library",
+  scanning_project: "Scanning project",
 };
 
 export function formatDeliveryProgressDetail(progress: DeliveryProgress | null): string | undefined {

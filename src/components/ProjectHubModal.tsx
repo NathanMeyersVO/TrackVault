@@ -5,8 +5,8 @@ import { DeliveryFolderDropZone } from "./DeliveryFolderDropZone";
 import { DeliveryPreviewModal } from "./DeliveryPreviewModal";
 import { ProjectArchiveDropZone } from "./ProjectArchiveDropZone";
 import { useDeliveryFolderConfirm } from "../hooks/useDeliveryFolderConfirm";
-import { useLibraryUiReset } from "../hooks/useLibraryUiReset";
-import { useLibrary } from "../hooks/usePlayer";
+import { useProjectUiReset } from "../hooks/useProjectUiReset";
+import { useProject } from "../hooks/usePlayer";
 import { usePlayerStore } from "../store/playerStore";
 import { getDeliveryCopy } from "../lib/applicationConfig";
 import { APPLICATION_OPTIONS, getApplicationLabel } from "../lib/applicationLabels";
@@ -33,8 +33,8 @@ export function ProjectHubModal({ onClose }: ProjectHubModalProps) {
   const [busy, setBusy] = useState(false);
   const [importingArchive, setImportingArchive] = useState(false);
   const setDeliveryStaging = usePlayerStore((s) => s.setDeliveryStaging);
-  const { refresh } = useLibrary();
-  const { resetLibraryUi } = useLibraryUiReset();
+  const { refresh } = useProject();
+  const { resetProjectUi } = useProjectUiReset();
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -169,7 +169,7 @@ export function ProjectHubModal({ onClose }: ProjectHubModalProps) {
     try {
       const playback = await api.deleteProject(deletedId);
       if (wasActive) {
-        resetLibraryUi(playback);
+        resetProjectUi(playback);
       }
       setDeleteTarget(null);
       await refresh();

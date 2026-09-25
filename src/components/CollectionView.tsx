@@ -8,13 +8,13 @@ import {
 } from "../lib/collectionArchive";
 import { api, type CollectionPlaybackMode, type Track } from "../lib/tauri";
 import { useDeleteCollectionTrack } from "../hooks/useDeleteCollectionTrack";
-import { useLibrary, usePlayer } from "../hooks/usePlayer";
+import { useProject, usePlayer } from "../hooks/usePlayer";
 import { playerController } from "../playerController";
-import { formatProjectLibrarySearchSubtitle } from "../lib/projectLibrarySearchCopy";
-import { useProjectLibrarySearch } from "../hooks/useProjectLibrarySearch";
+import { formatProjectSearchSubtitle } from "../lib/projectSearchCopy";
+import { useProjectSearch } from "../hooks/useProjectSearch";
 import { usePlayerStore, serializeView } from "../store/playerStore";
 import { TagEditorModal } from "./TagEditorModal";
-import { ProjectLibrarySearchPanel } from "./ProjectLibrarySearchPanel";
+import { ProjectSearchPanel } from "./ProjectSearchPanel";
 import { TrackTable } from "./TrackTable";
 
 interface CollectionViewProps {
@@ -29,7 +29,7 @@ export function CollectionView({ collectionId }: CollectionViewProps) {
     setActiveTrackIds,
   } = usePlayerStore();
   const { playTrack, selectTrack } = usePlayer();
-  const { refresh } = useLibrary();
+  const { refresh } = useProject();
   const [tracks, setTracks] = useState<Track[]>([]);
   const { requestDeleteTrack, confirmDialog: deleteConfirmDialog } =
     useDeleteCollectionTrack();
@@ -44,7 +44,7 @@ export function CollectionView({ collectionId }: CollectionViewProps) {
     searchLoading,
     searchError,
     globalHitCount,
-  } = useProjectLibrarySearch();
+  } = useProjectSearch();
 
   const collection = collections.find((entry) => entry.id === collectionId);
   const playbackMode = collection?.playback_mode ?? "discrete";
@@ -106,7 +106,7 @@ export function CollectionView({ collectionId }: CollectionViewProps) {
   }, [refreshTracks, collections]);
 
   useEffect(() => {
-    const unlisten = listen("library-updated", () => {
+    const unlisten = listen("project-updated", () => {
       refreshTracks();
     });
     return () => {
@@ -159,7 +159,7 @@ export function CollectionView({ collectionId }: CollectionViewProps) {
             </h2>
             <p className="text-xs text-muted">
               {isSearching
-                ? formatProjectLibrarySearchSubtitle(searchLoading, globalHitCount)
+                ? formatProjectSearchSubtitle(searchLoading, globalHitCount)
                 : `${tracks.length} track${tracks.length === 1 ? "" : "s"}`}
             </p>
           </div>
@@ -213,7 +213,7 @@ export function CollectionView({ collectionId }: CollectionViewProps) {
         ) : null}
       </div>
       <div className="border-b border-border px-4 py-2">
-        <ProjectLibrarySearchPanel
+        <ProjectSearchPanel
           query={query}
           onQueryChange={setQuery}
           hits={hits}

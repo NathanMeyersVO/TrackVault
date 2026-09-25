@@ -1,5 +1,5 @@
 export const SWAP_FILE_NAME_KEY = "__fileName__";
-export const SWAP_LIBRARY_PATHS_KEY = "__libraryPaths__";
+export const SWAP_PROJECT_PATHS_KEY = "__projectPaths__";
 
 export function swapSelectionState(keys: string[], selected: Set<string>) {
   if (keys.length === 0) {

@@ -12,13 +12,13 @@ import { api } from "../lib/tauri";
 
 import {
 
-  formatLibraryConflictMessage,
+  formatProjectConflictMessage,
 
   formatUploadResult,
 
 } from "../lib/uploadFeedback";
 
-import { useLibrary } from "./usePlayer";
+import { useProject } from "./usePlayer";
 
 import { usePlayerStore } from "../store/playerStore";
 
@@ -26,9 +26,9 @@ import { usePlayerStore } from "../store/playerStore";
 
 export function useUploadTracks() {
 
-  const { refresh } = useLibrary();
+  const { refresh } = useProject();
 
-  const { libraryFolder, setScanning } = usePlayerStore();
+  const { projectFolder, setScanning } = usePlayerStore();
 
   const [uploading, setUploading] = useState(false);
 
@@ -104,9 +104,9 @@ export function useUploadTracks() {
 
     async (sourcePaths: string[]) => {
 
-      if (!libraryFolder) {
+      if (!projectFolder) {
 
-        setUploadError("Choose a project library folder before uploading tracks.");
+        setUploadError("Choose a project folder before uploading tracks.");
 
         setUploadMessage(null);
 
@@ -142,7 +142,7 @@ export function useUploadTracks() {
 
     },
 
-    [libraryFolder, runUpload],
+    [projectFolder, runUpload],
 
   );
 
@@ -218,7 +218,7 @@ export function useUploadTracks() {
 
       title="Replace existing files?"
 
-      message={formatLibraryConflictMessage(pendingUpload.conflicts)}
+      message={formatProjectConflictMessage(pendingUpload.conflicts)}
 
       confirmLabel="Overwrite"
 

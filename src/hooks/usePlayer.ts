@@ -18,16 +18,16 @@ import { usePlayerStore } from "../store/playerStore";
 
 
 
-export function useLibrary() {
+export function useProject() {
 
   const {
     setTracks,
     setPlaylists,
     setTaglists,
     setCollections,
-    setLibraryFolder,
+    setProjectFolder,
     setActiveProject,
-    setLibraryScanProgress,
+    setProjectScanProgress,
     setDeliveryProgress,
     setArchiveExportProgress,
     setProjectLoadProgress,
@@ -38,13 +38,13 @@ export function useLibrary() {
 
   const refresh = useCallback(async () => {
 
-    const [tracks, playlists, taglists, collections, libraryFolder, activeProject] =
+    const [tracks, playlists, taglists, collections, projectFolder, activeProject] =
       await Promise.all([
         api.listTracks(),
         api.listPlaylists(),
         api.listTaglists(),
         api.listCollections(),
-        api.getLibraryFolder(),
+        api.getProjectFolder(),
         api.getActiveProject(),
       ]);
 
@@ -52,7 +52,7 @@ export function useLibrary() {
     setPlaylists(playlists);
     setTaglists(taglists);
     setCollections(collections);
-    setLibraryFolder(libraryFolder);
+    setProjectFolder(projectFolder);
     setActiveProject(activeProject);
 
   }, [
@@ -60,7 +60,7 @@ export function useLibrary() {
     setPlaylists,
     setTaglists,
     setCollections,
-    setLibraryFolder,
+    setProjectFolder,
     setActiveProject,
   ]);
 
@@ -72,7 +72,7 @@ export function useLibrary() {
 
 
 
-    const unlisten = listen("library-updated", () => {
+    const unlisten = listen("project-updated", () => {
 
       refresh().catch(console.error);
 
@@ -118,9 +118,9 @@ export function useLibrary() {
 
   useEffect(() => {
 
-    const unlisten = listen<AudioCacheProgress>("library-scan-progress", (event) => {
+    const unlisten = listen<AudioCacheProgress>("project-scan-progress", (event) => {
 
-      setLibraryScanProgress(event.payload);
+      setProjectScanProgress(event.payload);
 
     });
 
@@ -132,7 +132,7 @@ export function useLibrary() {
 
     };
 
-  }, [setLibraryScanProgress]);
+  }, [setProjectScanProgress]);
 
 
 

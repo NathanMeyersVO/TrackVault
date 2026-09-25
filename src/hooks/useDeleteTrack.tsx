@@ -3,11 +3,11 @@ import { useCallback, useState } from "react";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { api, type Track } from "../lib/tauri";
 import { invalidateTrackTags } from "../lib/trackTagsCache";
-import { useLibrary } from "./usePlayer";
+import { useProject } from "./usePlayer";
 import { usePlayerStore } from "../store/playerStore";
 
 export function useDeleteTrack() {
-  const { refresh } = useLibrary();
+  const { refresh } = useProject();
   const { cursorTrackId, setCursorTrackId, setPlayback } = usePlayerStore();
   const [pendingTrack, setPendingTrack] = useState<Track | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -50,7 +50,7 @@ export function useDeleteTrack() {
   const confirmDialog = pendingTrack ? (
     <ConfirmDialog
       title="Delete track"
-      message={`Delete "${pendingTrack.title}" from the project library? This will remove it from all project library playlists and project library taglists and delete the file. This cannot be undone.`}
+      message={`Delete "${pendingTrack.title}" from the project? This will remove it from all project playlists and project taglists and delete the file. This cannot be undone.`}
       confirmLabel="Delete"
       cancelLabel="Cancel"
       destructive

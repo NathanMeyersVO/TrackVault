@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use crate::db::Database;
-use crate::library_path;
+use crate::project_path;
 use crate::replace_track::{build_track_file_side, ReplaceTrackFileSide};
 use crate::tags::{read_human_tag_pairs, write_track_tags, TagFieldInput};
 use crate::waveform::probe_duration_ms;
@@ -14,8 +14,8 @@ use crate::waveform::probe_duration_ms;
 pub struct SwapTaglistPreview {
     pub source: ReplaceTrackFileSide,
     pub partner: ReplaceTrackFileSide,
-    pub source_library_path: String,
-    pub partner_library_path: String,
+    pub source_project_path: String,
+    pub partner_project_path: String,
     pub source_path_after: String,
     pub partner_path_after: String,
     pub partition_key: String,
@@ -42,23 +42,23 @@ pub fn preview_swap_taglist_entries(
     source_value: Option<&str>,
     target_value: Option<&str>,
     source_track_id: i64,
-    swap_library_paths: bool,
+    swap_project_paths: bool,
     swap_basenames: bool,
 ) -> Result<SwapTaglistPreview, String> {
     let ctx = resolve_swap_context(db, taglist_id, source_value, target_value, source_track_id)?;
     let source_path = Path::new(&ctx.source_path);
     let partner_path = Path::new(&ctx.partner_path);
 
-    library_path::ensure_under_library_folder(db, source_path)?;
-    library_path::ensure_under_library_folder(db, partner_path)?;
+    project_path::ensure_under_project_folder(db, source_path)?;
+    project_path::ensure_under_project_folder(db, partner_path)?;
 
     let source = build_track_file_side(source_path)?;
     let partner = build_track_file_side(partner_path)?;
 
     let different_parent_dirs = different_parent_dirs(source_path, partner_path);
-    let swap_library_paths = swap_library_paths || different_parent_dirs;
+    let swap_project_paths = swap_project_paths || different_parent_dirs;
     let (new_source, new_partner) =
-        compute_swapped_paths(source_path, partner_path, swap_library_paths, swap_basenames);
+        compute_swapped_paths(source_path, partner_path, swap_project_paths, swap_basenames);
     let (path_swap_collision, collision_message) = path_swap_collision_message(
         db,
         source_path,
@@ -70,8 +70,8 @@ pub fn preview_swap_taglist_entries(
     )?;
 
     Ok(SwapTaglistPreview {
-        source_library_path: ctx.source_path.clone(),
-        partner_library_path: ctx.partner_path.clone(),
+        source_project_path: ctx.source_path.clone(),
+        partner_project_path: ctx.partner_path.clone(),
         source_path_after: new_source.to_string_lossy().to_string(),
         partner_path_after: new_partner.to_string_lossy().to_string(),
         partition_key: ctx.partition_key,
@@ -96,22 +96,22 @@ pub fn swap_taglist_entries(
     target_value: Option<&str>,
     source_track_id: i64,
     swap_tag_keys: &[String],
-    swap_library_paths: bool,
+    swap_project_paths: bool,
     swap_basenames: bool,
 ) -> Result<Vec<crate::models::Track>, String> {
     let ctx = resolve_swap_context(db, taglist_id, source_value, target_value, source_track_id)?;
     let source_path = PathBuf::from(&ctx.source_path);
     let partner_path = PathBuf::from(&ctx.partner_path);
 
-    library_path::ensure_under_library_folder(db, &source_path)?;
-    library_path::ensure_under_library_folder(db, &partner_path)?;
+    project_path::ensure_under_project_folder(db, &source_path)?;
+    project_path::ensure_under_project_folder(db, &partner_path)?;
 
-    let swap_library_paths =
-        swap_library_paths || different_parent_dirs(&source_path, &partner_path);
+    let swap_project_paths =
+        swap_project_paths || different_parent_dirs(&source_path, &partner_path);
     let (new_source, new_partner) =
-        compute_swapped_paths(&source_path, &partner_path, swap_library_paths, swap_basenames);
+        compute_swapped_paths(&source_path, &partner_path, swap_project_paths, swap_basenames);
 
-    if swap_library_paths {
+    if swap_project_paths {
         if let Some(message) = path_swap_collision_message(
             db,
             &source_path,
@@ -128,12 +128,12 @@ pub fn swap_taglist_entries(
         apply_path_swap(&source_path, &partner_path, &new_source, &new_partner)?;
     }
 
-    let final_source_path = if swap_library_paths {
+    let final_source_path = if swap_project_paths {
         new_source
     } else {
         source_path.clone()
     };
-    let final_partner_path = if swap_library_paths {
+    let final_partner_path = if swap_project_paths {
         new_partner
     } else {
         partner_path.clone()
@@ -155,7 +155,7 @@ pub fn swap_taglist_entries(
 
     let source_meta = write_track_tags(db, &final_source_path, &source_fields)?;
     let source_track = db
-        .update_library_track_after_replace(
+        .update_project_track_after_replace(
             ctx.source_track_id,
             &final_source_path.to_string_lossy(),
             &source_meta.title,
@@ -171,7 +171,7 @@ pub fn swap_taglist_entries(
 
     let partner_meta = write_track_tags(db, &final_partner_path, &partner_fields)?;
     let partner_track = db
-        .update_library_track_after_replace(
+        .update_project_track_after_replace(
             ctx.partner_track_id,
             &final_partner_path.to_string_lossy(),
             &partner_meta.title,
@@ -202,10 +202,10 @@ pub fn swap_taglist_entries(
 pub fn compute_swapped_paths(
     source_path: &Path,
     partner_path: &Path,
-    swap_library_paths: bool,
+    swap_project_paths: bool,
     swap_basenames: bool,
 ) -> (PathBuf, PathBuf) {
-    if !swap_library_paths || source_path == partner_path {
+    if !swap_project_paths || source_path == partner_path {
         return (source_path.to_path_buf(), partner_path.to_path_buf());
     }
 

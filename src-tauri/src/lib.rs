@@ -16,8 +16,8 @@ mod project_archive;
 mod project_config;
 mod projects;
 mod models;
-mod library_path;
-mod library_setup;
+mod project_path;
+mod project_setup;
 mod playback;
 mod player;
 mod scanner;
@@ -33,17 +33,17 @@ mod replace_remote_upload;
 mod phone_upload_settings;
 mod phone_upload_probe;
 mod project_load;
-mod project_library_search;
+mod project_search;
 mod upload_relay;
 mod waveform;
 
 use commands::{
     add_track_to_playlist, check_collection_upload_conflicts, check_upload_conflicts,
-    close_library, create_collection, create_playlist, create_taglist, delete_collection,
+    close_project, create_collection, create_playlist, create_taglist, delete_collection,
     delete_collection_track, delete_playlist, delete_taglist, delete_track, export_collection,
     get_app_settings, get_application_settings, get_collection_playback_state, get_collection_tracks,
     apply_staged_delivery, create_project, delete_project, export_project,     get_active_project, get_project_load_progress,
-    get_library_folder, import_project_archive,
+    get_project_folder, import_project_archive,
     list_projects, open_project, preview_delivery_with_mode,
     browse_delivery_folder, get_last_delivery_folder,
     restore_active_project_in_background, set_last_delivery_folder, stage_delivery,
@@ -53,15 +53,15 @@ use commands::{
     list_collections, list_playlists, list_taglist_values, list_taglists, list_tracks,
     pause_playback, play_track, remove_track_from_playlist, rename_collection, rename_playlist,
     reorder_collection_tracks, reorder_collections, reorder_playlist_tracks, reorder_playlists,
-    reorder_taglist_tracks, reorder_taglist_values, resume_playback, search_project_library,
-    load_library_config,
+    reorder_taglist_tracks, reorder_taglist_values, resume_playback, search_project,
+    load_project_config,
     list_taglist_swap_targets, preview_swap_taglist_entries, swap_taglist_entries,
-    save_collection_playback_state, save_library_config, seek_playback,
+    save_collection_playback_state, save_project_config, seek_playback,
     set_app_settings, set_application_settings, set_collection_continuous_volume, set_collection_playback_mode,
-    set_library_folder, set_taglist_value_title, set_volume, stop_playback, update_track_tags, upload_collection_tracks, upload_tracks,
-    preview_replace_library_track_file, replace_library_track_file,
+    set_project_folder, set_taglist_value_title, set_volume, stop_playback, update_track_tags, upload_collection_tracks, upload_tracks,
+    preview_replace_project_track_file, replace_project_track_file,
     stage_drop_source_path, stage_drop_source_paths, cleanup_drop_staging,
-    start_replace_remote_upload, start_library_remote_upload, start_collection_remote_upload,
+    start_replace_remote_upload, start_project_remote_upload, start_collection_remote_upload,
     stop_replace_remote_upload, get_replace_remote_upload_status,
     get_replace_remote_upload_log_path, get_replace_remote_upload_logs_dir,
     get_phone_upload_settings, set_phone_upload_settings, probe_cloudflared,
@@ -91,8 +91,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             list_tracks,
             get_track,
-            get_library_folder,
-            set_library_folder,
+            get_project_folder,
+            set_project_folder,
             list_projects,
             get_active_project,
             get_project_load_progress,
@@ -108,18 +108,18 @@ pub fn run() {
             stage_delivery,
             preview_delivery_with_mode,
             apply_staged_delivery,
-            save_library_config,
-            load_library_config,
-            close_library,
+            save_project_config,
+            load_project_config,
+            close_project,
             upload_tracks,
             check_upload_conflicts,
-            preview_replace_library_track_file,
-            replace_library_track_file,
+            preview_replace_project_track_file,
+            replace_project_track_file,
             stage_drop_source_path,
             stage_drop_source_paths,
             cleanup_drop_staging,
             start_replace_remote_upload,
-            start_library_remote_upload,
+            start_project_remote_upload,
             start_collection_remote_upload,
             stop_replace_remote_upload,
             get_replace_remote_upload_status,
@@ -183,7 +183,7 @@ pub fn run() {
             set_app_settings,
             get_application_settings,
             set_application_settings,
-            search_project_library,
+            search_project,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

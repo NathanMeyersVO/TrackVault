@@ -3,11 +3,11 @@ import { useCallback, useState } from "react";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { api, type Track } from "../lib/tauri";
 import { invalidateTrackTags } from "../lib/trackTagsCache";
-import { useLibrary } from "./usePlayer";
+import { useProject } from "./usePlayer";
 import { usePlayerStore } from "../store/playerStore";
 
 export function useDeleteCollectionTrack() {
-  const { refresh } = useLibrary();
+  const { refresh } = useProject();
   const { cursorTrackId, setCursorTrackId, setPlayback } = usePlayerStore();
   const [pendingTrack, setPendingTrack] = useState<Track | null>(null);
   const [deleting, setDeleting] = useState(false);

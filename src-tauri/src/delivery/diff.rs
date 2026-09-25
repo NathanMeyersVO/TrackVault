@@ -22,7 +22,7 @@ pub struct DeliveryPreview {
     pub changes: Vec<DeliveryChange>,
     pub apply_mode_hint: DeliveryApplyModeHint,
     pub staged_audio_count: u32,
-    pub library_audio_count: u32,
+    pub project_audio_count: u32,
     pub unchanged_audio_count: u32,
 }
 
@@ -52,7 +52,7 @@ pub fn build_preview(
     if total > 0 {
         progress.emit(DeliveryProgressPhase::Analyzing, 0, total, false, None);
     }
-    let library = collect_library_audio_hashes(&library_paths, progress, &mut done, total)?;
+    let library = collect_project_audio_hashes(&library_paths, progress, &mut done, total)?;
 
     let mut lib_by_rel: HashMap<String, LibraryFile> = HashMap::new();
     let mut lib_by_hash: HashMap<String, Vec<String>> = HashMap::new();
@@ -164,7 +164,7 @@ pub fn build_preview(
         changes,
         apply_mode_hint: hint,
         staged_audio_count: staged_count,
-        library_audio_count: library_count,
+        project_audio_count: library_count,
         unchanged_audio_count,
     })
 }
@@ -176,7 +176,7 @@ pub fn append_full_replace_removals(
 ) -> Result<(), String> {
     let staged = collect_audio_relative(staging_root)?;
     let staged_set: HashSet<String> = staged.into_iter().map(|(r, _)| r).collect();
-    for file in collect_library_audio(library_root)? {
+    for file in collect_project_audio(library_root)? {
         if !staged_set.contains(&file.rel) {
             preview.changes.push(DeliveryChange {
                 change_id: stable_change_id(DeliveryChangeKind::AudioRemove, &file.rel),
@@ -246,17 +246,17 @@ pub fn map_selected_change_ids(
     selected
 }
 
-fn collect_library_audio(library_root: &Path) -> Result<Vec<LibraryFile>, String> {
+fn collect_project_audio(library_root: &Path) -> Result<Vec<LibraryFile>, String> {
     if !library_root.is_dir() {
         return Ok(Vec::new());
     }
     let paths = collect_audio_relative(library_root)?;
     let mut done = 0u32;
     let total = paths.len() as u32;
-    collect_library_audio_hashes(&paths, &DeliveryProgressCtx::none(), &mut done, total)
+    collect_project_audio_hashes(&paths, &DeliveryProgressCtx::none(), &mut done, total)
 }
 
-fn collect_library_audio_hashes(
+fn collect_project_audio_hashes(
     paths: &[(String, PathBuf)],
     progress: &DeliveryProgressCtx,
     done: &mut u32,
@@ -350,7 +350,7 @@ mod tests {
     use std::fs;
 
     #[test]
-    fn identical_staged_and_library_audio_counts_as_unchanged() {
+    fn identical_staged_and_project_audio_counts_as_unchanged() {
         let base = std::env::temp_dir().join(format!("tv-diff-unchanged-{}", uuid::Uuid::new_v4()));
         let staging = base.join("staging");
         let library = base.join("library");
@@ -372,7 +372,7 @@ mod tests {
             )
             .expect("preview");
         assert_eq!(preview.staged_audio_count, 1);
-        assert_eq!(preview.library_audio_count, 1);
+        assert_eq!(preview.project_audio_count, 1);
         assert_eq!(preview.unchanged_audio_count, 1);
         assert!(
             preview

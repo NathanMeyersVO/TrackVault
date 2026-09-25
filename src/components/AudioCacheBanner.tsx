@@ -1,7 +1,7 @@
 import { usePlayerStore } from "../store/playerStore";
 
 export function AudioCacheBanner() {
-  const scan = usePlayerStore((state) => state.libraryScanProgress);
+  const scan = usePlayerStore((state) => state.projectScanProgress);
   const projectLoadChecked = usePlayerStore((state) => state.projectLoadChecked);
   const projectLoad = usePlayerStore((state) => state.projectLoadProgress);
 
@@ -18,8 +18,8 @@ export function AudioCacheBanner() {
     ? Math.min(100, Math.round((scan.done / Math.max(scan.total, 1)) * 100))
     : 0;
   const label = determinate
-    ? `Scanning project library ${scan.done} / ${scan.total}`
-    : "Scanning project library…";
+    ? `Scanning project ${scan.done} / ${scan.total}`
+    : "Scanning project…";
 
   return (
     <div className="border-b border-border bg-surface px-4 py-2">

@@ -5,7 +5,7 @@ import { AppearanceSettingsModal } from "./AppearanceSettingsModal";
 import { AboutDialog } from "./AboutDialog";
 import { KeyboardShortcutsModal } from "./KeyboardShortcutsModal";
 import { MenuBarStatus, MenuDropdown, type MenuEntry } from "./MenuDropdown";
-import { useLibraryMenuActions } from "../hooks/useLibraryMenuActions";
+import { useProjectMenuActions } from "../hooks/useProjectMenuActions";
 
 export function AppMenuBar() {
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
@@ -17,7 +17,7 @@ export function AppMenuBar() {
     deliveryStaging,
     deliveryCopy,
     exportingProject,
-    libraryUploading,
+    projectUploading,
     collectionUploading,
     importingCollection,
     uploadMessage,
@@ -25,7 +25,7 @@ export function AppMenuBar() {
     configMessage,
     configError,
     dismissStatusFeedback,
-    libraryUploadConfirmDialog,
+    projectUploadConfirmDialog,
     collectionUploadConfirmDialog,
     activeProject,
     openProjectHub,
@@ -34,7 +34,7 @@ export function AppMenuBar() {
     applyDeliveryPickerModal,
     deliveryFolderConfirmModal,
     deliveryUpdateModal,
-    openLibraryUpload,
+    openProjectUpload,
     openCollectionUpload,
     openPhoneUploadSettings,
     phoneUploadSettingsModal,
@@ -42,16 +42,16 @@ export function AppMenuBar() {
     exportProject,
     importCollection,
     actionsDisabled,
-    libraryActionsDisabled,
-    libraryUploadDisabled,
+    projectActionsDisabled,
+    projectUploadDisabled,
     collectionUploadDisabled,
-  } = useLibraryMenuActions();
+  } = useProjectMenuActions();
   const collectionUploadLabel =
     collectionName != null
       ? `Upload track to stored collection (${collectionName})…`
       : "Upload track to stored collection…";
 
-  const libraryItems: MenuEntry[] = [
+  const projectItems: MenuEntry[] = [
     {
       label: "Projects…",
       title: "Create, open, or delete projects.",
@@ -64,20 +64,20 @@ export function AppMenuBar() {
         : deliveryCopy.applyUpdateMenuLabel,
       title: deliveryCopy.applyUpdateMenuTitle,
       onClick: () => void applyDeliveryUpdate(),
-      disabled: libraryActionsDisabled || deliveryStaging,
+      disabled: projectActionsDisabled || deliveryStaging,
     },
     {
-      label: libraryUploading ? "Uploading to project library…" : "Upload track to project library…",
+      label: projectUploading ? "Uploading to project…" : "Upload track to project…",
       title:
-        "Copy audio files into the project library folder (choose files, drag and drop, or upload from phone).",
-      disabled: libraryUploadDisabled,
-      onClick: () => openLibraryUpload(),
+        "Copy audio files into the project folder (choose files, drag and drop, or upload from phone).",
+      disabled: projectUploadDisabled,
+      onClick: () => openProjectUpload(),
     },
     {
       label: exportingProject ? "Exporting project…" : "Export Project…",
-      title: "Save the open project (project library audio, schedule, and trackvault.json) to a .tvproject.zip archive.",
+      title: "Save the open project (project audio, schedule, and trackvault.json) to a .tvproject.zip archive.",
       onClick: () => void exportProject(),
-      disabled: libraryActionsDisabled || exportingProject,
+      disabled: projectActionsDisabled || exportingProject,
     },
   ];
 
@@ -157,7 +157,7 @@ export function AppMenuBar() {
         </h1>
         <nav className="flex shrink-0 items-center gap-1">
           <MenuDropdown label="File" items={fileItems} />
-          <MenuDropdown label="Library" items={libraryItems} />
+          <MenuDropdown label="Project" items={projectItems} />
           <MenuDropdown label="Stored Collections" items={storedCollectionItems} />
           <MenuDropdown label="View" items={viewItems} />
           <MenuDropdown label="Help" items={helpItems} />
@@ -179,7 +179,7 @@ export function AppMenuBar() {
           ) : null}
         </div>
       </header>
-      {libraryUploadConfirmDialog}
+      {projectUploadConfirmDialog}
       {collectionUploadConfirmDialog}
       {uploadTracksModal}
       {phoneUploadSettingsModal}

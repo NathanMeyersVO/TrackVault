@@ -18,19 +18,19 @@ import {
 
   formatCollectionConflictMessage,
 
-  formatLibraryConflictMessage,
+  formatProjectConflictMessage,
 
   formatUploadResult,
 
 } from "../lib/uploadFeedback";
 
-import { useLibrary } from "../hooks/usePlayer";
+import { useProject } from "../hooks/usePlayer";
 
 import { usePlayerStore } from "../store/playerStore";
 
 
 
-export type UploadTracksPhoneMode = "library" | "collection";
+export type UploadTracksPhoneMode = "project" | "collection";
 
 
 
@@ -76,7 +76,7 @@ export function UploadTracksPhoneSection({
 
 }: UploadTracksPhoneSectionProps) {
 
-  const { refresh } = useLibrary();
+  const { refresh } = useProject();
 
   const setScanning = usePlayerStore((state) => state.setScanning);
 
@@ -122,9 +122,9 @@ export function UploadTracksPhoneSection({
 
         const info =
 
-          mode === "library"
+          mode === "project"
 
-            ? await api.startLibraryRemoteUpload()
+            ? await api.startProjectRemoteUpload()
 
             : await api.startCollectionRemoteUpload(collectionId!);
 
@@ -350,7 +350,7 @@ export function UploadTracksPhoneSection({
 
         const result =
 
-          mode === "library"
+          mode === "project"
 
             ? await api.uploadTracks(paths, overwrite)
 
@@ -410,7 +410,7 @@ export function UploadTracksPhoneSection({
 
         const conflicts =
 
-          mode === "library"
+          mode === "project"
 
             ? await api.checkUploadConflicts(paths)
 
@@ -476,9 +476,9 @@ export function UploadTracksPhoneSection({
 
   const importingLabel =
 
-    mode === "library"
+    mode === "project"
 
-      ? `Adding ${sourcePaths.length} file${sourcePaths.length === 1 ? "" : "s"} to project library…`
+      ? `Adding ${sourcePaths.length} file${sourcePaths.length === 1 ? "" : "s"} to project…`
 
       : `Adding ${sourcePaths.length} file${sourcePaths.length === 1 ? "" : "s"} to collection…`;
 
@@ -498,7 +498,7 @@ export function UploadTracksPhoneSection({
 
           Send tracks from your phone. Files are added to{" "}
 
-          {mode === "library" ? "your project library" : "this collection"} automatically after upload.
+          {mode === "project" ? "your project" : "this collection"} automatically after upload.
 
         </p>
 
@@ -546,9 +546,9 @@ export function UploadTracksPhoneSection({
 
           destinationHint={
 
-            mode === "library"
+            mode === "project"
 
-              ? "Uploading to your project library"
+              ? "Uploading to your project"
 
               : collectionName
 
@@ -636,9 +636,9 @@ export function UploadTracksPhoneSection({
 
           message={
 
-            mode === "library"
+            mode === "project"
 
-              ? formatLibraryConflictMessage(pendingImport.conflicts)
+              ? formatProjectConflictMessage(pendingImport.conflicts)
 
               : formatCollectionConflictMessage(pendingImport.conflicts)
 

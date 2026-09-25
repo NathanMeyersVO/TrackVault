@@ -8,7 +8,7 @@ import {
   type Track,
 } from "../lib/tauri";
 import { invalidateTrackTags } from "../lib/trackTagsCache";
-import { useLibrary } from "../hooks/usePlayer";
+import { useProject } from "../hooks/usePlayer";
 import { usePhoneUploadSettings } from "../hooks/usePhoneUploadSettings";
 import { usePlayerStore } from "../store/playerStore";
 import { AudioFilesDropZone } from "./AudioFilesDropZone";
@@ -50,7 +50,7 @@ function tagValueMap(tags: { key: string; value: string }[]): Map<string, string
   return new Map(tags.map((tag) => [tag.key, tag.value]));
 }
 
-function libraryDirectory(fullPath: string): string {
+function projectDirectory(fullPath: string): string {
   const slash = Math.max(fullPath.lastIndexOf("/"), fullPath.lastIndexOf("\\"));
   return slash >= 0 ? fullPath.slice(0, slash) : fullPath;
 }
@@ -72,7 +72,7 @@ function replaceTagSelectionState(keys: string[], selected: Set<string>) {
 }
 
 export function ReplaceTrackFileModal({ track, onClose }: ReplaceTrackFileModalProps) {
-  const { refresh } = useLibrary();
+  const { refresh } = useProject();
   const { phoneUploadReady } = usePhoneUploadSettings();
   const patchTrack = usePlayerStore((state) => state.patchTrack);
   const activeProject = usePlayerStore((state) => state.activeProject);
@@ -157,10 +157,10 @@ export function ReplaceTrackFileModal({ track, onClose }: ReplaceTrackFileModalP
     return preview.replacement.file_name;
   }, [canReplaceFileName, preview, replaceFileName]);
 
-  const afterLibraryPath = useMemo(() => {
+  const afterProjectPath = useMemo(() => {
     if (!preview) return "";
-    if (replaceFileName || !canReplaceFileName) return preview.library_path_before;
-    return preview.library_path_after;
+    if (replaceFileName || !canReplaceFileName) return preview.project_path_before;
+    return preview.project_path_after;
   }, [canReplaceFileName, preview, replaceFileName]);
 
   useEffect(() => {
@@ -196,7 +196,7 @@ export function ReplaceTrackFileModal({ track, onClose }: ReplaceTrackFileModalP
       try {
         const staged = await api.stageDropSourcePath(selected, fromDragDrop);
         setSourcePath(staged);
-        const result = await api.previewReplaceLibraryTrackFile(track.id, staged);
+        const result = await api.previewReplaceProjectTrackFile(track.id, staged);
         setPreview(result);
       } catch (err) {
         setSourcePath(null);
@@ -241,7 +241,7 @@ export function ReplaceTrackFileModal({ track, onClose }: ReplaceTrackFileModalP
     setCommitting(true);
     setError(null);
     try {
-      const updated = await api.replaceLibraryTrackFile(
+      const updated = await api.replaceProjectTrackFile(
         track.id,
         sourcePath,
         replaceTagKeysForCommit(
@@ -309,11 +309,11 @@ export function ReplaceTrackFileModal({ track, onClose }: ReplaceTrackFileModalP
                 <p className="text-sm text-foreground">
                   {trackDeliveryIntro(deliveryOptions, false)} Replacing{" "}
                   <span className="font-medium text-foreground">{track.title}</span> in the
-                  project library.
+                  project.
                 </p>
                 <p>
                   TrackVault will verify the file, then show a confirmation step before the
-                  project library copy is updated.
+                  project copy is updated.
                 </p>
               </div>
 
@@ -369,7 +369,7 @@ export function ReplaceTrackFileModal({ track, onClose }: ReplaceTrackFileModalP
                   <li>
                     A copy of the selected file will be written into{" "}
                     <span className="break-all text-foreground">
-                      {libraryDirectory(preview.library_path_before)}
+                      {projectDirectory(preview.project_path_before)}
                     </span>{" "}
                     (the folder that currently contains this track).
                   </li>
@@ -380,16 +380,16 @@ export function ReplaceTrackFileModal({ track, onClose }: ReplaceTrackFileModalP
                     </li>
                   )}
                   <li>
-                    Tag values and the project library file name you enable below from the current
-                    project library file will be applied to the copy. Disabled rows keep the
+                    Tag values and the project file name you enable below from the current
+                    project file will be applied to the copy. Disabled rows keep the
                     replacement file&apos;s values instead.
                   </li>
                   <li>
-                    After the copy is ready, the current project library file will be removed from
-                    disk when the library path changes (see paths below).
+                    After the copy is ready, the current project file will be removed from
+                    disk when the project path changes (see paths below).
                   </li>
                   <li>
-                    Project library playlists and taglists that include this track keep the same entry.
+                    Project playlists and taglists that include this track keep the same entry.
                   </li>
                 </ul>
               </div>
@@ -416,10 +416,10 @@ export function ReplaceTrackFileModal({ track, onClose }: ReplaceTrackFileModalP
                     <tr className="border-b border-border bg-background/50">
                       <th className="px-3 py-2 font-medium text-muted">Tag</th>
                       <th className="px-3 py-2 font-medium text-foreground">
-                        Current project library file
+                        Current project file
                       </th>
                       <th className="px-3 py-2 font-medium text-foreground">
-                        New project library file (after copy)
+                        New project file (after copy)
                       </th>
                       <th className="w-28 px-3 py-2 font-medium text-foreground">
                         <label className="flex items-center justify-center gap-1.5 text-xs font-medium">
@@ -445,7 +445,7 @@ export function ReplaceTrackFileModal({ track, onClose }: ReplaceTrackFileModalP
                               }
                             }}
                             className="shrink-0"
-                            aria-label="Replace all from current project library file"
+                            aria-label="Replace all from current project file"
                           />
                           Replace
                         </label>
@@ -465,7 +465,7 @@ export function ReplaceTrackFileModal({ track, onClose }: ReplaceTrackFileModalP
                             disabled={busy}
                             onChange={() => setReplaceFileName((prev) => !prev)}
                             className="shrink-0"
-                            aria-label="Replace file name from current project library file"
+                            aria-label="Replace file name from current project file"
                           />
                         ) : (
                           <span className="text-muted" aria-hidden>
@@ -475,9 +475,9 @@ export function ReplaceTrackFileModal({ track, onClose }: ReplaceTrackFileModalP
                       </td>
                     </tr>
                     <tr className="border-b border-border">
-                      <td className="px-3 py-2 text-muted">Project library path</td>
-                      <td className="px-3 py-2 break-all">{preview.library_path_before}</td>
-                      <td className="px-3 py-2 break-all">{afterLibraryPath}</td>
+                      <td className="px-3 py-2 text-muted">Project path</td>
+                      <td className="px-3 py-2 break-all">{preview.project_path_before}</td>
+                      <td className="px-3 py-2 break-all">{afterProjectPath}</td>
                       <td className="px-3 py-2 text-center">
                         <span className="text-muted" aria-hidden>
                           —
@@ -523,8 +523,8 @@ export function ReplaceTrackFileModal({ track, onClose }: ReplaceTrackFileModalP
                                 checked
                                 disabled
                                 className="shrink-0"
-                                title="Always kept from current project library file for this application"
-                                aria-label={`Replace tag ${key} from current project library file (required)`}
+                                title="Always kept from current project file for this application"
+                                aria-label={`Replace tag ${key} from current project file (required)`}
                               />
                             ) : canReplace ? (
                               <input
@@ -540,7 +540,7 @@ export function ReplaceTrackFileModal({ track, onClose }: ReplaceTrackFileModalP
                                   });
                                 }}
                                 className="shrink-0"
-                                aria-label={`Replace tag ${key} from current project library file`}
+                                aria-label={`Replace tag ${key} from current project file`}
                               />
                             ) : (
                               <span className="text-muted" aria-hidden>
@@ -558,7 +558,7 @@ export function ReplaceTrackFileModal({ track, onClose }: ReplaceTrackFileModalP
                 <p className="text-xs text-muted">
                   Selected file:{" "}
                   <span className="break-all text-foreground">{sourcePath}</span>
-                  . The “New project library file” column shows values after replace, based on your
+                  . The “New project file” column shows values after replace, based on your
                   Replace selections.
                 </p>
               )}

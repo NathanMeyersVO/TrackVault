@@ -2,7 +2,7 @@ import type { ProjectLoadPhase, ProjectLoadProgress } from "./tauri";
 
 const PHASE_LABELS: Record<ProjectLoadPhase, string> = {
   opening: "Opening project",
-  scanning: "Scanning project library",
+  scanning: "Scanning project",
   loading_config: "Loading project configuration",
   applying_setup: "Applying application setup",
 };

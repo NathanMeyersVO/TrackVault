@@ -1,7 +1,7 @@
 import { useCallback } from "react";
 
 import { formatTaglistLabel } from "../lib/taglistLabels";
-import type { ProjectLibrarySearchHit } from "../lib/tauri";
+import type { ProjectSearchHit } from "../lib/tauri";
 import { playerController } from "../playerController";
 import { scrollSidebarItem, sidebarSublistId } from "../lib/sidebarNavigation";
 import { usePlayerStore } from "../store/playerStore";
@@ -32,19 +32,19 @@ export function scrollToTrackRowWithRetry(trackId: number): void {
   requestAnimationFrame(tryScroll);
 }
 
-export function useProjectLibrarySearchNavigation() {
+export function useProjectSearchNavigation() {
   const setView = usePlayerStore((state) => state.setView);
   const setPendingPartitionFocus = usePlayerStore(
     (state) => state.setPendingPartitionFocus,
   );
 
   const navigateToHit = useCallback(
-    (hit: ProjectLibrarySearchHit) => {
+    (hit: ProjectSearchHit) => {
       const { taglist_id: taglistId, partition_value: value, track_id: trackId } =
         hit;
 
       const store = usePlayerStore.getState();
-      store.setProjectLibrarySearchQuery("");
+      store.setProjectSearchQuery("");
       setPendingPartitionFocus({ taglistId, value, trackId });
       setView({ taglistId, value });
       scrollSidebarItem(sidebarSublistId(taglistId, value));
@@ -56,7 +56,7 @@ export function useProjectLibrarySearchNavigation() {
   return { navigateToHit };
 }
 
-export function formatProjectLibrarySearchHit(hit: ProjectLibrarySearchHit): {
+export function formatProjectSearchHit(hit: ProjectSearchHit): {
   primary: string;
   secondary: string;
 } {

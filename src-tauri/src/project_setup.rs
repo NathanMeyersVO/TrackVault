@@ -1,4 +1,4 @@
-//! Application-specific setup for a project's library directory (project library on disk).
+//! Application-specific setup for a project's library directory (project on disk).
 
 use std::path::Path;
 
@@ -13,15 +13,15 @@ const EVENTS_TAG_KEY: &str = EVENTS_PARTITION_TAG_KEY;
 pub const EVENTS_ENTRY_TAG_KEY: &str = "Track Title";
 const EVENTS_VALUE_SINGULAR_NAME: &str = "Event";
 
-pub fn apply_application_library_setup(
+pub fn apply_application_project_setup(
     db: &Database,
     library_root: &Path,
     application: ApplicationId,
 ) -> Result<(), String> {
-    apply_application_library_setup_with_schedule(db, library_root, application, None)
+    apply_application_project_setup_with_schedule(db, library_root, application, None)
 }
 
-pub fn apply_application_library_setup_with_schedule(
+pub fn apply_application_project_setup_with_schedule(
     db: &Database,
     library_root: &Path,
     application: ApplicationId,
@@ -137,7 +137,7 @@ mod tests {
         ));
         std::fs::create_dir_all(&library).expect("create library dir");
         let library = library.canonicalize().unwrap_or(library);
-        db.set_library_folder(library.to_str().unwrap())
+        db.set_project_folder(library.to_str().unwrap())
             .expect("set library");
         (db, library)
     }
@@ -150,7 +150,7 @@ mod tests {
             &[("01", "Showcase: Pre-Preliminary")],
         );
 
-        apply_application_library_setup(&db, &library, ApplicationId::None).unwrap();
+        apply_application_project_setup(&db, &library, ApplicationId::None).unwrap();
 
         assert!(db.list_taglists().unwrap().is_empty());
     }
@@ -159,7 +159,7 @@ mod tests {
     fn ems_creates_events_taglist_without_xls() {
         let (db, library) = test_library();
 
-        apply_application_library_setup(&db, &library, ApplicationId::UsFigureSkatingEms).unwrap();
+        apply_application_project_setup(&db, &library, ApplicationId::UsFigureSkatingEms).unwrap();
 
         let taglists = db.list_taglists().unwrap();
         assert_eq!(taglists.len(), 1);
@@ -177,7 +177,7 @@ mod tests {
             &[("01", "Showcase: Pre-Preliminary")],
         );
 
-        apply_application_library_setup(&db, &library, ApplicationId::UsFigureSkatingEms).unwrap();
+        apply_application_project_setup(&db, &library, ApplicationId::UsFigureSkatingEms).unwrap();
 
         let taglists = db.list_taglists().unwrap();
         assert_eq!(taglists.len(), 1);
@@ -220,7 +220,7 @@ mod tests {
             &[("01", "Showcase: Pre-Preliminary")],
         );
 
-        apply_application_library_setup(&db, &library, ApplicationId::UsFigureSkatingEms).unwrap();
+        apply_application_project_setup(&db, &library, ApplicationId::UsFigureSkatingEms).unwrap();
 
         let taglists = db.list_taglists().unwrap();
         assert_eq!(taglists.len(), 1);
@@ -234,7 +234,7 @@ mod tests {
         write_event_schedule_xlsx(&library.join("a.xlsx"), &[("01", "First")]);
         write_event_schedule_xlsx(&library.join("b.xlsx"), &[("02", "Second")]);
 
-        apply_application_library_setup(&db, &library, ApplicationId::UsFigureSkatingEms).unwrap();
+        apply_application_project_setup(&db, &library, ApplicationId::UsFigureSkatingEms).unwrap();
 
         let taglists = db.list_taglists().unwrap();
         assert_eq!(taglists.len(), 1);
@@ -246,7 +246,7 @@ mod tests {
         let (db, library) = test_library();
         write_invalid_sheet_xlsx(&library.join("schedule.xlsx"));
 
-        apply_application_library_setup(&db, &library, ApplicationId::UsFigureSkatingEms).unwrap();
+        apply_application_project_setup(&db, &library, ApplicationId::UsFigureSkatingEms).unwrap();
 
         let taglists = db.list_taglists().unwrap();
         assert_eq!(taglists.len(), 1);

@@ -16,7 +16,7 @@ import {
   getTaglistValueSingularLabel,
 } from "../lib/taglistLabels";
 import { invalidateTrackTags } from "../lib/trackTagsCache";
-import { useLibrary } from "./usePlayer";
+import { useProject } from "./usePlayer";
 import { usePlayerStore } from "../store/playerStore";
 
 interface PendingTagDrop {
@@ -52,7 +52,7 @@ function partitionsEqual(
 }
 
 export function useTagDropConfirm() {
-  const { refresh } = useLibrary();
+  const { refresh } = useProject();
   const tracks = usePlayerStore((state) => state.tracks);
   const patchTrack = usePlayerStore((state) => state.patchTrack);
   const [pending, setPending] = useState<PendingTagDrop | null>(null);

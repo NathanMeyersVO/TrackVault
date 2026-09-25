@@ -1,10 +1,10 @@
 # TrackVault
 
-A cross-platform desktop music player (Windows and macOS) with an iTunes-like layout. Manage **projects** (each with its own project library folder (`library/` under app data), browse tracks, manage playlists and taglists, apply **EMS download** updates (for US Figure Skating EMS projects), and play audio with a waveform view powered by [wavesurfer.js](https://wavesurfer.xyz/).
+A cross-platform desktop music player (Windows and macOS) with an iTunes-like layout. Manage **projects** (each stores audio under a `library/` folder in app data), browse **project tracks**, manage project playlists and taglists, apply **EMS download** updates (for US Figure Skating EMS projects), and play audio with a waveform view powered by [wavesurfer.js](https://wavesurfer.xyz/).
 
 ## Stack
 
-- **Backend:** Rust (Tauri 2) — project library scanning, SQLite, audio playback, waveform peaks
+- **Backend:** Rust (Tauri 2) — project scanning, SQLite, audio playback, waveform peaks
 - **Frontend:** React, TypeScript, Tailwind CSS, Zustand, wavesurfer.js
 
 ## Prerequisites
@@ -82,22 +82,22 @@ Use tag names like `v0.9.0` that match the app version `0.9.0`.
 
 ## Usage
 
-1. Open **Library → Projects…** and create a project (name + application), or **Import EMS download…** from a folder of EMS downloads (ZIP archives and/or event schedule spreadsheet).
-2. Open a project. TrackVault scans the project library for MP3, FLAC, WAV, OGG, and M4A files and reads tags. Playlists and taglists load from the project library’s `library/trackvault.json` (kept up to date automatically).
+1. Open **Project → Projects…** and create a project (name + application), or **Import EMS download…** from a folder of EMS downloads (ZIP archives and/or event schedule spreadsheet).
+2. Open a project. TrackVault scans project audio for MP3, FLAC, WAV, OGG, and M4A files and reads tags. Playlists and taglists load from `library/trackvault.json` (kept up to date automatically).
 3. Double-click a track (or select and press play) to start playback.
-4. Use **Library → Apply EMS Download…** to stage a folder of EMS downloads, preview changes, and apply updates to the open project.
-5. **Library → Export Project…** saves the open project to a `.tvproject.zip` archive. In the Projects hub, **Import from archive** (file picker or drop zone) restores a copy as a **new** project (new ID).
+4. Use **Project → Apply EMS Download…** to stage a folder of EMS downloads, preview changes, and apply updates to the open project.
+5. **Project → Export Project…** saves the open project to a `.tvproject.zip` archive. In the Projects hub, **Import from archive** (file picker or drop zone) restores a copy as a **new** project (new ID).
 6. Create stored collections from the sidebar; import/export `.tvcollection.zip` stored collections separately from full projects.
 
 ### Privacy / demo copies
 
-To share a project library or record demos without real names in tags or filenames, use the **anonymize-library** CLI. It copies audio into a subfolder under your project library root (default `DEMO_COPY/`), replaces **Track Title** with stable fake names, and renames file stems accordingly. Original files are not modified.
+To share a project or record demos without real names in tags or filenames, use the **anonymize-project** CLI. It copies audio into a subfolder under your project directory (default `DEMO_COPY/`), replaces **Track Title** with stable fake names, and renames file stems accordingly. Original files are not modified.
 
 From the repo root:
 
 ```powershell
-cargo run --manifest-path src-tauri/Cargo.toml --bin anonymize-library -- `
-  --library "C:\path\to\your\project\library"
+cargo run --manifest-path src-tauri/Cargo.toml --bin anonymize-project -- `
+  --project-dir "C:\path\to\your\project\library"
 ```
 
 Use `--dry-run` to preview changes. Optional flags: `--output-subdir`, `--seed`.
@@ -121,14 +121,10 @@ Use `--dry-run` to preview paths. Tune roster size with `--competitors-min`, `--
 ```
 src/                 React UI
 src-tauri/src/       Rust backend
-  db.rs              SQLite project library index + playlists
+  db.rs              SQLite project index + playlists
   scanner.rs         Folder scan + tag reading
   projects.rs        Managed project folders + manifests
   project_archive.rs Project .tvproject.zip export/import
   delivery/          Vendor delivery staging, preview, apply
   player.rs          Audio playback
 ```
-
-## License
-
-[MIT](LICENSE) — Copyright (c) 2026 Nathan Meyers

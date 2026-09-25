@@ -57,7 +57,7 @@ export interface TaglistValue {
   display_title?: string | null;
 }
 
-export interface ProjectLibrarySearchHit {
+export interface ProjectSearchHit {
   track_id: number;
   taglist_id: number;
   taglist_name: string;
@@ -111,7 +111,7 @@ export type DeliveryProgressPhase =
   | "staging"
   | "analyzing"
   | "applying"
-  | "scanning_library";
+  | "scanning_project";
 
 export interface DeliveryProgress {
   phase: DeliveryProgressPhase;
@@ -157,8 +157,8 @@ export interface ReplaceTrackFileSide {
 export interface ReplaceTrackFilePreview {
   existing: ReplaceTrackFileSide;
   replacement: ReplaceTrackFileSide;
-  library_path_before: string;
-  library_path_after: string;
+  project_path_before: string;
+  project_path_after: string;
   path_collision: boolean;
   collision_message: string | null;
 }
@@ -166,8 +166,8 @@ export interface ReplaceTrackFilePreview {
 export interface SwapTaglistPreview {
   source: ReplaceTrackFileSide;
   partner: ReplaceTrackFileSide;
-  source_library_path: string;
-  partner_library_path: string;
+  source_project_path: string;
+  partner_project_path: string;
   source_path_after: string;
   partner_path_after: string;
   partition_key: string;
@@ -290,7 +290,7 @@ export interface DeliveryPreview {
   changes: DeliveryChange[];
   apply_mode_hint: DeliveryApplyModeHint;
   staged_audio_count: number;
-  library_audio_count: number;
+  project_audio_count: number;
   unchanged_audio_count: number;
 }
 
@@ -327,12 +327,12 @@ export interface DeliveryFolderBrowseResult {
 
 export const api = {
   listTracks: () => invoke<Track[]>("list_tracks"),
-  searchProjectLibrary: (query: string) =>
-    invoke<ProjectLibrarySearchHit[]>("search_project_library", { query }),
+  searchProject: (query: string) =>
+    invoke<ProjectSearchHit[]>("search_project", { query }),
   getTrack: (trackId: number) => invoke<Track>("get_track", { trackId }),
-  getLibraryFolder: () => invoke<string | null>("get_library_folder"),
-  setLibraryFolder: (path: string) =>
-    invoke<ScanProgress>("set_library_folder", { path }),
+  getProjectFolder: () => invoke<string | null>("get_project_folder"),
+  setProjectFolder: (path: string) =>
+    invoke<ScanProgress>("set_project_folder", { path }),
   uploadTracks: (sourcePaths: string[], overwrite = false) =>
     invoke<UploadResult>("upload_tracks", { sourcePaths, overwrite }),
   checkUploadConflicts: (sourcePaths: string[]) =>
@@ -342,18 +342,18 @@ export const api = {
   stageDropSourcePaths: (sourcePaths: string[], force = false) =>
     invoke<string[]>("stage_drop_source_paths", { sourcePaths, force }),
   cleanupDropStaging: () => invoke<void>("cleanup_drop_staging"),
-  previewReplaceLibraryTrackFile: (trackId: number, sourcePath: string) =>
-    invoke<ReplaceTrackFilePreview>("preview_replace_library_track_file", {
+  previewReplaceProjectTrackFile: (trackId: number, sourcePath: string) =>
+    invoke<ReplaceTrackFilePreview>("preview_replace_project_track_file", {
       trackId,
       sourcePath,
     }),
-  replaceLibraryTrackFile: (
+  replaceProjectTrackFile: (
     trackId: number,
     sourcePath: string,
     replaceTagKeys: string[],
     replaceFileName: boolean,
   ) =>
-    invoke<Track>("replace_library_track_file", {
+    invoke<Track>("replace_project_track_file", {
       trackId,
       sourcePath,
       replaceTagKeys,
@@ -361,8 +361,8 @@ export const api = {
     }),
   startReplaceRemoteUpload: (trackId: number) =>
     invoke<ReplaceRemoteUploadStartInfo>("start_replace_remote_upload", { trackId }),
-  startLibraryRemoteUpload: () =>
-    invoke<ReplaceRemoteUploadStartInfo>("start_library_remote_upload"),
+  startProjectRemoteUpload: () =>
+    invoke<ReplaceRemoteUploadStartInfo>("start_project_remote_upload"),
   startCollectionRemoteUpload: (collectionId: number) =>
     invoke<ReplaceRemoteUploadStartInfo>("start_collection_remote_upload", {
       collectionId,
@@ -391,10 +391,10 @@ export const api = {
     }),
   deleteTrack: (trackId: number) =>
     invoke<PlaybackState>("delete_track", { trackId }),
-  saveLibraryConfig: () => invoke<string>("save_library_config"),
-  loadLibraryConfig: () => invoke<string>("load_library_config"),
-  resetLibrary: () => invoke<PlaybackState>("close_library"),
-  closeLibrary: () => invoke<PlaybackState>("close_library"),
+  saveProjectConfig: () => invoke<string>("save_project_config"),
+  loadProjectConfig: () => invoke<string>("load_project_config"),
+  resetProject: () => invoke<PlaybackState>("close_project"),
+  closeProject: () => invoke<PlaybackState>("close_project"),
   createCollection: (name: string) =>
     invoke<number>("create_collection", { name }),
   deleteCollection: (id: number) => invoke<void>("delete_collection", { id }),
@@ -521,7 +521,7 @@ export const api = {
     sourceValue: string | null,
     targetValue: string | null,
     sourceTrackId: number,
-    swapLibraryPaths: boolean,
+    swapProjectPaths: boolean,
     swapBasenames: boolean,
   ) =>
     invoke<SwapTaglistPreview>("preview_swap_taglist_entries", {
@@ -529,7 +529,7 @@ export const api = {
       sourceValue,
       targetValue,
       sourceTrackId,
-      swapLibraryPaths,
+      swapProjectPaths,
       swapBasenames,
     }),
   swapTaglistEntries: (
@@ -538,7 +538,7 @@ export const api = {
     targetValue: string | null,
     sourceTrackId: number,
     swapTagKeys: string[],
-    swapLibraryPaths: boolean,
+    swapProjectPaths: boolean,
     swapBasenames: boolean,
   ) =>
     invoke<Track[]>("swap_taglist_entries", {
@@ -547,7 +547,7 @@ export const api = {
       targetValue,
       sourceTrackId,
       swapTagKeys,
-      swapLibraryPaths,
+      swapProjectPaths,
       swapBasenames,
     }),
   playTrack: (trackId: number, startMs?: number, autoplay = true) =>

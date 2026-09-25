@@ -8,11 +8,11 @@ import {
   formatCollectionConflictMessage,
   formatUploadResult,
 } from "../lib/uploadFeedback";
-import { useLibrary } from "./usePlayer";
+import { useProject } from "./usePlayer";
 import { usePlayerStore } from "../store/playerStore";
 
 export function useCollectionUpload(collectionId: number | null) {
-  const { refresh } = useLibrary();
+  const { refresh } = useProject();
   const { setScanning } = usePlayerStore();
   const [uploading, setUploading] = useState(false);
   const [uploadMessage, setUploadMessage] = useState<string | null>(null);

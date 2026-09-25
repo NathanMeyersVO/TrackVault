@@ -2,9 +2,9 @@ import { useCallback } from "react";
 
 import { clearTrackTagsCache } from "../lib/trackTagsCache";
 import type { PlaybackState } from "../lib/tauri";
-import { isLibrarySourcedView, usePlayerStore } from "../store/playerStore";
+import { isProjectSourcedView, usePlayerStore } from "../store/playerStore";
 
-export function useLibraryUiReset() {
+export function useProjectUiReset() {
   const setPlayback = usePlayerStore((s) => s.setPlayback);
   const setView = usePlayerStore((s) => s.setView);
   const setCursorTrackId = usePlayerStore((s) => s.setCursorTrackId);
@@ -13,26 +13,26 @@ export function useLibraryUiReset() {
   const setCursorTaglistFooter = usePlayerStore((s) => s.setCursorTaglistFooter);
   const clearPendingPlayIntent = usePlayerStore((s) => s.clearPendingPlayIntent);
   const clearPendingPausedLoad = usePlayerStore((s) => s.clearPendingPausedLoad);
-  const setLibraryFolder = usePlayerStore((s) => s.setLibraryFolder);
+  const setProjectFolder = usePlayerStore((s) => s.setProjectFolder);
   const setActiveProject = usePlayerStore((s) => s.setActiveProject);
-  const setProjectLibrarySearchQuery = usePlayerStore(
-    (s) => s.setProjectLibrarySearchQuery,
+  const setProjectSearchQuery = usePlayerStore(
+    (s) => s.setProjectSearchQuery,
   );
   const setPendingPartitionFocus = usePlayerStore((s) => s.setPendingPartitionFocus);
 
-  const resetLibraryUi = useCallback(
+  const resetProjectUi = useCallback(
     (playback: PlaybackState) => {
       const currentView = usePlayerStore.getState().view;
       setPlayback(playback);
-      setLibraryFolder(null);
+      setProjectFolder(null);
       setActiveProject(null);
-      if (isLibrarySourcedView(currentView)) {
-        setView("library");
+      if (isProjectSourcedView(currentView)) {
+        setView("project_tracks");
         setCursorTrackId(null);
         setActiveTrackIds([]);
         setTaglistNav(null);
         setCursorTaglistFooter(false);
-        setProjectLibrarySearchQuery("");
+        setProjectSearchQuery("");
         setPendingPartitionFocus(null);
         clearPendingPlayIntent();
       }
@@ -46,14 +46,14 @@ export function useLibraryUiReset() {
       setActiveTrackIds,
       setCursorTaglistFooter,
       setCursorTrackId,
-      setLibraryFolder,
+      setProjectFolder,
       setPendingPartitionFocus,
       setPlayback,
-      setProjectLibrarySearchQuery,
+      setProjectSearchQuery,
       setTaglistNav,
       setView,
     ],
   );
 
-  return { resetLibraryUi };
+  return { resetProjectUi };
 }

@@ -11,8 +11,8 @@ export function TrackSearchInput({ value, onChange, onKeyDown }: TrackSearchInpu
       value={value}
       onChange={(e) => onChange(e.target.value)}
       onKeyDown={onKeyDown}
-      placeholder="Search project library…"
-      aria-label="Search project library by entry tag or filename"
+      placeholder="Search project…"
+      aria-label="Search project by entry tag or filename"
       className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground"
     />
   );

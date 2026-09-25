@@ -58,14 +58,14 @@ pub fn supports_schedule_delivery(application: ApplicationId) -> bool {
 pub fn partition_tag_key(application: ApplicationId) -> Option<&'static str> {
     match application {
         ApplicationId::None => None,
-        ApplicationId::UsFigureSkatingEms => Some(crate::library_setup::EVENTS_PARTITION_TAG_KEY),
+        ApplicationId::UsFigureSkatingEms => Some(crate::project_setup::EVENTS_PARTITION_TAG_KEY),
     }
 }
 
 pub fn entry_tag_key(application: ApplicationId) -> Option<&'static str> {
     match application {
         ApplicationId::None => None,
-        ApplicationId::UsFigureSkatingEms => Some(crate::library_setup::EVENTS_ENTRY_TAG_KEY),
+        ApplicationId::UsFigureSkatingEms => Some(crate::project_setup::EVENTS_ENTRY_TAG_KEY),
     }
 }
 

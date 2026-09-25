@@ -1,30 +1,30 @@
 import { useCallback, useState, type KeyboardEvent } from "react";
 
 import {
-  formatProjectLibrarySearchHit,
-  useProjectLibrarySearchNavigation,
-} from "../hooks/useProjectLibrarySearchNavigation";
-import type { ProjectLibrarySearchHit } from "../lib/tauri";
+  formatProjectSearchHit,
+  useProjectSearchNavigation,
+} from "../hooks/useProjectSearchNavigation";
+import type { ProjectSearchHit } from "../lib/tauri";
 import { TrackSearchInput } from "./TrackSearchInput";
 
-interface ProjectLibrarySearchPanelProps {
+interface ProjectSearchPanelProps {
   query: string;
   onQueryChange: (value: string) => void;
-  hits: ProjectLibrarySearchHit[];
+  hits: ProjectSearchHit[];
   isSearching: boolean;
   searchLoading: boolean;
   searchError: string | null;
 }
 
-export function ProjectLibrarySearchPanel({
+export function ProjectSearchPanel({
   query,
   onQueryChange,
   hits,
   isSearching,
   searchLoading,
   searchError,
-}: ProjectLibrarySearchPanelProps) {
-  const { navigateToHit } = useProjectLibrarySearchNavigation();
+}: ProjectSearchPanelProps) {
+  const { navigateToHit } = useProjectSearchNavigation();
   const [highlightIndex, setHighlightIndex] = useState(-1);
 
   const handleQueryChange = useCallback(
@@ -36,7 +36,7 @@ export function ProjectLibrarySearchPanel({
   );
 
   const selectHit = useCallback(
-    (hit: ProjectLibrarySearchHit) => {
+    (hit: ProjectSearchHit) => {
       setHighlightIndex(-1);
       navigateToHit(hit);
     },
@@ -73,11 +73,11 @@ export function ProjectLibrarySearchPanel({
           ) : searchError ? (
             <p className="px-3 py-2 text-xs text-red-400">{searchError}</p>
           ) : hits.length === 0 ? (
-            <p className="px-3 py-2 text-xs text-muted">No matches in project library taglists.</p>
+            <p className="px-3 py-2 text-xs text-muted">No matches in project taglists.</p>
           ) : (
             <ul className="py-1" role="listbox">
               {hits.map((hit, index) => {
-                const { primary, secondary } = formatProjectLibrarySearchHit(hit);
+                const { primary, secondary } = formatProjectSearchHit(hit);
                 const active = index === highlightIndex;
                 return (
                   <li key={`${hit.taglist_id}-${hit.partition_value ?? "none"}-${hit.track_id}`}>

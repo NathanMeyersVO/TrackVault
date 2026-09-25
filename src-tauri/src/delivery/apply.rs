@@ -298,7 +298,7 @@ mod tests {
         }];
 
         let db = crate::db::Database::open(std::path::Path::new(":memory:")).unwrap();
-        db.set_library_folder(&library.to_string_lossy()).unwrap();
+        db.set_project_folder(&library.to_string_lossy()).unwrap();
 
         let mut manifest = ProjectManifest::new(
             "proj".to_string(),

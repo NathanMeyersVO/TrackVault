@@ -16,7 +16,7 @@ import type {
 } from "../lib/tauri";
 
 export type View =
-  | "library"
+  | "project_tracks"
   | { playlistId: number }
   | { taglistId: number; value: string | null }
   | { collectionId: number };
@@ -28,7 +28,7 @@ export interface PendingPausedLoad {
 }
 
 export function serializeView(view: View): string {
-  if (view === "library") return "library";
+  if (view === "project_tracks") return "project_tracks";
   if ("playlistId" in view) return `playlist:${view.playlistId}`;
   if ("taglistId" in view) {
     return `taglist:${view.taglistId}:${view.value ?? ""}`;
@@ -41,9 +41,9 @@ export function viewsEqual(a: View, b: View): boolean {
   return serializeView(a) === serializeView(b);
 }
 
-export function isLibrarySourcedView(view: View): boolean {
+export function isProjectSourcedView(view: View): boolean {
   return (
-    view === "library" ||
+    view === "project_tracks" ||
     (typeof view === "object" &&
       ("playlistId" in view || "taglistId" in view))
   );
@@ -124,9 +124,9 @@ interface PlayerStore {
   deliveryStagingApplicationId: ApplicationId | null;
   deliveryProgress: DeliveryProgress | null;
   archiveExportProgress: ArchiveExportProgress | null;
-  libraryFolder: string | null;
+  projectFolder: string | null;
   activeProject: ProjectSummary | null;
-  libraryScanProgress: AudioCacheProgress;
+  projectScanProgress: AudioCacheProgress;
   projectLoadProgress: ProjectLoadProgress | null;
   projectLoadChecked: boolean;
   transportBusy: boolean;
@@ -141,7 +141,7 @@ interface PlayerStore {
   volume: number;
   taglistNav: TaglistNav | null;
   cursorTaglistFooter: boolean;
-  projectLibrarySearchQuery: string;
+  projectSearchQuery: string;
   pendingPartitionFocus: PendingPartitionFocus | null;
   continuousPlaybackCollectionId: number | null;
   continuousPlaybackTrackIds: number[];
@@ -158,9 +158,9 @@ interface PlayerStore {
   setDeliveryStaging: (deliveryStaging: boolean, applicationId?: ApplicationId | null) => void;
   setDeliveryProgress: (deliveryProgress: DeliveryProgress | null) => void;
   setArchiveExportProgress: (archiveExportProgress: ArchiveExportProgress | null) => void;
-  setLibraryFolder: (libraryFolder: string | null) => void;
+  setProjectFolder: (projectFolder: string | null) => void;
   setActiveProject: (activeProject: ProjectSummary | null) => void;
-  setLibraryScanProgress: (progress: AudioCacheProgress) => void;
+  setProjectScanProgress: (progress: AudioCacheProgress) => void;
   setProjectLoadProgress: (progress: ProjectLoadProgress | null) => void;
   markProjectLoadChecked: (progress: ProjectLoadProgress | null) => void;
   beginTransport: (targetMs: number) => void;
@@ -179,7 +179,7 @@ interface PlayerStore {
   patchTrack: (track: Track) => void;
   setTaglistNav: (nav: TaglistNav | null) => void;
   setCursorTaglistFooter: (active: boolean) => void;
-  setProjectLibrarySearchQuery: (query: string) => void;
+  setProjectSearchQuery: (query: string) => void;
   setPendingPartitionFocus: (focus: PendingPartitionFocus | null) => void;
   setContinuousPlaybackContext: (
     collectionId: number | null,
@@ -208,7 +208,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   playlists: [],
   taglists: [],
   collections: [],
-  view: "library",
+  view: "project_tracks",
   cursorTrackId: null,
   activeTrackIds: [],
   playback: {
@@ -222,9 +222,9 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   deliveryStagingApplicationId: null,
   deliveryProgress: null,
   archiveExportProgress: null,
-  libraryFolder: null,
+  projectFolder: null,
   activeProject: null,
-  libraryScanProgress: { done: 0, total: 0, finished: true },
+  projectScanProgress: { done: 0, total: 0, finished: true },
   projectLoadProgress: null,
   projectLoadChecked: false,
   transportBusy: false,
@@ -239,7 +239,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   volume: 1,
   taglistNav: null,
   cursorTaglistFooter: false,
-  projectLibrarySearchQuery: "",
+  projectSearchQuery: "",
   pendingPartitionFocus: null,
   continuousPlaybackCollectionId: null,
   continuousPlaybackTrackIds: [],
@@ -270,9 +270,9 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     })),
   setDeliveryProgress: (deliveryProgress) => set({ deliveryProgress }),
   setArchiveExportProgress: (archiveExportProgress) => set({ archiveExportProgress }),
-  setLibraryFolder: (libraryFolder) => set({ libraryFolder }),
+  setProjectFolder: (projectFolder) => set({ projectFolder }),
   setActiveProject: (activeProject) => set({ activeProject }),
-  setLibraryScanProgress: (libraryScanProgress) => set({ libraryScanProgress }),
+  setProjectScanProgress: (projectScanProgress) => set({ projectScanProgress }),
   setProjectLoadProgress: (projectLoadProgress) =>
     set({ projectLoadProgress, projectLoadChecked: true }),
   markProjectLoadChecked: (progress) =>
@@ -384,8 +384,8 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       cursorTaglistFooter: active,
       cursorTrackId: active ? null : state.cursorTrackId,
     })),
-  setProjectLibrarySearchQuery: (projectLibrarySearchQuery) =>
-    set({ projectLibrarySearchQuery }),
+  setProjectSearchQuery: (projectSearchQuery) =>
+    set({ projectSearchQuery }),
   setPendingPartitionFocus: (pendingPartitionFocus) => set({ pendingPartitionFocus }),
   setContinuousPlaybackContext: (continuousPlaybackCollectionId, continuousPlaybackTrackIds) =>
     set({ continuousPlaybackCollectionId, continuousPlaybackTrackIds }),

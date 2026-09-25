@@ -4,13 +4,13 @@ import { listen } from "@tauri-apps/api/event";
 import { api, type Track } from "../lib/tauri";
 import { usePlayer } from "../hooks/usePlayer";
 import { useDeleteTrack } from "../hooks/useDeleteTrack";
-import { useReplaceLibraryTrackFile } from "../hooks/useReplaceLibraryTrackFile";
-import { useProjectLibrarySearch } from "../hooks/useProjectLibrarySearch";
-import { formatProjectLibrarySearchSubtitle } from "../lib/projectLibrarySearchCopy";
+import { useReplaceProjectTrackFile } from "../hooks/useReplaceProjectTrackFile";
+import { useProjectSearch } from "../hooks/useProjectSearch";
+import { formatProjectSearchSubtitle } from "../lib/projectSearchCopy";
 import { usePlayerStore, serializeView } from "../store/playerStore";
 import { playerController } from "../playerController";
 import { TagEditorModal } from "./TagEditorModal";
-import { ProjectLibrarySearchPanel } from "./ProjectLibrarySearchPanel";
+import { ProjectSearchPanel } from "./ProjectSearchPanel";
 import { TrackTable } from "./TrackTable";
 
 interface PlaylistViewProps {
@@ -27,7 +27,7 @@ export function PlaylistView({ playlistId }: PlaylistViewProps) {
   const { playTrack, selectTrack } = usePlayer();
   const [tracks, setTracks] = useState<Track[]>([]);
   const { requestDeleteTrack, confirmDialog: deleteConfirmDialog } = useDeleteTrack();
-  const { requestReplaceFile, replaceFileModal } = useReplaceLibraryTrackFile();
+  const { requestReplaceFile, replaceFileModal } = useReplaceProjectTrackFile();
   const [editingTrackId, setEditingTrackId] = useState<number | null>(null);
   const {
     query,
@@ -37,7 +37,7 @@ export function PlaylistView({ playlistId }: PlaylistViewProps) {
     searchLoading,
     searchError,
     globalHitCount,
-  } = useProjectLibrarySearch();
+  } = useProjectSearch();
 
   const playlist = playlists.find((p) => p.id === playlistId);
 
@@ -50,7 +50,7 @@ export function PlaylistView({ playlistId }: PlaylistViewProps) {
   }, [refreshTracks, playlists]);
 
   useEffect(() => {
-    const unlisten = listen("library-updated", () => {
+    const unlisten = listen("project-updated", () => {
       refreshTracks();
     });
     return () => {
@@ -91,16 +91,16 @@ export function PlaylistView({ playlistId }: PlaylistViewProps) {
     <div className="flex h-full flex-col">
       <div className="border-b border-border px-4 py-3">
         <h2 className="text-base font-semibold text-white">
-          {playlist?.name ?? "Project library playlist"}
+          {playlist?.name ?? "Project playlist"}
         </h2>
         <p className="text-xs text-muted">
           {isSearching
-            ? formatProjectLibrarySearchSubtitle(searchLoading, globalHitCount)
+            ? formatProjectSearchSubtitle(searchLoading, globalHitCount)
             : `${tracks.length} track${tracks.length === 1 ? "" : "s"}`}
         </p>
       </div>
       <div className="border-b border-border px-4 py-2">
-        <ProjectLibrarySearchPanel
+        <ProjectSearchPanel
           query={query}
           onQueryChange={setQuery}
           hits={hits}
@@ -121,7 +121,7 @@ export function PlaylistView({ playlistId }: PlaylistViewProps) {
           onDeleteTrack={requestDeleteTrack}
           onReplaceFile={requestReplaceFile}
           onReorderTracks={isSearching ? undefined : reorderTracks}
-          emptyMessage="No tracks in this project library playlist yet. Add tracks from the project library."
+          emptyMessage="No tracks in this project playlist yet. Add tracks from the project."
         />
       </div>
       {deleteConfirmDialog}

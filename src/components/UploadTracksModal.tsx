@@ -38,8 +38,8 @@ export function UploadTracksModal({
   const [phoneBusy, setPhoneBusy] = useState(false);
 
   const title =
-    mode === "library"
-      ? "Upload to project library"
+    mode === "project"
+      ? "Upload to project"
       : collectionName
         ? `Upload to ${collectionName}`
         : "Upload to stored collection";
@@ -47,8 +47,8 @@ export function UploadTracksModal({
   const busy = uploading || phoneBusy;
   const deliveryOptions = phoneUploadReady ? 3 : 2;
   const destinationHint =
-    mode === "library"
-      ? "Files are copied into your project library folder."
+    mode === "project"
+      ? "Files are copied into your project folder."
       : "Files are copied into this stored collection.";
 
   const handleClose = useCallback(() => {

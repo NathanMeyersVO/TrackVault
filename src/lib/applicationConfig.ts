@@ -25,16 +25,16 @@ export interface DeliveryCopy {
   stagingBusyTitle: string;
   applyingBusyTitle: string;
   appliedSuccessMessage: string;
-  libraryEmptyWithProject: string;
+  projectEmptyWithProject: string;
   appEmptyTracksFooter: string;
 }
 
 export interface ApplicationConfig {
   supportsTitleImport: boolean;
   supportsScheduleDelivery: boolean;
-  /** Tag key always copied from the library file on replace (application partition). */
+  /** Tag key always copied from the project file on replace (application partition). */
   partitionTagKey: string | null;
-  /** Tag key used for project library search matching; null means match on filename. */
+  /** Tag key used for project search matching; null means match on filename. */
   entryTagKey: string | null;
   titleImportDialog?: TitleImportDialogConfig;
   deliveryCopy: DeliveryCopy;
@@ -60,10 +60,10 @@ const NONE_DELIVERY_COPY: DeliveryCopy = {
   stagingBusyTitle: "Staging delivery…",
   applyingBusyTitle: "Applying delivery update…",
   appliedSuccessMessage: "Delivery update applied",
-  libraryEmptyWithProject:
-    "No tracks yet. Library → Projects… (or Apply Delivery Update…) and choose your delivery folder.",
+  projectEmptyWithProject:
+    "No tracks yet. Project → Projects… (or Apply Delivery Update…) and choose your delivery folder.",
   appEmptyTracksFooter:
-    "Use Library → Projects to import a delivery and open a project.",
+    "Use Project → Projects to import a delivery and open a project.",
 };
 
 const USFS_EMS_DELIVERY_COPY: DeliveryCopy = {
@@ -86,10 +86,10 @@ const USFS_EMS_DELIVERY_COPY: DeliveryCopy = {
   stagingBusyTitle: "Staging EMS download…",
   applyingBusyTitle: "Applying EMS download…",
   appliedSuccessMessage: "EMS download applied",
-  libraryEmptyWithProject:
-    "No tracks yet. Library → Projects… (or Apply EMS Download…) and choose your EMS downloads folder.",
+  projectEmptyWithProject:
+    "No tracks yet. Project → Projects… (or Apply EMS Download…) and choose your EMS downloads folder.",
   appEmptyTracksFooter:
-    "Use Library → Projects to import an EMS download and open a project.",
+    "Use Project → Projects to import an EMS download and open a project.",
 };
 
 export const APPLICATION_CONFIG: Record<ApplicationId, ApplicationConfig> = {

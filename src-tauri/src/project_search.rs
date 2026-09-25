@@ -9,7 +9,7 @@ use crate::db::Database;
 pub const SEARCH_RESULT_LIMIT: usize = 50;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct ProjectLibrarySearchHit {
+pub struct ProjectSearchHit {
     pub track_id: i64,
     pub taglist_id: i64,
     pub taglist_name: String,
@@ -18,12 +18,12 @@ pub struct ProjectLibrarySearchHit {
     pub match_label: String,
 }
 
-pub fn search_project_library(
+pub fn search_project(
     db: &Database,
     application: ApplicationId,
     query: &str,
     limit: usize,
-) -> Result<Vec<ProjectLibrarySearchHit>, String> {
+) -> Result<Vec<ProjectSearchHit>, String> {
     let needle = query.trim();
     if needle.is_empty() {
         return Ok(Vec::new());
@@ -34,7 +34,7 @@ pub fn search_project_library(
     }
 
     let entry_key = entry_tag_key(application);
-    let mut hits: Vec<ProjectLibrarySearchHit> = Vec::new();
+    let mut hits: Vec<ProjectSearchHit> = Vec::new();
     let mut seen: HashSet<(i64, i64, Option<String>)> = HashSet::new();
 
     let taglists = db.list_taglists().map_err(|e| e.to_string())?;
@@ -101,7 +101,7 @@ pub fn search_project_library(
                     .and_then(|v| titles.get(v).cloned())
                     .or(sublist.display_title.clone());
 
-                hits.push(ProjectLibrarySearchHit {
+                hits.push(ProjectSearchHit {
                     track_id: track.id,
                     taglist_id: taglist.id,
                     taglist_name: taglist.name.clone(),
@@ -220,7 +220,7 @@ mod tests {
         let db = test_db();
         let (_taglist_id, track_a) = setup_taglist_with_tracks(&db);
 
-        let hits = search_project_library(
+        let hits = search_project(
             &db,
             ApplicationId::UsFigureSkatingEms,
             "short",
@@ -244,7 +244,7 @@ mod tests {
         db.replace_track_tags(_track_id, &[("Genre".into(), "Rock".into())])
             .unwrap();
 
-        let hits = search_project_library(
+        let hits = search_project(
             &db,
             ApplicationId::None,
             "my-song",
@@ -261,7 +261,7 @@ mod tests {
         let db = test_db();
         let _ = setup_taglist_with_tracks(&db);
         let hits =
-            search_project_library(&db, ApplicationId::UsFigureSkatingEms, "  ", SEARCH_RESULT_LIMIT)
+            search_project(&db, ApplicationId::UsFigureSkatingEms, "  ", SEARCH_RESULT_LIMIT)
                 .expect("search");
         assert!(hits.is_empty());
     }

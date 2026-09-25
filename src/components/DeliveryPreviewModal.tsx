@@ -171,7 +171,7 @@ export function DeliveryPreviewModal({
           <p className="mt-1 text-xs text-muted">
             {preview.staged_audio_count} files in {deliveryCopy.deliverySingular}
             {mode === "update"
-              ? ` · ${preview.library_audio_count} in project library`
+              ? ` · ${preview.project_audio_count} in project`
               : ""}
           </p>
           <p className="mt-0.5 text-xs text-muted">
@@ -230,7 +230,7 @@ export function DeliveryPreviewModal({
               {preview.unchanged_audio_count} track
               {preview.unchanged_audio_count === 1 ? "" : "s"} in this{" "}
               {deliveryCopy.deliverySingular} already match the
-              project library (same files and metadata). No audio updates to apply.
+              project (same files and metadata). No audio updates to apply.
             </p>
           ) : null}
           {groups.map(({ def, items }) => (

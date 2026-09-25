@@ -9,7 +9,7 @@ pub const CONFIG_VERSION: u32 = 1;
 pub const CONFIG_FILENAME: &str = "trackvault.json";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct LibraryConfig {
+pub struct TrackvaultConfig {
     pub version: u32,
     pub playlists: Vec<ConfigPlaylist>,
     pub taglists: Vec<ConfigTaglist>,
@@ -127,7 +127,7 @@ fn path_lookup_candidates(path: &Path) -> Vec<String> {
     candidates
 }
 
-pub fn export_config(db: &Database, library_root: &Path) -> Result<LibraryConfig, String> {
+pub fn export_config(db: &Database, library_root: &Path) -> Result<TrackvaultConfig, String> {
     let library_root = library_root
         .canonicalize()
         .unwrap_or_else(|_| library_root.to_path_buf());
@@ -174,7 +174,7 @@ pub fn export_config(db: &Database, library_root: &Path) -> Result<LibraryConfig
                 .map_err(|e| e.to_string())?
                 .ok_or_else(|| format!("Track {track_id} not found"))?;
             let rel = relative_path(&library_root, Path::new(&path))
-                .ok_or_else(|| format!("Track path not under project library: {path}"))?;
+                .ok_or_else(|| format!("Track path not under project: {path}"))?;
             track_order
                 .entry(tag_value)
                 .or_default()
@@ -200,7 +200,7 @@ pub fn export_config(db: &Database, library_root: &Path) -> Result<LibraryConfig
         });
     }
 
-    Ok(LibraryConfig {
+    Ok(TrackvaultConfig {
         version: CONFIG_VERSION,
         playlists,
         taglists,
@@ -215,14 +215,14 @@ pub fn save_config(db: &Database, library_root: &Path) -> Result<PathBuf, String
     Ok(path)
 }
 
-pub fn load_config_file(library_root: &Path) -> Result<Option<LibraryConfig>, String> {
+pub fn load_config_file(library_root: &Path) -> Result<Option<TrackvaultConfig>, String> {
     let path = config_file_path(library_root);
     if !path.exists() {
         return Ok(None);
     }
     let contents =
         std::fs::read_to_string(&path).map_err(|e| format!("Failed to read config: {e}"))?;
-    let config: LibraryConfig =
+    let config: TrackvaultConfig =
         serde_json::from_str(&contents).map_err(|e| format!("Invalid config JSON: {e}"))?;
     if config.version != CONFIG_VERSION {
         return Err(format!(
@@ -236,7 +236,7 @@ pub fn load_config_file(library_root: &Path) -> Result<Option<LibraryConfig>, St
 pub fn apply_config(
     db: &Database,
     library_root: &Path,
-    config: &LibraryConfig,
+    config: &TrackvaultConfig,
 ) -> Result<(), String> {
     let library_root = library_root
         .canonicalize()
@@ -312,7 +312,7 @@ mod tests {
         ));
         std::fs::create_dir_all(&library).expect("create library dir");
         let library = library.canonicalize().unwrap_or(library);
-        db.set_library_folder(library.to_str().unwrap())
+        db.set_project_folder(library.to_str().unwrap())
             .expect("set library");
 
         let track_a = library.join("01-intro.mp3");
@@ -420,7 +420,7 @@ mod tests {
     fn import_skips_missing_tracks() {
         let (db, library) = test_db_with_library();
 
-        let config = LibraryConfig {
+        let config = TrackvaultConfig {
             version: CONFIG_VERSION,
             playlists: vec![ConfigPlaylist {
                 name: "Partial".to_string(),

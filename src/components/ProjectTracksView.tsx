@@ -2,18 +2,18 @@ import { useCallback, useEffect, useState } from "react";
 
 import { getDeliveryCopy } from "../lib/applicationConfig";
 import { api } from "../lib/tauri";
-import { useLibrary, usePlayer } from "../hooks/usePlayer";
+import { useProject, usePlayer } from "../hooks/usePlayer";
 import { useDeleteTrack } from "../hooks/useDeleteTrack";
-import { useReplaceLibraryTrackFile } from "../hooks/useReplaceLibraryTrackFile";
-import { useProjectLibrarySearch } from "../hooks/useProjectLibrarySearch";
-import { formatProjectLibrarySearchSubtitle } from "../lib/projectLibrarySearchCopy";
+import { useReplaceProjectTrackFile } from "../hooks/useReplaceProjectTrackFile";
+import { useProjectSearch } from "../hooks/useProjectSearch";
+import { formatProjectSearchSubtitle } from "../lib/projectSearchCopy";
 import { usePlayerStore } from "../store/playerStore";
 import { playerController } from "../playerController";
 import { TagEditorModal } from "./TagEditorModal";
-import { ProjectLibrarySearchPanel } from "./ProjectLibrarySearchPanel";
+import { ProjectSearchPanel } from "./ProjectSearchPanel";
 import { TrackTable } from "./TrackTable";
 
-export function LibraryView() {
+export function ProjectTracksView() {
   const {
     tracks,
     playlists,
@@ -21,27 +21,27 @@ export function LibraryView() {
     cursorTrackId,
     setActiveTrackIds,
     activeProject,
-    libraryFolder,
+    projectFolder,
   } = usePlayerStore();
   const { playTrack, selectTrack } = usePlayer();
-  const { refresh } = useLibrary();
+  const { refresh } = useProject();
   const { requestDeleteTrack, confirmDialog: deleteConfirmDialog } = useDeleteTrack();
-  const { requestReplaceFile, replaceFileModal } = useReplaceLibraryTrackFile();
+  const { requestReplaceFile, replaceFileModal } = useReplaceProjectTrackFile();
   const [editingTrackId, setEditingTrackId] = useState<number | null>(null);
   const { query, setQuery, isSearching, hits, searchLoading, searchError, globalHitCount } =
-    useProjectLibrarySearch();
+    useProjectSearch();
 
   useEffect(() => {
     const trackIds = tracks.map((track) => track.id);
     setActiveTrackIds(trackIds);
-    playerController.syncTracklistContext("library", trackIds);
+    playerController.syncTracklistContext("project_tracks", trackIds);
   }, [tracks, setActiveTrackIds]);
 
-  const hasOpenProject = activeProject != null || libraryFolder != null;
+  const hasOpenProject = activeProject != null || projectFolder != null;
 
-  const libraryEmptyMessage = !hasOpenProject
-    ? "Open or create a project: Library → Projects…"
-    : getDeliveryCopy(activeProject?.application_id).libraryEmptyWithProject;
+  const projectEmptyMessage = !hasOpenProject
+    ? "Open or create a project: Project → Projects…"
+    : getDeliveryCopy(activeProject?.application_id).projectEmptyWithProject;
 
   const handleAddToPlaylist = useCallback(
     async (trackId: number, playlistId: number) => {
@@ -54,15 +54,15 @@ export function LibraryView() {
   return (
     <div className="flex h-full flex-col">
       <div className="border-b border-border px-4 py-3">
-        <h2 className="text-base font-semibold text-white">Project library</h2>
+        <h2 className="text-base font-semibold text-white">Project Tracks</h2>
         <p className="text-xs text-muted">
           {isSearching
-            ? formatProjectLibrarySearchSubtitle(searchLoading, globalHitCount)
+            ? formatProjectSearchSubtitle(searchLoading, globalHitCount)
             : `${tracks.length} track${tracks.length === 1 ? "" : "s"}`}
         </p>
       </div>
       <div className="border-b border-border px-4 py-2">
-        <ProjectLibrarySearchPanel
+        <ProjectSearchPanel
           query={query}
           onQueryChange={setQuery}
           hits={hits}
@@ -83,7 +83,7 @@ export function LibraryView() {
           onAddTrackToPlaylist={handleAddToPlaylist}
           onDeleteTrack={requestDeleteTrack}
           onReplaceFile={requestReplaceFile}
-          emptyMessage={libraryEmptyMessage}
+          emptyMessage={projectEmptyMessage}
         />
       </div>
       {deleteConfirmDialog}

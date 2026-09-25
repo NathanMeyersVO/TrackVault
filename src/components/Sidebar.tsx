@@ -23,7 +23,7 @@ import {
   sidebarPlaylistId,
   sidebarSublistId,
 } from "../lib/sidebarNavigation";
-import { useLibrary } from "../hooks/usePlayer";
+import { useProject } from "../hooks/usePlayer";
 import { useTagDropConfirm } from "../hooks/useTagDropConfirm";
 import { usePlayerStore, type View } from "../store/playerStore";
 
@@ -65,7 +65,7 @@ function TaglistGroup({
     filters: { name: string; extensions: string[] }[];
   };
 }) {
-  const { refresh } = useLibrary();
+  const { refresh } = useProject();
   const [values, setValues] = useState<TaglistValue[]>([]);
   const [editingValue, setEditingValue] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
@@ -114,7 +114,7 @@ function TaglistGroup({
   }, [loadValues]);
 
   useEffect(() => {
-    const unlisten = listen("library-updated", () => {
+    const unlisten = listen("project-updated", () => {
       loadValues();
     });
     return () => {
@@ -154,7 +154,7 @@ function TaglistGroup({
       "taglistId" in view &&
       view.taglistId === taglist.id
     ) {
-      setView("library");
+      setView("project_tracks");
     }
     await refresh();
   };
@@ -335,7 +335,7 @@ function TaglistGroup({
             type="button"
             onClick={(event) => void deleteTaglist(event)}
             className="rounded px-1 text-xs text-muted hover:text-red-400"
-            title="Delete project library taglist"
+            title="Delete project taglist"
           >
             ×
           </button>
@@ -362,7 +362,7 @@ export function Sidebar({ width }: { width: number }) {
     setDraggingTrackId,
     activeProject,
   } = usePlayerStore();
-  const { refresh } = useLibrary();
+  const { refresh } = useProject();
   const applicationId: ApplicationId =
     activeProject?.application_id === "usfs_ems" ? "usfs_ems" : "none";
   const applicationConfig = getApplicationConfig(applicationId);
@@ -549,7 +549,7 @@ export function Sidebar({ width }: { width: number }) {
         "playlistId" in view &&
         view.playlistId === pendingDeletePlaylist.id
       ) {
-        setView("library");
+        setView("project_tracks");
       }
       await refresh();
       setPendingDeletePlaylist(null);
@@ -600,7 +600,7 @@ export function Sidebar({ width }: { width: number }) {
         "collectionId" in view &&
         view.collectionId === pendingDeleteCollection.id
       ) {
-        setView("library");
+        setView("project_tracks");
       }
       await refresh();
       setPendingDeleteCollection(null);
@@ -629,7 +629,7 @@ export function Sidebar({ width }: { width: number }) {
     await refresh();
   };
 
-  const isLibraryActive = view === "library";
+  const isProjectTracksActive = view === "project_tracks";
 
   return (
     <aside
@@ -638,22 +638,11 @@ export function Sidebar({ width }: { width: number }) {
     >
       <div className="border-b border-border px-4 py-3">
         <h2 className="text-sm font-semibold tracking-tight text-foreground">Browse</h2>
-        <p className="text-xs text-muted">Project library, stored collections, project library playlists & project library taglists</p>
+        <p className="text-xs text-muted">Project tracks, stored collections, project playlists & project taglists</p>
       </div>
 
       <nav className="flex-1 overflow-y-auto bg-background p-2">
-        <button
-          onClick={() => setView("library")}
-          className={`mb-1 w-full rounded-md px-3 py-2 text-left text-sm ${
-            isLibraryActive
-              ? "bg-cursor-background text-foreground"
-              : "text-foreground hover:bg-surface-hover/60"
-          }`}
-        >
-          Project library
-        </button>
-
-        <div className="mb-2 mt-4 px-3 text-xs font-medium uppercase tracking-wide text-muted">
+        <div className="mb-2 px-3 text-xs font-medium uppercase tracking-wide text-muted">
           Stored Collections
         </div>
 
@@ -804,8 +793,19 @@ export function Sidebar({ width }: { width: number }) {
           </button>
         )}
 
+        <button
+          onClick={() => setView("project_tracks")}
+          className={`mb-1 mt-4 w-full rounded-md px-3 py-2 text-left text-sm ${
+            isProjectTracksActive
+              ? "bg-cursor-background text-foreground"
+              : "text-foreground hover:bg-surface-hover/60"
+          }`}
+        >
+          Project Tracks
+        </button>
+
         <div className="mb-2 mt-4 px-3 text-xs font-medium uppercase tracking-wide text-muted">
-          {isTrackDragging ? "Drop on a project library playlist or project library taglist" : "Project library playlists"}
+          {isTrackDragging ? "Drop on a project playlist or project taglist" : "Project playlists"}
         </div>
 
         <div ref={playlistListRef}>
@@ -914,7 +914,7 @@ export function Sidebar({ width }: { width: number }) {
                     type="button"
                     onClick={(event) => startRenamePlaylist(event, playlist)}
                     className="ml-1 hidden shrink-0 cursor-pointer rounded px-1 text-xs text-muted hover:text-foreground group-hover/playlist:inline"
-                    title="Rename project library playlist"
+                    title="Rename project playlist"
                   >
                     ✎
                   </button>
@@ -922,7 +922,7 @@ export function Sidebar({ width }: { width: number }) {
                     type="button"
                     onClick={(event) => requestDeletePlaylist(event, playlist)}
                     className="ml-1 hidden shrink-0 cursor-pointer rounded px-1 text-xs text-muted hover:text-red-400 group-hover/playlist:inline"
-                    title="Delete project library playlist"
+                    title="Delete project playlist"
                   >
                     ×
                   </button>
@@ -943,7 +943,7 @@ export function Sidebar({ width }: { width: number }) {
                 if (e.key === "Enter") createPlaylist();
                 if (e.key === "Escape") setCreating(false);
               }}
-              placeholder="Project library playlist name"
+              placeholder="Project playlist name"
               className="w-full rounded-md border border-border bg-background px-2 py-1 text-sm"
             />
             <div className="flex gap-2">
@@ -966,12 +966,12 @@ export function Sidebar({ width }: { width: number }) {
             onClick={() => setCreating(true)}
             className="mt-1 w-full rounded-md px-3 py-2 text-left text-sm text-muted hover:bg-surface-hover/60 hover:text-foreground"
           >
-            + New project library playlist
+            + New project playlist
           </button>
         )}
 
         <div className="mb-2 mt-4 px-3 text-xs font-medium uppercase tracking-wide text-muted">
-          {isTrackDragging ? "Drop on a project library taglist sublist" : "Project library taglists"}
+          {isTrackDragging ? "Drop on a project taglist sublist" : "Project taglists"}
         </div>
 
         {taglists.map((taglist) => (
@@ -997,7 +997,7 @@ export function Sidebar({ width }: { width: number }) {
                 if (e.key === "Enter") void createTaglist();
                 if (e.key === "Escape") setCreatingTaglist(false);
               }}
-              placeholder="Project library taglist name"
+              placeholder="Project taglist name"
               className="w-full rounded-md border border-border bg-background px-2 py-1 text-sm"
             />
             <input
@@ -1054,15 +1054,15 @@ export function Sidebar({ width }: { width: number }) {
             onClick={() => setCreatingTaglist(true)}
             className="mt-1 w-full rounded-md px-3 py-2 text-left text-sm text-muted hover:bg-surface-hover/60 hover:text-foreground"
           >
-            + New project library taglist
+            + New project taglist
           </button>
         )}
       </nav>
 
       {pendingDeletePlaylist ? (
         <ConfirmDialog
-          title="Delete project library playlist"
-          message={`Delete "${pendingDeletePlaylist.name}"? This will remove the project library playlist but not the tracks.`}
+          title="Delete project playlist"
+          message={`Delete "${pendingDeletePlaylist.name}"? This will remove the project playlist but not the tracks.`}
           confirmLabel="Delete"
           cancelLabel="Cancel"
           destructive

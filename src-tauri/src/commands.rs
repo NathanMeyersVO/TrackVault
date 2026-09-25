@@ -41,16 +41,16 @@ pub struct AppState {
 
 fn try_autosave_project_config(state: &AppState) {
     let db = state.db.lock();
-    if let Ok(Some(path)) = db.get_library_folder() {
+    if let Ok(Some(path)) = db.get_project_folder() {
         let _ = autosave_trackvault_json(&db, Path::new(&path));
     }
 }
 
-fn teardown_library(state: &AppState) -> Result<PlaybackState, String> {
+fn teardown_project(state: &AppState) -> Result<PlaybackState, String> {
     state.player.stop();
     {
         let db = state.db.lock();
-        db.close_library_state().map_err(|e| e.to_string())?;
+        db.close_project_state().map_err(|e| e.to_string())?;
     }
     state.audio_cache.reset();
     let mut playback = state.player.state();
@@ -77,25 +77,25 @@ pub fn list_tracks(state: State<'_, AppState>) -> Result<Vec<Track>, String> {
 }
 
 #[tauri::command]
-pub fn get_library_folder(state: State<'_, AppState>) -> Result<Option<String>, String> {
+pub fn get_project_folder(state: State<'_, AppState>) -> Result<Option<String>, String> {
     state
         .db
         .lock()
-        .get_library_folder()
+        .get_project_folder()
         .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub fn set_library_folder(
+pub fn set_project_folder(
     app: AppHandle,
     state: State<'_, AppState>,
     path: String,
 ) -> Result<ScanProgress, String> {
-    teardown_library(&state)?;
+    teardown_project(&state)?;
     let library_root = PathBuf::from(&path);
     {
         let db = state.db.lock();
-        db.set_library_folder(&path).map_err(|e| e.to_string())?;
+        db.set_project_folder(&path).map_err(|e| e.to_string())?;
     }
 
     let pending_config = match crate::config::load_config_file(&library_root) {
@@ -103,19 +103,19 @@ pub fn set_library_folder(
         Err(e) => {
             let _progress = {
                 let db = state.db.lock();
-                scanner::scan_library_folder(&db, &app, None, None)?
+                scanner::scan_project_folder(&db, &app, None, None)?
             };
-            let _ = app.emit("library-updated", ());
+            let _ = app.emit("project-updated", ());
             state.audio_cache.kick();
             return Err(format!(
-                "Project library folder set and scanned, but config could not be loaded: {e}"
+                "Project folder set and scanned, but config could not be loaded: {e}"
             ));
         }
     };
 
     let progress = {
         let db = state.db.lock();
-        scanner::scan_library_folder(&db, &app, None, None)?
+        scanner::scan_project_folder(&db, &app, None, None)?
     };
 
     if let Some(config) = pending_config {
@@ -126,37 +126,37 @@ pub fn set_library_folder(
     {
         let db = state.db.lock();
         let application = crate::application::get_application(&db)?;
-        crate::library_setup::apply_application_library_setup(
+        crate::project_setup::apply_application_project_setup(
             &db,
             &library_root,
             application,
         )?;
     }
 
-    let _ = app.emit("library-updated", ());
+    let _ = app.emit("project-updated", ());
     state.audio_cache.kick();
     Ok(progress)
 }
 
 #[tauri::command]
-pub fn save_library_config(state: State<'_, AppState>) -> Result<String, String> {
+pub fn save_project_config(state: State<'_, AppState>) -> Result<String, String> {
     let db = state.db.lock();
     let library = db
-        .get_library_folder()
+        .get_project_folder()
         .map_err(|e| e.to_string())?
-        .ok_or_else(|| "No project library folder configured".to_string())?;
+        .ok_or_else(|| "No project folder configured".to_string())?;
     let path = crate::config::save_config(&db, Path::new(&library))?;
     Ok(path.to_string_lossy().to_string())
 }
 
 #[tauri::command]
-pub fn load_library_config(app: AppHandle, state: State<'_, AppState>) -> Result<String, String> {
+pub fn load_project_config(app: AppHandle, state: State<'_, AppState>) -> Result<String, String> {
     let (library_root, config) = {
         let db = state.db.lock();
         let library = db
-            .get_library_folder()
+            .get_project_folder()
             .map_err(|e| e.to_string())?
-            .ok_or_else(|| "No project library folder configured".to_string())?;
+            .ok_or_else(|| "No project folder configured".to_string())?;
         let library_root = PathBuf::from(&library);
         let config_path = crate::config::config_file_path(&library_root);
         let config = crate::config::load_config_file(&library_root)?.ok_or_else(|| {
@@ -175,14 +175,14 @@ pub fn load_library_config(app: AppHandle, state: State<'_, AppState>) -> Result
     }
 
     let path = crate::config::config_file_path(&library_root);
-    let _ = app.emit("library-updated", ());
+    let _ = app.emit("project-updated", ());
     Ok(path.to_string_lossy().to_string())
 }
 
 #[tauri::command]
-pub fn close_library(app: AppHandle, state: State<'_, AppState>) -> Result<PlaybackState, String> {
-    let playback = teardown_library(&state)?;
-    let _ = app.emit("library-updated", ());
+pub fn close_project(app: AppHandle, state: State<'_, AppState>) -> Result<PlaybackState, String> {
+    let playback = teardown_project(&state)?;
+    let _ = app.emit("project-updated", ());
     Ok(playback)
 }
 
@@ -278,19 +278,19 @@ pub fn upload_tracks(
         let db = state.db.lock();
         crate::upload::upload_tracks(&db, &paths, overwrite)?
     };
-    let _ = app.emit("library-updated", ());
+    let _ = app.emit("project-updated", ());
     state.audio_cache.kick();
     Ok(result)
 }
 
 #[tauri::command]
-pub fn preview_replace_library_track_file(
+pub fn preview_replace_project_track_file(
     state: State<'_, AppState>,
     track_id: i64,
     source_path: String,
 ) -> Result<crate::replace_track::ReplaceTrackFilePreview, String> {
     let db = state.db.lock();
-    crate::replace_track::preview_replace_library_track_file(
+    crate::replace_track::preview_replace_project_track_file(
         &db,
         track_id,
         Path::new(&source_path),
@@ -298,7 +298,7 @@ pub fn preview_replace_library_track_file(
 }
 
 #[tauri::command]
-pub fn replace_library_track_file(
+pub fn replace_project_track_file(
     app: AppHandle,
     state: State<'_, AppState>,
     track_id: i64,
@@ -312,7 +312,7 @@ pub fn replace_library_track_file(
 
     let track = {
         let db = state.db.lock();
-        crate::replace_track::replace_library_track_file(
+        crate::replace_track::replace_project_track_file(
             &db,
             &state.app_data_dir,
             track_id,
@@ -322,7 +322,7 @@ pub fn replace_library_track_file(
         )?
     };
 
-    let _ = app.emit("library-updated", ());
+    let _ = app.emit("project-updated", ());
     state.audio_cache.kick();
     Ok(track)
 }
@@ -342,11 +342,11 @@ pub fn start_replace_remote_upload(
 }
 
 #[tauri::command]
-pub fn start_library_remote_upload(
+pub fn start_project_remote_upload(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<crate::replace_remote_upload::ReplaceRemoteUploadStartInfo, String> {
-    state.replace_remote_upload.start_library_import(
+    state.replace_remote_upload.start_project_import(
         app,
         Arc::clone(&state.db),
         &state.app_data_dir,
@@ -468,10 +468,10 @@ pub fn delete_track(
             .get_track_path(track_id)
             .map_err(|e| e.to_string())?
             .ok_or("Track not found")?;
-        if !db.is_library_track(track_id).map_err(|e| e.to_string())? {
+        if !db.is_project_track(track_id).map_err(|e| e.to_string())? {
             return Err("Use delete collection track for collection tracks".to_string());
         }
-        crate::library_path::ensure_under_library_folder(&db, Path::new(&path))?;
+        crate::project_path::ensure_under_project_folder(&db, Path::new(&path))?;
         if state.player.state().track_id == Some(track_id) {
             state.player.stop();
         }
@@ -480,7 +480,7 @@ pub fn delete_track(
 
     if let Err(error) = std::fs::remove_file(&path) {
         return Err(format!(
-            "Track removed from project library, but file could not be deleted: {error}"
+            "Track removed from project, but file could not be deleted: {error}"
         ));
     }
 
@@ -492,7 +492,7 @@ pub fn delete_track(
         playback.is_playing = false;
     }
 
-    let _ = app.emit("library-updated", ());
+    let _ = app.emit("project-updated", ());
     Ok(playback)
 }
 
@@ -543,7 +543,7 @@ pub fn add_track_to_playlist(
     track_id: i64,
 ) -> Result<(), String> {
     let db = state.db.lock();
-    if !db.is_library_track(track_id).map_err(|e| e.to_string())? {
+    if !db.is_project_track(track_id).map_err(|e| e.to_string())? {
         return Err("Collection tracks cannot be added to playlists".to_string());
     }
     db.add_track_to_playlist(playlist_id, track_id)
@@ -600,7 +600,7 @@ pub fn rename_playlist(
         .rename_playlist(id, name)
         .map_err(|e| e.to_string())?;
     try_autosave_project_config(&state);
-    let _ = app.emit("library-updated", ());
+    let _ = app.emit("project-updated", ());
     Ok(())
 }
 
@@ -615,7 +615,7 @@ pub fn reorder_playlists(
         .lock()
         .reorder_playlists(&playlist_ids)
         .map_err(|e| e.to_string())?;
-    let _ = app.emit("library-updated", ());
+    let _ = app.emit("project-updated", ());
     Ok(())
 }
 
@@ -725,7 +725,7 @@ pub fn set_taglist_value_title(
         )
         .map_err(|e| e.to_string())?;
     }
-    let _ = app.emit("library-updated", ());
+    let _ = app.emit("project-updated", ());
     Ok(())
 }
 
@@ -766,7 +766,7 @@ pub fn reorder_taglist_values(
         db.reorder_taglist_values(taglist_id, &tag_values)
             .map_err(|e| e.to_string())?;
     }
-    let _ = app.emit("library-updated", ());
+    let _ = app.emit("project-updated", ());
     Ok(())
 }
 
@@ -804,7 +804,7 @@ pub fn preview_swap_taglist_entries(
     source_value: Option<String>,
     target_value: Option<String>,
     source_track_id: i64,
-    swap_library_paths: bool,
+    swap_project_paths: bool,
     swap_basenames: bool,
 ) -> Result<crate::taglist_swap::SwapTaglistPreview, String> {
     let db = state.db.lock();
@@ -814,7 +814,7 @@ pub fn preview_swap_taglist_entries(
         source_value.as_deref(),
         target_value.as_deref(),
         source_track_id,
-        swap_library_paths,
+        swap_project_paths,
         swap_basenames,
     )
 }
@@ -828,7 +828,7 @@ pub fn swap_taglist_entries(
     target_value: Option<String>,
     source_track_id: i64,
     swap_tag_keys: Vec<String>,
-    swap_library_paths: bool,
+    swap_project_paths: bool,
     swap_basenames: bool,
 ) -> Result<Vec<Track>, String> {
     {
@@ -858,12 +858,12 @@ pub fn swap_taglist_entries(
             target_value.as_deref(),
             source_track_id,
             &swap_tag_keys,
-            swap_library_paths,
+            swap_project_paths,
             swap_basenames,
         )?
     };
 
-    let _ = app.emit("library-updated", ());
+    let _ = app.emit("project-updated", ());
     state.audio_cache.kick();
     Ok(tracks)
 }
@@ -1020,7 +1020,7 @@ pub fn update_track_tags(
             .map_err(|e| e.to_string())?;
     }
 
-    let _ = app.emit("library-updated", ());
+    let _ = app.emit("project-updated", ());
     Ok(track)
 }
 
@@ -1048,17 +1048,17 @@ pub fn get_application_settings(
 }
 
 #[tauri::command]
-pub fn search_project_library(
+pub fn search_project(
     state: State<'_, AppState>,
     query: String,
-) -> Result<Vec<crate::project_library_search::ProjectLibrarySearchHit>, String> {
+) -> Result<Vec<crate::project_search::ProjectSearchHit>, String> {
     let db = state.db.lock();
     let application = crate::application::get_application(&db)?;
-    crate::project_library_search::search_project_library(
+    crate::project_search::search_project(
         &db,
         application,
         &query,
-        crate::project_library_search::SEARCH_RESULT_LIMIT,
+        crate::project_search::SEARCH_RESULT_LIMIT,
     )
 }
 
@@ -1075,18 +1075,18 @@ pub fn set_application_settings(
 
     if let Some(library_root) = {
         let db = state.db.lock();
-        db.get_library_folder().map_err(|e| e.to_string())?
+        db.get_project_folder().map_err(|e| e.to_string())?
     } {
         let application = crate::application::normalize_application_id(&normalized.application_id);
         let db = state.db.lock();
-        crate::library_setup::apply_application_library_setup(
+        crate::project_setup::apply_application_project_setup(
             &db,
             Path::new(&library_root),
             application,
         )?;
     }
 
-    let _ = app.emit("library-updated", ());
+    let _ = app.emit("project-updated", ());
     Ok(normalized)
 }
 
@@ -1109,7 +1109,7 @@ pub fn delete_collection(
         let db = state.db.lock();
         crate::collections::delete_collection_with_files(&db, &state.app_data_dir, id)?;
     }
-    let _ = app.emit("library-updated", ());
+    let _ = app.emit("project-updated", ());
     Ok(())
 }
 
@@ -1158,7 +1158,7 @@ pub fn reorder_collections(
         .lock()
         .reorder_collections(&collection_ids)
         .map_err(|e| e.to_string())?;
-    let _ = app.emit("library-updated", ());
+    let _ = app.emit("project-updated", ());
     Ok(())
 }
 
@@ -1187,7 +1187,7 @@ pub fn rename_collection(
         db.rename_collection(id, name)
             .map_err(|e| e.to_string())?;
     }
-    let _ = app.emit("library-updated", ());
+    let _ = app.emit("project-updated", ());
     Ok(())
 }
 
@@ -1231,7 +1231,7 @@ pub fn upload_collection_tracks(
             overwrite,
         )?
     };
-    let _ = app.emit("library-updated", ());
+    let _ = app.emit("project-updated", ());
     state.audio_cache.kick();
     Ok(result)
 }
@@ -1264,7 +1264,7 @@ pub fn delete_collection_track(
         playback.is_playing = false;
     }
 
-    let _ = app.emit("library-updated", ());
+    let _ = app.emit("project-updated", ());
     Ok(playback)
 }
 
@@ -1309,7 +1309,7 @@ pub fn import_collection(
         let db = state.db.lock();
         crate::collections::import_collection(&db, &state.app_data_dir, Path::new(&source))?
     };
-    let _ = app.emit("library-updated", ());
+    let _ = app.emit("project-updated", ());
     state.audio_cache.kick();
     Ok(collection_id)
 }
@@ -1332,7 +1332,7 @@ pub fn set_collection_playback_mode(
             .map_err(|e| e.to_string())?
             .ok_or_else(|| "Collection not found".to_string())?
     };
-    let _ = app.emit("library-updated", ());
+    let _ = app.emit("project-updated", ());
     Ok(collection)
 }
 
@@ -1354,7 +1354,7 @@ pub fn set_collection_continuous_volume(
             .map_err(|e| e.to_string())?
             .ok_or_else(|| "Collection not found".to_string())?
     };
-    let _ = app.emit("library-updated", ());
+    let _ = app.emit("project-updated", ());
     Ok(collection)
 }
 
@@ -1529,7 +1529,7 @@ fn reapply_project_application(
         } else {
             None
         };
-        crate::library_setup::apply_application_library_setup_with_schedule(
+        crate::project_setup::apply_application_project_setup_with_schedule(
             &db,
             &library_root,
             application,
@@ -1537,7 +1537,7 @@ fn reapply_project_application(
         )?;
         autosave_trackvault_json(&db, &library_root)?;
     }
-    let _ = app.emit("library-updated", ());
+    let _ = app.emit("project-updated", ());
     state.audio_cache.kick();
     Ok(())
 }
@@ -1553,12 +1553,12 @@ pub fn delete_project(
         let db = state.db.lock();
         if projects::get_active_project_id(&db)? == Some(project_id.clone()) {
             drop(db);
-            playback = teardown_library(&state)?;
+            playback = teardown_project(&state)?;
             projects::clear_active_project_id(&state.db.lock())?;
         }
     }
     projects::delete_project_dir(&state.app_data_dir, &project_id)?;
-    let _ = app.emit("library-updated", ());
+    let _ = app.emit("project-updated", ());
     Ok(playback)
 }
 
@@ -1863,12 +1863,12 @@ pub fn apply_staged_delivery(
 
     {
         let db = state.db.lock();
-        scanner::scan_library_folder(&db, &app, Some(&progress), None)?;
+        scanner::scan_project_folder(&db, &app, Some(&progress), None)?;
     }
 
     state.delivery_sessions.remove(&staging_session_id);
     try_autosave_project_config(&state);
-    let _ = app.emit("library-updated", ());
+    let _ = app.emit("project-updated", ());
     state.audio_cache.kick();
     progress.finish();
     Ok(result)
@@ -1897,11 +1897,11 @@ fn open_project_internal(app: &AppHandle, state: &AppState, project_id: &str) ->
     std::fs::create_dir_all(&library_root).map_err(|e| e.to_string())?;
     let library_str = library_root.to_string_lossy().to_string();
 
-    teardown_library(state)?;
+    teardown_project(state)?;
 
     {
         let db = state.db.lock();
-        db.set_library_folder(&library_str).map_err(|e| e.to_string())?;
+        db.set_project_folder(&library_str).map_err(|e| e.to_string())?;
         let app_settings = crate::application::ApplicationSettings {
             application_id: manifest.application_id.clone(),
         };
@@ -1909,7 +1909,7 @@ fn open_project_internal(app: &AppHandle, state: &AppState, project_id: &str) ->
         projects::set_active_project_id(&db, project_id)?;
     }
 
-    scanner::scan_library_folder(&state.db.lock(), app, None, Some(&ctx))?;
+    scanner::scan_project_folder(&state.db.lock(), app, None, Some(&ctx))?;
 
     ctx.emit(ProjectLoadPhase::LoadingConfig, 0, 0, false, None);
     {

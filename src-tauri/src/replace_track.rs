@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::db::Database;
 
-use crate::library_path;
+use crate::project_path;
 
 use crate::scanner::{is_audio_file, read_tags};
 
@@ -57,9 +57,9 @@ pub struct ReplaceTrackFilePreview {
 
     pub replacement: ReplaceTrackFileSide,
 
-    pub library_path_before: String,
+    pub project_path_before: String,
 
-    pub library_path_after: String,
+    pub project_path_after: String,
 
     pub path_collision: bool,
 
@@ -69,7 +69,7 @@ pub struct ReplaceTrackFilePreview {
 
 
 
-pub fn preview_replace_library_track_file(
+pub fn preview_replace_project_track_file(
 
     db: &Database,
 
@@ -79,7 +79,7 @@ pub fn preview_replace_library_track_file(
 
 ) -> Result<ReplaceTrackFilePreview, String> {
 
-    let dest_path = resolve_library_dest_path(db, track_id)?;
+    let dest_path = resolve_project_dest_path(db, track_id)?;
 
     let dest = Path::new(&dest_path);
 
@@ -105,9 +105,9 @@ pub fn preview_replace_library_track_file(
 
         replacement,
 
-        library_path_before: dest_path,
+        project_path_before: dest_path,
 
-        library_path_after: target_path.to_string_lossy().to_string(),
+        project_path_after: target_path.to_string_lossy().to_string(),
 
         path_collision: collision_message.is_some(),
 
@@ -119,7 +119,7 @@ pub fn preview_replace_library_track_file(
 
 
 
-pub fn replace_library_track_file(
+pub fn replace_project_track_file(
 
     db: &Database,
 
@@ -135,7 +135,7 @@ pub fn replace_library_track_file(
 
 ) -> Result<crate::models::Track, String> {
 
-    let dest_path = resolve_library_dest_path(db, track_id)?;
+    let dest_path = resolve_project_dest_path(db, track_id)?;
 
     validate_source_for_replace(&dest_path, source_path)?;
 
@@ -192,7 +192,7 @@ pub fn replace_library_track_file(
 
 
 
-    db.update_library_track_after_replace(
+    db.update_project_track_after_replace(
 
         track_id,
 
@@ -282,7 +282,7 @@ fn install_replacement_file(
 
         fs::remove_file(dest_path)
 
-            .map_err(|e| format!("Failed to remove existing project library file: {e}"))?;
+            .map_err(|e| format!("Failed to remove existing project file: {e}"))?;
 
     }
 
@@ -352,7 +352,7 @@ fn resolve_target_path(
 
         .parent()
 
-        .ok_or_else(|| "Project library track has no parent directory.".to_string())?;
+        .ok_or_else(|| "Project track has no parent directory.".to_string())?;
 
     let file_name = source_path
 
@@ -476,7 +476,7 @@ fn path_collision_message(
 
             return Ok(Some(format!(
 
-                "The path \"{}\" is already used by another project library track.",
+                "The path \"{}\" is already used by another project track.",
 
                 target_str
 
@@ -494,11 +494,11 @@ fn path_collision_message(
 
 
 
-fn resolve_library_dest_path(db: &Database, track_id: i64) -> Result<String, String> {
+fn resolve_project_dest_path(db: &Database, track_id: i64) -> Result<String, String> {
 
-    if !db.is_library_track(track_id).map_err(|e| e.to_string())? {
+    if !db.is_project_track(track_id).map_err(|e| e.to_string())? {
 
-        return Err("Only project library tracks can be replaced".to_string());
+        return Err("Only project tracks can be replaced".to_string());
 
     }
 
@@ -510,7 +510,7 @@ fn resolve_library_dest_path(db: &Database, track_id: i64) -> Result<String, Str
 
         .ok_or("Track not found")?;
 
-    library_path::ensure_under_library_folder(db, Path::new(&path))?;
+    project_path::ensure_under_project_folder(db, Path::new(&path))?;
 
     Ok(path)
 
@@ -523,7 +523,7 @@ pub fn validate_replacement_source(
     track_id: i64,
     source_path: &Path,
 ) -> Result<(), String> {
-    let dest_path = resolve_library_dest_path(db, track_id)?;
+    let dest_path = resolve_project_dest_path(db, track_id)?;
     validate_source_for_replace(&dest_path, source_path)
 }
 
@@ -567,7 +567,7 @@ fn validate_source_for_replace(dest_path: &str, source_path: &Path) -> Result<()
 
     if paths_are_same_file(Path::new(dest_path), source_path)? {
 
-        return Err("Choose a different file than the project library track itself.".to_string());
+        return Err("Choose a different file than the project track itself.".to_string());
 
     }
 

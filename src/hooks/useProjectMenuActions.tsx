@@ -22,8 +22,8 @@ import { UploadTracksModal } from "../components/UploadTracksModal";
 import { usePhoneUploadSettings } from "./usePhoneUploadSettings";
 import { getDeliveryCopy, normalizeApplicationId } from "../lib/applicationConfig";
 import { api, type DeliveryPreview } from "../lib/tauri";
-import { useLibrary } from "./usePlayer";
-import { useLibraryUiReset } from "./useLibraryUiReset";
+import { useProject } from "./usePlayer";
+import { useProjectUiReset } from "./useProjectUiReset";
 import { useUploadTracks } from "./useUploadTracks";
 import { useCollectionUpload } from "./useCollectionUpload";
 import { usePlayerStore } from "../store/playerStore";
@@ -38,11 +38,11 @@ function activeCollectionId(
 }
 
 const CLOSE_LIBRARY_MESSAGE =
-  "Remove the current project library folder and clear all indexed tracks, project library playlists, and project library taglists from the app? Audio files on disk are not deleted. Stored collections are kept.\n\nSave configuration first if you want project library playlists and project library taglists written to trackvault.json.";
+  "Remove the current project folder and clear all indexed tracks, project playlists, and project taglists from the app? Audio files on disk are not deleted. Stored collections are kept.\n\nSave configuration first if you want project playlists and project taglists written to trackvault.json.";
 
-export function useLibraryMenuActions() {
+export function useProjectMenuActions() {
   const {
-    libraryFolder,
+    projectFolder,
     activeProject,
     scanning,
     deliveryStaging,
@@ -52,25 +52,25 @@ export function useLibraryMenuActions() {
     setDeliveryStaging,
     setView,
   } = usePlayerStore();
-  const { resetLibraryUi } = useLibraryUiReset();
+  const { resetProjectUi } = useProjectUiReset();
   const collectionId = activeCollectionId(view);
   const collectionName =
     collectionId != null
       ? collections.find((collection) => collection.id === collectionId)?.name
       : null;
-  const { refresh } = useLibrary();
-  const libraryUpload = useUploadTracks();
+  const { refresh } = useProject();
+  const projectUpload = useUploadTracks();
   const collectionUpload = useCollectionUpload(collectionId);
   const {
-    uploadFromPaths: uploadLibraryFromPaths,
-    uploading: libraryUploading,
-    uploadMessage: libraryUploadMessage,
-    uploadError: libraryUploadError,
-    uploadConfirmDialog: libraryUploadConfirmDialog,
-    clearUploadFeedback: clearLibraryUploadFeedback,
-    showUploadMessage: showLibraryUploadMessage,
-    showUploadError: showLibraryUploadError,
-  } = libraryUpload;
+    uploadFromPaths: uploadProjectFromPaths,
+    uploading: projectUploading,
+    uploadMessage: projectUploadMessage,
+    uploadError: projectUploadError,
+    uploadConfirmDialog: projectUploadConfirmDialog,
+    clearUploadFeedback: clearProjectUploadFeedback,
+    showUploadMessage: showProjectUploadMessage,
+    showUploadError: showProjectUploadError,
+  } = projectUpload;
   const {
     uploadFromPaths: uploadCollectionFromPaths,
     uploading: collectionUploading,
@@ -81,13 +81,13 @@ export function useLibraryMenuActions() {
     showUploadMessage: showCollectionUploadMessage,
     showUploadError: showCollectionUploadError,
   } = collectionUpload;
-  const uploading = libraryUploading || collectionUploading;
-  const uploadMessage = libraryUploadMessage ?? collectionUploadMessage;
-  const uploadError = libraryUploadError ?? collectionUploadError;
+  const uploading = projectUploading || collectionUploading;
+  const uploadMessage = projectUploadMessage ?? collectionUploadMessage;
+  const uploadError = projectUploadError ?? collectionUploadError;
   const clearUploadFeedback = useCallback(() => {
-    clearLibraryUploadFeedback();
+    clearProjectUploadFeedback();
     clearCollectionUploadFeedback();
-  }, [clearCollectionUploadFeedback, clearLibraryUploadFeedback]);
+  }, [clearCollectionUploadFeedback, clearProjectUploadFeedback]);
   const [configMessage, setConfigMessage] = useState<string | null>(null);
   const [configError, setConfigError] = useState<string | null>(null);
   const clearConfigFeedback = useCallback(() => {
@@ -109,13 +109,13 @@ export function useLibraryMenuActions() {
   const [savingConfig, setSavingConfig] = useState(false);
   const [loadingConfig, setLoadingConfig] = useState(false);
   const [loadConfigConfirmOpen, setLoadConfigConfirmOpen] = useState(false);
-  const [closingLibrary, setClosingLibrary] = useState(false);
-  const [closeLibraryConfirmOpen, setCloseLibraryConfirmOpen] = useState(false);
-  const [changeLibraryConfirmOpen, setChangeLibraryConfirmOpen] = useState(false);
-  const [pendingLibraryFolder, setPendingLibraryFolder] = useState<string | null>(null);
+  const [closingProject, setClosingProject] = useState(false);
+  const [closeProjectConfirmOpen, setCloseProjectConfirmOpen] = useState(false);
+  const [changeProjectConfirmOpen, setChangeProjectConfirmOpen] = useState(false);
+  const [pendingProjectFolder, setPendingProjectFolder] = useState<string | null>(null);
   const [importingCollection, setImportingCollection] = useState(false);
   const [uploadModalTarget, setUploadModalTarget] = useState<
-    "library" | "collection" | null
+    "project" | "collection" | null
   >(null);
   const [projectHubOpen, setProjectHubOpen] = useState(false);
   const [deliveryPreview, setDeliveryPreview] = useState<DeliveryPreview | null>(null);
@@ -124,21 +124,21 @@ export function useLibraryMenuActions() {
   const [phoneUploadSettingsOpen, setPhoneUploadSettingsOpen] = useState(false);
   const { phoneUploadReady, reload: reloadPhoneUploadSettings } = usePhoneUploadSettings();
 
-  const applyLibraryFolder = useCallback(
+  const applyProjectFolder = useCallback(
     async (path: string) => {
       setScanning(true);
       setConfigError(null);
       setConfigMessage(null);
       clearUploadFeedback();
       try {
-        if (libraryFolder) {
-          const playback = await api.closeLibrary();
-          resetLibraryUi(playback);
+        if (projectFolder) {
+          const playback = await api.closeProject();
+          resetProjectUi(playback);
         }
-        await api.setLibraryFolder(path);
+        await api.setProjectFolder(path);
         await refresh();
-        setChangeLibraryConfirmOpen(false);
-        setPendingLibraryFolder(null);
+        setChangeProjectConfirmOpen(false);
+        setPendingProjectFolder(null);
         return true;
       } catch (err) {
         setConfigError(String(err));
@@ -148,7 +148,7 @@ export function useLibraryMenuActions() {
         setScanning(false);
       }
     },
-    [clearUploadFeedback, libraryFolder, refresh, resetLibraryUi, setScanning],
+    [clearUploadFeedback, projectFolder, refresh, resetProjectUi, setScanning],
   );
 
   const openProjectHub = useCallback(() => {
@@ -244,23 +244,23 @@ export function useLibraryMenuActions() {
     }
   }, [activeProject, clearUploadFeedback]);
 
-  const chooseLibraryFolder = useCallback(async () => {
+  const chooseProjectFolder = useCallback(async () => {
     const selected = await open({
       directory: true,
       multiple: false,
-      title: "Choose project library folder",
+      title: "Choose project folder",
     });
     if (typeof selected !== "string") return;
-    if (selected === libraryFolder) return;
+    if (selected === projectFolder) return;
 
-    if (!libraryFolder) {
-      await applyLibraryFolder(selected);
+    if (!projectFolder) {
+      await applyProjectFolder(selected);
       return;
     }
 
-    setPendingLibraryFolder(selected);
-    setChangeLibraryConfirmOpen(true);
-  }, [applyLibraryFolder, libraryFolder]);
+    setPendingProjectFolder(selected);
+    setChangeProjectConfirmOpen(true);
+  }, [applyProjectFolder, projectFolder]);
 
   const saveConfiguration = useCallback(async () => {
     setSavingConfig(true);
@@ -268,7 +268,7 @@ export function useLibraryMenuActions() {
     setConfigError(null);
     clearUploadFeedback();
     try {
-      const savedPath = await api.saveLibraryConfig();
+      const savedPath = await api.saveProjectConfig();
       setConfigMessage(`Saved to ${savedPath}`);
       return true;
     } catch (err) {
@@ -280,9 +280,9 @@ export function useLibraryMenuActions() {
   }, [clearUploadFeedback]);
 
   const requestLoadConfiguration = useCallback(() => {
-    if (!libraryFolder) return;
+    if (!projectFolder) return;
     setLoadConfigConfirmOpen(true);
-  }, [libraryFolder]);
+  }, [projectFolder]);
 
   const cancelLoadConfiguration = useCallback(() => {
     if (loadingConfig) return;
@@ -295,7 +295,7 @@ export function useLibraryMenuActions() {
     setConfigError(null);
     clearUploadFeedback();
     try {
-      const loadedPath = await api.loadLibraryConfig();
+      const loadedPath = await api.loadProjectConfig();
       await refresh();
       setConfigMessage(`Loaded from ${loadedPath}`);
       setLoadConfigConfirmOpen(false);
@@ -306,73 +306,73 @@ export function useLibraryMenuActions() {
     }
   }, [clearUploadFeedback, refresh]);
 
-  const closeLibrary = useCallback(async () => {
-    setClosingLibrary(true);
+  const closeProject = useCallback(async () => {
+    setClosingProject(true);
     setConfigMessage(null);
     setConfigError(null);
     clearUploadFeedback();
     try {
-      const playback = await api.closeLibrary();
-      resetLibraryUi(playback);
+      const playback = await api.closeProject();
+      resetProjectUi(playback);
       await refresh();
-      setCloseLibraryConfirmOpen(false);
+      setCloseProjectConfirmOpen(false);
       return true;
     } catch (err) {
       setConfigError(String(err));
       return false;
     } finally {
-      setClosingLibrary(false);
+      setClosingProject(false);
     }
-  }, [clearUploadFeedback, refresh, resetLibraryUi]);
+  }, [clearUploadFeedback, refresh, resetProjectUi]);
 
-  const requestCloseLibrary = useCallback(() => {
-    setCloseLibraryConfirmOpen(true);
+  const requestCloseProject = useCallback(() => {
+    setCloseProjectConfirmOpen(true);
   }, []);
 
-  const cancelCloseLibrary = useCallback(() => {
-    if (closingLibrary || savingConfig) return;
-    setCloseLibraryConfirmOpen(false);
-  }, [closingLibrary, savingConfig]);
+  const cancelCloseProject = useCallback(() => {
+    if (closingProject || savingConfig) return;
+    setCloseProjectConfirmOpen(false);
+  }, [closingProject, savingConfig]);
 
-  const confirmCloseLibrary = useCallback(async () => {
-    const closed = await closeLibrary();
+  const confirmCloseProject = useCallback(async () => {
+    const closed = await closeProject();
     if (closed) {
-      setConfigMessage("Project library closed");
+      setConfigMessage("Project closed");
     }
-  }, [closeLibrary]);
+  }, [closeProject]);
 
-  const confirmSaveAndCloseLibrary = useCallback(async () => {
+  const confirmSaveAndCloseProject = useCallback(async () => {
     const saved = await saveConfiguration();
     if (!saved) return;
-    const closed = await closeLibrary();
+    const closed = await closeProject();
     if (closed) {
-      setConfigMessage("Saved and project library closed");
+      setConfigMessage("Saved and project closed");
     }
-  }, [closeLibrary, saveConfiguration]);
+  }, [closeProject, saveConfiguration]);
 
-  const cancelChangeLibrary = useCallback(() => {
-    if (scanning || closingLibrary || savingConfig) return;
-    setChangeLibraryConfirmOpen(false);
-    setPendingLibraryFolder(null);
-  }, [closingLibrary, savingConfig, scanning]);
+  const cancelChangeProject = useCallback(() => {
+    if (scanning || closingProject || savingConfig) return;
+    setChangeProjectConfirmOpen(false);
+    setPendingProjectFolder(null);
+  }, [closingProject, savingConfig, scanning]);
 
-  const confirmChangeLibrary = useCallback(async () => {
-    if (pendingLibraryFolder == null) return;
-    const changed = await applyLibraryFolder(pendingLibraryFolder);
+  const confirmChangeProject = useCallback(async () => {
+    if (pendingProjectFolder == null) return;
+    const changed = await applyProjectFolder(pendingProjectFolder);
     if (changed) {
-      setConfigMessage("Project library folder changed");
+      setConfigMessage("Project folder changed");
     }
-  }, [applyLibraryFolder, pendingLibraryFolder]);
+  }, [applyProjectFolder, pendingProjectFolder]);
 
-  const confirmSaveAndChangeLibrary = useCallback(async () => {
-    if (pendingLibraryFolder == null) return;
+  const confirmSaveAndChangeProject = useCallback(async () => {
+    if (pendingProjectFolder == null) return;
     const saved = await saveConfiguration();
     if (!saved) return;
-    const changed = await applyLibraryFolder(pendingLibraryFolder);
+    const changed = await applyProjectFolder(pendingProjectFolder);
     if (changed) {
-      setConfigMessage("Saved and project library folder changed");
+      setConfigMessage("Saved and project folder changed");
     }
-  }, [applyLibraryFolder, pendingLibraryFolder, saveConfiguration]);
+  }, [applyProjectFolder, pendingProjectFolder, saveConfiguration]);
 
   const openPhoneUploadSettings = useCallback(() => {
     setPhoneUploadSettingsOpen(true);
@@ -382,14 +382,14 @@ export function useLibraryMenuActions() {
     setPhoneUploadSettingsOpen(false);
   }, []);
 
-  const openLibraryUpload = useCallback(() => {
-    if (!libraryFolder) {
-      showLibraryUploadError("Choose a project library folder before uploading tracks.");
+  const openProjectUpload = useCallback(() => {
+    if (!projectFolder) {
+      showProjectUploadError("Choose a project folder before uploading tracks.");
       return;
     }
     clearUploadFeedback();
-    setUploadModalTarget("library");
-  }, [clearUploadFeedback, libraryFolder, showLibraryUploadError]);
+    setUploadModalTarget("project");
+  }, [clearUploadFeedback, projectFolder, showProjectUploadError]);
 
   const openCollectionUpload = useCallback(() => {
     if (collectionId == null) {
@@ -410,14 +410,14 @@ export function useLibraryMenuActions() {
       if (uploadModalTarget === "collection") {
         showCollectionUploadMessage(message);
       } else {
-        showLibraryUploadMessage(message);
+        showProjectUploadMessage(message);
       }
       setUploadModalTarget(null);
     },
     [
       clearUploadFeedback,
       showCollectionUploadMessage,
-      showLibraryUploadMessage,
+      showProjectUploadMessage,
       uploadModalTarget,
     ],
   );
@@ -443,7 +443,7 @@ export function useLibraryMenuActions() {
   const loadConfigConfirmDialog = loadConfigConfirmOpen ? (
     <ConfirmDialog
       title="Load configuration"
-      message="Replace all current project library playlists and project library taglists with the contents of trackvault.json? Indexed tracks are not affected."
+      message="Replace all current project playlists and project taglists with the contents of trackvault.json? Indexed tracks are not affected."
       confirmLabel="Load"
       cancelLabel="Cancel"
       destructive
@@ -453,33 +453,33 @@ export function useLibraryMenuActions() {
     />
   ) : null;
 
-  const closeLibraryConfirmDialog = closeLibraryConfirmOpen ? (
+  const closeProjectConfirmDialog = closeProjectConfirmOpen ? (
     <ConfirmDialog
-      title="Close project library?"
+      title="Close project?"
       message={CLOSE_LIBRARY_MESSAGE}
-      confirmLabel="Close project library"
-      secondaryLabel="Save & close project library"
+      confirmLabel="Close project"
+      secondaryLabel="Save & close project"
       cancelLabel="Cancel"
       destructive
-      busy={closingLibrary || savingConfig}
-      onConfirm={() => void confirmCloseLibrary()}
-      onSecondary={() => void confirmSaveAndCloseLibrary()}
-      onCancel={cancelCloseLibrary}
+      busy={closingProject || savingConfig}
+      onConfirm={() => void confirmCloseProject()}
+      onSecondary={() => void confirmSaveAndCloseProject()}
+      onCancel={cancelCloseProject}
     />
   ) : null;
 
-  const changeLibraryConfirmDialog = changeLibraryConfirmOpen ? (
+  const changeProjectConfirmDialog = changeProjectConfirmOpen ? (
     <ConfirmDialog
-      title="Change project library folder?"
+      title="Change project folder?"
       message={CLOSE_LIBRARY_MESSAGE}
-      confirmLabel="Close project library"
-      secondaryLabel="Save & close project library"
+      confirmLabel="Close project"
+      secondaryLabel="Save & close project"
       cancelLabel="Cancel"
       destructive
-      busy={scanning || closingLibrary || savingConfig}
-      onConfirm={() => void confirmChangeLibrary()}
-      onSecondary={() => void confirmSaveAndChangeLibrary()}
-      onCancel={cancelChangeLibrary}
+      busy={scanning || closingProject || savingConfig}
+      onConfirm={() => void confirmChangeProject()}
+      onSecondary={() => void confirmSaveAndChangeProject()}
+      onCancel={cancelChangeProject}
     />
   ) : null;
 
@@ -531,27 +531,27 @@ export function useLibraryMenuActions() {
     uploading ||
     savingConfig ||
     loadingConfig ||
-    closingLibrary ||
+    closingProject ||
     importingCollection ||
     exportingProject;
   const fileOperationBusy = coreFileOperationBusy || uploadModalOpen;
   const actionsDisabled = fileOperationBusy;
-  const libraryActionsDisabled = fileOperationBusy || !libraryFolder;
-  const libraryUploadDisabled = fileOperationBusy || !libraryFolder;
+  const projectActionsDisabled = fileOperationBusy || !projectFolder;
+  const projectUploadDisabled = fileOperationBusy || !projectFolder;
   const collectionUploadDisabled = fileOperationBusy || collectionId == null;
-  const libraryUploadModalEnabled = !coreFileOperationBusy && !!libraryFolder;
+  const projectUploadModalEnabled = !coreFileOperationBusy && !!projectFolder;
   const collectionUploadModalEnabled =
     !coreFileOperationBusy && collectionId != null;
 
   const uploadTracksModal =
-    uploadModalTarget === "library" ? (
+    uploadModalTarget === "project" ? (
       <UploadTracksModal
-        mode="library"
+        mode="project"
         phoneUploadReady={phoneUploadReady}
-        enabled={libraryUploadModalEnabled}
-        uploading={libraryUploading}
+        enabled={projectUploadModalEnabled}
+        uploading={projectUploading}
         onClose={closeUploadModal}
-        onUploadFromPaths={uploadLibraryFromPaths}
+        onUploadFromPaths={uploadProjectFromPaths}
         onPhoneUploaded={handlePhoneUploadComplete}
       />
     ) : uploadModalTarget === "collection" && collectionId != null ? (
@@ -569,37 +569,37 @@ export function useLibraryMenuActions() {
     ) : null;
 
   return {
-    libraryFolder,
+    projectFolder,
     activeProject,
     collectionId,
     collectionName,
     scanning,
     deliveryStaging,
     deliveryCopy,
-    libraryUploading,
+    projectUploading,
     collectionUploading,
     savingConfig,
     loadingConfig,
-    closingLibrary,
+    closingProject,
     importingCollection,
     uploadMessage,
     uploadError,
     configMessage,
     configError,
     dismissStatusFeedback,
-    libraryUploadConfirmDialog,
+    projectUploadConfirmDialog,
     collectionUploadConfirmDialog,
     loadConfigConfirmDialog,
-    closeLibraryConfirmDialog,
-    changeLibraryConfirmDialog,
-    chooseLibraryFolder,
+    closeProjectConfirmDialog,
+    changeProjectConfirmDialog,
+    chooseProjectFolder,
     openProjectHub,
     applyDeliveryUpdate,
     projectHubModal,
     applyDeliveryPickerModal,
     deliveryFolderConfirmModal,
     deliveryUpdateModal,
-    openLibraryUpload,
+    openProjectUpload,
     openCollectionUpload,
     phoneUploadReady,
     openPhoneUploadSettings,
@@ -609,11 +609,11 @@ export function useLibraryMenuActions() {
     exportingProject,
     saveConfiguration,
     requestLoadConfiguration,
-    requestCloseLibrary,
+    requestCloseProject,
     importCollection,
     actionsDisabled,
-    libraryActionsDisabled,
-    libraryUploadDisabled,
+    projectActionsDisabled,
+    projectUploadDisabled,
     collectionUploadDisabled,
   };
 }

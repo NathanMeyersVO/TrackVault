@@ -254,8 +254,8 @@ impl ReplaceRemoteUploadManager {
         app_data_dir: &Path,
         track_id: i64,
     ) -> Result<ReplaceRemoteUploadStartInfo, String> {
-        if !db.lock().is_library_track(track_id).map_err(|e| e.to_string())? {
-            return Err("Only project library tracks can be replaced".to_string());
+        if !db.lock().is_project_track(track_id).map_err(|e| e.to_string())? {
+            return Err("Only project tracks can be replaced".to_string());
         }
         self.start_with_kind(
             app,
@@ -265,7 +265,7 @@ impl ReplaceRemoteUploadManager {
         )
     }
 
-    pub fn start_library_import(
+    pub fn start_project_import(
         &self,
         app: AppHandle,
         db: Arc<Mutex<Database>>,
@@ -274,11 +274,11 @@ impl ReplaceRemoteUploadManager {
         {
             let db_guard = db.lock();
             if db_guard
-                .get_library_folder()
+                .get_project_folder()
                 .map_err(|e| e.to_string())?
                 .is_none()
             {
-                return Err("No project library folder configured".to_string());
+                return Err("No project folder configured".to_string());
             }
         }
         self.start_with_kind(app, db, app_data_dir, SessionKind::LibraryImport)
@@ -841,7 +841,7 @@ async fn upload_page_inner(token: String, ctx: Arc<ServerContext>) -> Response {
                 }
             },
             None => render_replace_upload_page(&UploadPageContext::Replace {
-                title: "Project library track".to_string(),
+                title: "Project track".to_string(),
                 artist: String::new(),
                 album: String::new(),
                 file_name: String::new(),
@@ -1339,14 +1339,14 @@ fn resolve_upload_page_context(
         }
         SessionKind::LibraryImport => {
             let folder_path = db
-                .get_library_folder()
+                .get_project_folder()
                 .map_err(|e| e.to_string())?
-                .ok_or_else(|| "No project library folder configured".to_string())?;
+                .ok_or_else(|| "No project folder configured".to_string())?;
             let folder_label = Path::new(&folder_path)
                 .file_name()
                 .and_then(|name| name.to_str())
                 .filter(|label| !label.is_empty())
-                .unwrap_or("Project library")
+                .unwrap_or("Project")
                 .to_string();
             Ok(UploadPageContext::Library {
                 folder_label,
@@ -1403,7 +1403,7 @@ fn render_replace_upload_page(ctx: &UploadPageContext) -> String {
     } = ctx
     else {
         return render_replace_upload_page(&UploadPageContext::Replace {
-            title: "Project library track".to_string(),
+            title: "Project track".to_string(),
             artist: String::new(),
             album: String::new(),
             file_name: String::new(),

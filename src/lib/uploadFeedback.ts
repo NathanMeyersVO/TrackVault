@@ -22,7 +22,7 @@ export function formatUploadResult(result: UploadResult): string {
   return parts.join(". ");
 }
 
-export function formatLibraryConflictMessage(conflicts: string[]): string {
+export function formatProjectConflictMessage(conflicts: string[]): string {
   const preview = conflicts.slice(0, 5).join("\n");
   const remaining = conflicts.length - 5;
   const suffix = remaining > 0 ? `\n…and ${remaining} more.` : "";

@@ -183,7 +183,7 @@ impl Database {
             ",
         )?;
         self.bootstrap_playlist_order()?;
-        self.migrate_single_library_folder()?;
+        self.migrate_single_project_folder()?;
         let _ = self.conn.execute(
             "ALTER TABLE collections ADD COLUMN playback_mode TEXT NOT NULL DEFAULT 'discrete'",
             [],
@@ -290,7 +290,7 @@ impl Database {
         Ok(())
     }
 
-    fn migrate_single_library_folder(&self) -> Result<(), DbError> {
+    fn migrate_single_project_folder(&self) -> Result<(), DbError> {
         let keep_id: Option<i64> = self
             .conn
             .query_row(
@@ -308,13 +308,13 @@ impl Database {
         Ok(())
     }
 
-    pub fn get_library_folder(&self) -> Result<Option<String>, DbError> {
+    pub fn get_project_folder(&self) -> Result<Option<String>, DbError> {
         let mut stmt = self.conn.prepare("SELECT path FROM watch_folders LIMIT 1")?;
         let mut rows = stmt.query_map([], |row| row.get(0))?;
         Ok(rows.next().transpose()?)
     }
 
-    pub fn set_library_folder(&self, path: &str) -> Result<(), DbError> {
+    pub fn set_project_folder(&self, path: &str) -> Result<(), DbError> {
         let tx = self.conn.unchecked_transaction()?;
         tx.execute("DELETE FROM watch_folders", [])?;
         tx.execute(
@@ -474,15 +474,15 @@ impl Database {
         Ok(rows.filter_map(Result::ok).collect())
     }
 
-    pub fn list_library_track_paths(&self) -> Result<Vec<String>, DbError> {
+    pub fn list_project_track_paths(&self) -> Result<Vec<String>, DbError> {
         self.list_track_paths()
     }
 
     pub fn delete_tracks_by_paths(&self, paths: &[String]) -> Result<u32, DbError> {
-        self.delete_library_tracks_by_paths(paths)
+        self.delete_project_tracks_by_paths(paths)
     }
 
-    pub fn delete_library_tracks_by_paths(&self, paths: &[String]) -> Result<u32, DbError> {
+    pub fn delete_project_tracks_by_paths(&self, paths: &[String]) -> Result<u32, DbError> {
         if paths.is_empty() {
             return Ok(0);
         }
@@ -566,7 +566,7 @@ impl Database {
         }
     }
 
-    pub fn is_library_track(&self, track_id: i64) -> Result<bool, DbError> {
+    pub fn is_project_track(&self, track_id: i64) -> Result<bool, DbError> {
         Ok(self.get_track_collection_id(track_id)?.is_none())
     }
 
@@ -597,7 +597,7 @@ impl Database {
         })
     }
 
-    pub fn update_library_track_after_replace(
+    pub fn update_project_track_after_replace(
         &self,
         id: i64,
         path: &str,
@@ -695,7 +695,7 @@ impl Database {
         Ok(())
     }
 
-    pub fn close_library_state(&self) -> Result<(), DbError> {
+    pub fn close_project_state(&self) -> Result<(), DbError> {
         let tx = self.conn.unchecked_transaction()?;
         tx.execute("DELETE FROM playlist_tracks", [])?;
         tx.execute("DELETE FROM playlists", [])?;
@@ -1652,7 +1652,7 @@ impl Database {
         taglist_id: i64,
         tag_key: &str,
     ) -> Result<(), DbError> {
-        if !self.is_library_track(track_id)? {
+        if !self.is_project_track(track_id)? {
             return Ok(());
         }
         let current_values = self.get_track_tag_values(track_id, tag_key)?;
@@ -2546,7 +2546,7 @@ mod tests {
         db.add_track_to_playlist(playlist_id, track_id).unwrap();
 
         let new_path = "/music/renamed.wav";
-        db.update_library_track_after_replace(
+        db.update_project_track_after_replace(
             track_id,
             new_path,
             "Renamed",

@@ -52,15 +52,15 @@ export function SwapTaglistEntryModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedSwapTags, setSelectedSwapTags] = useState<Set<string>>(() => new Set());
-  const [swapLibraryPaths, setSwapLibraryPaths] = useState(true);
+  const [swapProjectPaths, setSwapProjectPaths] = useState(true);
   const [swapBasenames, setSwapBasenames] = useState(true);
   const swapHeaderRef = useRef<HTMLInputElement>(null);
   const previewSessionKeyRef = useRef<string | null>(null);
 
   const lockedPartitionKey = taglist.tag_key;
 
-  const forceLibraryPathSwap = Boolean(preview?.different_parent_dirs);
-  const effectiveSwapLibraryPaths = forceLibraryPathSwap || swapLibraryPaths;
+  const forceProjectPathSwap = Boolean(preview?.different_parent_dirs);
+  const effectiveSwapProjectPaths = forceProjectPathSwap || swapProjectPaths;
 
   useEffect(() => {
     setLoadingTargets(true);
@@ -86,7 +86,7 @@ export function SwapTaglistEntryModal({
         partitionValue,
         selectedValue,
         trackId,
-        effectiveSwapLibraryPaths,
+        effectiveSwapProjectPaths,
         swapBasenames,
       )
       .then((result) => {
@@ -108,7 +108,7 @@ export function SwapTaglistEntryModal({
     partitionValue,
     selectedValue,
     step,
-    effectiveSwapLibraryPaths,
+    effectiveSwapProjectPaths,
     swapBasenames,
     taglistId,
     trackId,
@@ -116,7 +116,7 @@ export function SwapTaglistEntryModal({
 
   useEffect(() => {
     if (step !== "approve" || !preview) return;
-    const sessionKey = `${preview.source_library_path}|${preview.partner_library_path}`;
+    const sessionKey = `${preview.source_project_path}|${preview.partner_project_path}`;
     if (previewSessionKeyRef.current === sessionKey) return;
     previewSessionKeyRef.current = sessionKey;
     setSelectedSwapTags(new Set(preview.source.tags.map((tag) => tag.key)));
@@ -172,7 +172,7 @@ export function SwapTaglistEntryModal({
     return (
       preview.different_parent_dirs ||
       preview.source.file_name !== preview.partner.file_name ||
-      preview.source_library_path !== preview.partner_library_path
+      preview.source_project_path !== preview.partner_project_path
     );
   }, [preview]);
 
@@ -204,47 +204,47 @@ export function SwapTaglistEntryModal({
 
   const afterFileName = useMemo(() => {
     if (!preview) return "";
-    if (!effectiveSwapLibraryPaths) return preview.source.file_name;
+    if (!effectiveSwapProjectPaths) return preview.source.file_name;
     if (preview.different_parent_dirs) {
       if (swapBasenames) return preview.partner.file_name;
       return preview.source.file_name;
     }
     if (swapBasenames) return preview.partner.file_name;
     return preview.source.file_name;
-  }, [effectiveSwapLibraryPaths, preview, swapBasenames]);
+  }, [effectiveSwapProjectPaths, preview, swapBasenames]);
 
-  const afterLibraryPath = useMemo(() => {
+  const afterProjectPath = useMemo(() => {
     if (!preview) return "";
-    if (!effectiveSwapLibraryPaths) return preview.source_library_path;
+    if (!effectiveSwapProjectPaths) return preview.source_project_path;
     return preview.source_path_after;
-  }, [effectiveSwapLibraryPaths, preview]);
+  }, [effectiveSwapProjectPaths, preview]);
 
   const afterPartnerFileName = useMemo(() => {
     if (!preview) return "";
-    if (!effectiveSwapLibraryPaths) return preview.partner.file_name;
+    if (!effectiveSwapProjectPaths) return preview.partner.file_name;
     if (preview.different_parent_dirs) {
       if (swapBasenames) return preview.source.file_name;
       return preview.partner.file_name;
     }
     if (swapBasenames) return preview.source.file_name;
     return preview.partner.file_name;
-  }, [effectiveSwapLibraryPaths, preview, swapBasenames]);
+  }, [effectiveSwapProjectPaths, preview, swapBasenames]);
 
-  const afterPartnerLibraryPath = useMemo(() => {
+  const afterPartnerProjectPath = useMemo(() => {
     if (!preview) return "";
-    if (!effectiveSwapLibraryPaths) return preview.partner_library_path;
+    if (!effectiveSwapProjectPaths) return preview.partner_project_path;
     return preview.partner_path_after;
-  }, [effectiveSwapLibraryPaths, preview]);
+  }, [effectiveSwapProjectPaths, preview]);
 
   const swapExchangesAudioBodies = useMemo(() => {
-    if (!preview || !effectiveSwapLibraryPaths) return false;
+    if (!preview || !effectiveSwapProjectPaths) return false;
     if (!preview.different_parent_dirs) {
       return (
         swapBasenames && preview.source.file_name !== preview.partner.file_name
       );
     }
     return swapBasenames;
-  }, [effectiveSwapLibraryPaths, preview, swapBasenames]);
+  }, [effectiveSwapProjectPaths, preview, swapBasenames]);
 
   const afterSourceDurationMs = useMemo(() => {
     if (!preview) return 0;
@@ -286,7 +286,7 @@ export function SwapTaglistEntryModal({
     previewSessionKeyRef.current = null;
     setStep("approve");
     setPreview(null);
-    setSwapLibraryPaths(true);
+    setSwapProjectPaths(true);
     setSwapBasenames(true);
     setError(null);
   }, [selectedValue]);
@@ -304,12 +304,12 @@ export function SwapTaglistEntryModal({
     setSaving(true);
     setError(null);
     try {
-      const effectiveLibraryPaths = preview.different_parent_dirs
+      const effectiveProjectPaths = preview.different_parent_dirs
         ? true
-        : swapLibraryPaths &&
+        : swapProjectPaths &&
           canOfferPathSwap &&
           (swapBasenames ||
-            preview.source_library_path !== preview.partner_library_path);
+            preview.source_project_path !== preview.partner_project_path);
       const effectiveBasenames =
         swapBasenames &&
         (preview.different_parent_dirs || preview.source.file_name !== preview.partner.file_name);
@@ -320,7 +320,7 @@ export function SwapTaglistEntryModal({
         selectedValue,
         trackId,
         swapTagKeysForCommit(selectedSwapTags, lockedPartitionKey, swappableTagKeys),
-        effectiveLibraryPaths,
+        effectiveProjectPaths,
         effectiveBasenames,
       );
       onSwapped();
@@ -340,7 +340,7 @@ export function SwapTaglistEntryModal({
     selectedSwapTags,
     selectedValue,
     swapBasenames,
-    swapLibraryPaths,
+    swapProjectPaths,
     swappableTagKeys,
     taglistId,
     trackId,
@@ -350,7 +350,7 @@ export function SwapTaglistEntryModal({
   const sublistLabel = getTaglistValueSingularLabel(taglist);
   const busy = loadingPreview || saving;
   const confirmBlockedByCollision =
-    preview?.path_swap_collision && effectiveSwapLibraryPaths;
+    preview?.path_swap_collision && effectiveSwapProjectPaths;
 
   const selectedTarget = targets.find(
     (target) => target.partition_value === selectedValue,
@@ -466,7 +466,7 @@ export function SwapTaglistEntryModal({
                       </li>
                       {preview.different_parent_dirs ? (
                         <li>
-                          Project library folders are always exchanged when tracks live in
+                          Project folders are always exchanged when tracks live in
                           different directories; only file names are optional below.
                         </li>
                       ) : null}
@@ -475,7 +475,7 @@ export function SwapTaglistEntryModal({
 
                   {preview.path_swap_collision &&
                     preview.collision_message &&
-                    effectiveSwapLibraryPaths && (
+                    effectiveSwapProjectPaths && (
                       <p className="text-sm text-red-400">{preview.collision_message}</p>
                     )}
 
@@ -500,12 +500,12 @@ export function SwapTaglistEntryModal({
                                 onChange={() => {
                                   const selectAll = !allSwapSelected;
                                   if (selectAll) {
-                                    setSwapLibraryPaths(true);
+                                    setSwapProjectPaths(true);
                                     setSwapBasenames(true);
                                     setSelectedSwapTags(new Set(swappableTagKeys));
                                   } else {
                                     if (!preview?.different_parent_dirs) {
-                                      setSwapLibraryPaths(false);
+                                      setSwapProjectPaths(false);
                                     }
                                     setSwapBasenames(false);
                                     setSelectedSwapTags(
@@ -550,9 +550,9 @@ export function SwapTaglistEntryModal({
                           </td>
                         </tr>
                         <tr className="border-b border-border">
-                          <td className="px-3 py-2 text-muted">Project library path</td>
-                          <td className="px-3 py-2 break-all">{afterLibraryPath}</td>
-                          <td className="px-3 py-2 break-all">{afterPartnerLibraryPath}</td>
+                          <td className="px-3 py-2 text-muted">Project path</td>
+                          <td className="px-3 py-2 break-all">{afterProjectPath}</td>
+                          <td className="px-3 py-2 break-all">{afterPartnerProjectPath}</td>
                           <td className="px-3 py-2 text-center">
                             <span className="text-muted" aria-hidden>
                               —

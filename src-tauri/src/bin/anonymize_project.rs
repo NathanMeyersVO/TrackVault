@@ -3,31 +3,31 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use trackvault_lib::anonymize::{
-    anonymize_library, AnonymizeOptions, DEFAULT_OUTPUT_SUBDIR, DEFAULT_SEED,
+    anonymize_project, AnonymizeOptions, DEFAULT_OUTPUT_SUBDIR, DEFAULT_SEED,
 };
 
 fn print_help() {
     eprintln!(
-        r#"anonymize-library — copy project library audio with skater names replaced by fake names
+        r#"anonymize-project — copy project audio with skater names replaced by fake names
 
 PII is taken from the Track Title tag (skater name). Copies are written under a
-subfolder of the project library root; filename stems and Track Title tags are updated.
+subfolder of the project root; filename stems and Track Title tags are updated.
 Original files are not modified.
 
 USAGE:
-    anonymize-library --library <PATH> [OPTIONS]
+    anonymize-project --project-dir <PATH> [OPTIONS]
 
 OPTIONS:
-    --library <PATH>           Project library root folder to scan (required)
-    --output-subdir <NAME>     Output subfolder under project library root [default: DEMO_COPY]
+    --project-dir <PATH>           Project root folder to scan (required)
+    --output-subdir <NAME>     Output subfolder under project root [default: DEMO_COPY]
     --seed <N>                 Seed for reproducible fake names [default: 42]
     --dry-run                  Print planned copies without writing files
     --strict                   Exit with error if any file cannot be processed
     -h, --help                 Show this help
 
 EXAMPLE:
-    cargo run --manifest-path src-tauri/Cargo.toml --bin anonymize-library -- \
-        --library "D:\Music\MyLibrary"
+    cargo run --manifest-path src-tauri/Cargo.toml --bin anonymize-project -- \
+        --project-dir "D:\Music\MyLibrary"
 "#
     );
 }
@@ -48,9 +48,9 @@ fn parse_args() -> Result<AnonymizeOptions, String> {
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
-            "--library" => {
+            "--project-dir" => {
                 i += 1;
-                library_root = Some(PathBuf::from(require_value(&args, i, "--library")?));
+                library_root = Some(PathBuf::from(require_value(&args, i, "--project-dir")?));
             }
             "--output-subdir" => {
                 i += 1;
@@ -71,7 +71,7 @@ fn parse_args() -> Result<AnonymizeOptions, String> {
     }
 
     let library_root =
-        library_root.ok_or_else(|| "--library is required".to_string())?;
+        library_root.ok_or_else(|| "--project-dir is required".to_string())?;
 
     if output_subdir.is_empty() || output_subdir.contains('/') || output_subdir.contains('\\') {
         return Err("--output-subdir must be a single folder name".to_string());
@@ -103,7 +103,7 @@ fn main() -> ExitCode {
         }
     };
 
-    match anonymize_library(opts) {
+    match anonymize_project(opts) {
         Ok(report) => {
             eprintln!(
                 "Done: {} copied, {} skipped, {} errors",

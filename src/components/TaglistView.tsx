@@ -5,16 +5,16 @@ import { api, type TaglistValue, type Track } from "../lib/tauri";
 import { formatTaglistLabel, getTaglistValueSingularLabel } from "../lib/taglistLabels";
 import { usePlayer } from "../hooks/usePlayer";
 import { useDeleteTrack } from "../hooks/useDeleteTrack";
-import { useReplaceLibraryTrackFile } from "../hooks/useReplaceLibraryTrackFile";
-import { formatProjectLibrarySearchSubtitle } from "../lib/projectLibrarySearchCopy";
-import { useProjectLibrarySearch } from "../hooks/useProjectLibrarySearch";
-import { scrollToTrackRowWithRetry } from "../hooks/useProjectLibrarySearchNavigation";
+import { useReplaceProjectTrackFile } from "../hooks/useReplaceProjectTrackFile";
+import { formatProjectSearchSubtitle } from "../lib/projectSearchCopy";
+import { useProjectSearch } from "../hooks/useProjectSearch";
+import { scrollToTrackRowWithRetry } from "../hooks/useProjectSearchNavigation";
 import { usePlayerStore, serializeView } from "../store/playerStore";
 import { playerController } from "../playerController";
 import { scrollSidebarItem, sidebarSublistId } from "../lib/sidebarNavigation";
 import { ChangeTaglistValueModal } from "./ChangeTaglistValueModal";
 import { SwapTaglistEntryModal } from "./SwapTaglistEntryModal";
-import { ProjectLibrarySearchPanel } from "./ProjectLibrarySearchPanel";
+import { ProjectSearchPanel } from "./ProjectSearchPanel";
 import { TagEditorModal } from "./TagEditorModal";
 import { TrackTable } from "./TrackTable";
 
@@ -38,7 +38,7 @@ export function TaglistView({ taglistId, value }: TaglistViewProps) {
   } = usePlayerStore();
   const { playTrack, selectTrack } = usePlayer();
   const { requestDeleteTrack, confirmDialog: deleteConfirmDialog } = useDeleteTrack();
-  const { requestReplaceFile, replaceFileModal } = useReplaceLibraryTrackFile();
+  const { requestReplaceFile, replaceFileModal } = useReplaceProjectTrackFile();
   const [tracks, setTracks] = useState<Track[]>([]);
   const [values, setValues] = useState<TaglistValue[]>([]);
   const [tracksLoaded, setTracksLoaded] = useState(false);
@@ -54,7 +54,7 @@ export function TaglistView({ taglistId, value }: TaglistViewProps) {
     searchLoading,
     searchError,
     globalHitCount,
-  } = useProjectLibrarySearch();
+  } = useProjectSearch();
 
   const taglist = taglists.find((entry) => entry.id === taglistId);
   const changeTaglistValueLabel = taglist
@@ -87,7 +87,7 @@ export function TaglistView({ taglistId, value }: TaglistViewProps) {
     ? formatTaglistLabel(nextSublist.value, nextSublist.display_title)
     : null;
   const footerLabel =
-    nextSublistLabel != null ? `Next project library taglist (${nextSublistLabel})` : null;
+    nextSublistLabel != null ? `Next project taglist (${nextSublistLabel})` : null;
 
   const refreshTracks = useCallback(() => {
     const generation = ++tracksFetchGenRef.current;
@@ -131,7 +131,7 @@ export function TaglistView({ taglistId, value }: TaglistViewProps) {
   }, [refreshTracks, refreshValues, taglists]);
 
   useEffect(() => {
-    const unlisten = listen("library-updated", () => {
+    const unlisten = listen("project-updated", () => {
       refreshTracks();
       refreshValues();
     });
@@ -235,12 +235,12 @@ export function TaglistView({ taglistId, value }: TaglistViewProps) {
               } · `
             : ""}
           {isSearching
-            ? formatProjectLibrarySearchSubtitle(searchLoading, globalHitCount)
+            ? formatProjectSearchSubtitle(searchLoading, globalHitCount)
             : `${tracks.length} track${tracks.length === 1 ? "" : "s"}`}
         </p>
       </div>
       <div className="border-b border-border px-4 py-2">
-        <ProjectLibrarySearchPanel
+        <ProjectSearchPanel
           query={query}
           onQueryChange={setQuery}
           hits={hits}
