@@ -48,8 +48,8 @@ export function AppMenuBar() {
   } = useLibraryMenuActions();
   const collectionUploadLabel =
     collectionName != null
-      ? `Upload to stored collection (${collectionName})…`
-      : "Upload to stored collection…";
+      ? `Upload track to stored collection (${collectionName})…`
+      : "Upload track to stored collection…";
 
   const libraryItems: MenuEntry[] = [
     {
@@ -67,7 +67,7 @@ export function AppMenuBar() {
       disabled: libraryActionsDisabled || deliveryStaging,
     },
     {
-      label: libraryUploading ? "Uploading to project library…" : "Upload to project library…",
+      label: libraryUploading ? "Uploading to project library…" : "Upload track to project library…",
       title:
         "Copy audio files into the project library folder (choose files, drag and drop, or upload from phone).",
       disabled: libraryUploadDisabled,

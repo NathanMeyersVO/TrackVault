@@ -1,11 +1,7 @@
-import { useCallback, useState, type CSSProperties } from "react";
+import { useRef, type CSSProperties } from "react";
 
 import { TAGLIST_FOOTER_ROW_ID, TRACK_LIST_ID } from "../hooks/useTrackCursor";
-import {
-  getReorderDragData,
-  isReorderDrag,
-  setReorderDragData,
-} from "../lib/dragDrop";
+import { usePointerListReorder } from "../hooks/usePointerListReorder";
 import { useAppearance } from "../hooks/useAppearance";
 import type { Playlist, Track } from "../lib/tauri";
 import { TrackTableRow } from "./TrackTableRow";
@@ -84,54 +80,28 @@ export function TrackTable({
   footerRow,
 }: TrackTableProps) {
   const { settings } = useAppearance();
-  const [dragIndex, setDragIndex] = useState<number | null>(null);
-  const [dropTarget, setDropTarget] = useState<{
-    index: number;
-    position: "before" | "after";
-  } | null>(null);
-
+  const tbodyRef = useRef<HTMLTableSectionElement>(null);
   const reorderable = onReorderTracks != null;
+
+  const { activeIndex, dropTarget, getGripProps, getRowProps } =
+    usePointerListReorder({
+      enabled: reorderable,
+      containerRef: tbodyRef,
+      onCommit: (fromIndex, toIndex, position) => {
+        if (!onReorderTracks) return;
+        const orderedIds = reorderTrackIds(
+          tracks.map((track) => track.id),
+          fromIndex,
+          toIndex,
+          position,
+        );
+        onReorderTracks(orderedIds);
+      },
+    });
 
   const focusTrackList = () => {
     document.getElementById(TRACK_LIST_ID)?.focus({ preventScroll: true });
   };
-
-  const clearReorderState = useCallback(() => {
-    setDragIndex(null);
-    setDropTarget(null);
-  }, []);
-
-  const handleDrop = useCallback(
-    (targetIndex: number, event: React.DragEvent<HTMLTableRowElement>) => {
-      event.preventDefault();
-      if (!onReorderTracks) return;
-
-      if (dragIndex == null && !isReorderDrag(event.dataTransfer)) {
-        clearReorderState();
-        return;
-      }
-
-      const fromIndex = dragIndex ?? getReorderDragData(event.dataTransfer);
-      if (fromIndex == null || fromIndex === targetIndex) {
-        clearReorderState();
-        return;
-      }
-
-      const row = event.currentTarget.getBoundingClientRect();
-      const position: "before" | "after" =
-        event.clientY < row.top + row.height / 2 ? "before" : "after";
-
-      const orderedIds = reorderTrackIds(
-        tracks.map((track) => track.id),
-        fromIndex,
-        targetIndex,
-        position,
-      );
-      onReorderTracks(orderedIds);
-      clearReorderState();
-    },
-    [clearReorderState, dragIndex, onReorderTracks, tracks],
-  );
 
   if (tracks.length === 0 && !footerRow) {
     return (
@@ -162,7 +132,7 @@ export function TrackTable({
             <th className="w-12 px-2 py-2" aria-label="Actions" />
           </tr>
         </thead>
-        <tbody>
+        <tbody ref={tbodyRef}>
           {tracks.length === 0 && (
             <tr className="border-b border-border text-muted">
               {reorderable && <td className="px-1 py-2" />}
@@ -193,27 +163,12 @@ export function TrackTable({
               onReplaceFile={onReplaceFile}
               draggable={draggable}
               reorderable={reorderable}
-              isDragging={dragIndex === index}
+              isDragging={activeIndex === index}
               dropIndicator={
                 dropTarget?.index === index ? dropTarget.position : null
               }
-              onReorderDragStart={(event) => {
-                setReorderDragData(event.dataTransfer, index);
-                setDragIndex(index);
-              }}
-              onReorderDragEnd={clearReorderState}
-              onReorderDragOver={(event) => {
-                if (dragIndex == null && !isReorderDrag(event.dataTransfer)) {
-                  return;
-                }
-                event.preventDefault();
-                event.dataTransfer.dropEffect = "move";
-                const row = event.currentTarget.getBoundingClientRect();
-                const position: "before" | "after" =
-                  event.clientY < row.top + row.height / 2 ? "before" : "after";
-                setDropTarget({ index, position });
-              }}
-              onReorderDrop={(event) => handleDrop(index, event)}
+              reorderGripProps={reorderable ? getGripProps(index) : undefined}
+              reorderRowProps={reorderable ? getRowProps(index) : undefined}
             />
           ))}
           {footerRow && (

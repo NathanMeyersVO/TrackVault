@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type Dispatch, type DragEvent, type KeyboardEvent, type MouseEvent, type SetStateAction } from "react";
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { listen } from "@tauri-apps/api/event";
 
@@ -14,19 +14,10 @@ import {
 } from "../lib/tauri";
 import { getApplicationConfig } from "../lib/applicationConfig";
 import { formatTaglistLabel } from "../lib/taglistLabels";
-import {
-  getCollectionReorderDragData,
-  getPlaylistReorderDragData,
-  getSublistReorderDragData,
-  getTrackDragData,
-  isCollectionReorderDrag,
-  isPlaylistReorderDrag,
-  isSublistReorderDrag,
-  reorderItemsByIndex,
-  setCollectionReorderDragData,
-  setPlaylistReorderDragData,
-  setSublistReorderDragData,
-} from "../lib/dragDrop";
+import { usePointerListReorder } from "../hooks/usePointerListReorder";
+import { usePointerTrackDrop } from "../hooks/usePointerTrackDrop";
+import { reorderItemsByIndex } from "../lib/dragDrop";
+import { TRACK_DROP_ATTR } from "../lib/pointerDrag";
 import {
   sidebarCollectionId,
   sidebarPlaylistId,
@@ -39,10 +30,6 @@ import { usePlayerStore, type View } from "../store/playerStore";
 interface TaglistDropTarget {
   taglistId: number;
   value: string | null;
-}
-
-function taglistDropTargetKey(taglistId: number, value: string | null): string {
-  return `${taglistId}:${value ?? "NO-TAG"}`;
 }
 
 function SublistGripIcon() {
@@ -63,11 +50,7 @@ function TaglistGroup({
   view,
   setView,
   isTrackDragging,
-  draggingTrackId,
   dragOverTarget,
-  setDragOverTarget,
-  setDraggingTrackId,
-  onTagDrop,
   supportsTitleImport,
   titleImportDialog,
 }: {
@@ -75,11 +58,7 @@ function TaglistGroup({
   view: View;
   setView: (view: View) => void;
   isTrackDragging: boolean;
-  draggingTrackId: number | null;
   dragOverTarget: TaglistDropTarget | null;
-  setDragOverTarget: Dispatch<SetStateAction<TaglistDropTarget | null>>;
-  setDraggingTrackId: (trackId: number | null) => void;
-  onTagDrop: (trackId: number, taglist: Taglist, entry: TaglistValue) => void;
   supportsTitleImport: boolean;
   titleImportDialog?: {
     title: string;
@@ -90,20 +69,41 @@ function TaglistGroup({
   const [values, setValues] = useState<TaglistValue[]>([]);
   const [editingValue, setEditingValue] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
-  const [dragIndex, setDragIndex] = useState<number | null>(null);
-  const [dropTarget, setDropTarget] = useState<{
-    index: number;
-    position: "before" | "after";
-  } | null>(null);
   const skipBlurSaveRef = useRef(false);
+  const sublistContainerRef = useRef<HTMLDivElement>(null);
 
   const taggedValues = values.filter((entry) => entry.value != null);
   const noTagEntry = values.find((entry) => entry.value == null);
 
-  const clearReorderState = useCallback(() => {
-    setDragIndex(null);
-    setDropTarget(null);
-  }, []);
+  const handleSublistReorder = async (orderedValues: TaglistValue[]) => {
+    const nextValues = [...orderedValues];
+    if (noTagEntry) nextValues.push(noTagEntry);
+    setValues(nextValues);
+    try {
+      await api.reorderTaglistValues(
+        taglist.id,
+        orderedValues.map((entry) => entry.value!),
+      );
+    } catch (error) {
+      console.error(error);
+      loadValues();
+    }
+  };
+
+  const { activeIndex, dropTarget, getGripProps, getRowProps } =
+    usePointerListReorder({
+      enabled: taggedValues.length > 1,
+      containerRef: sublistContainerRef,
+      onCommit: (fromIndex, toIndex, position) => {
+        const reordered = reorderItemsByIndex(
+          taggedValues,
+          fromIndex,
+          toIndex,
+          position,
+        );
+        void handleSublistReorder(reordered);
+      },
+    });
 
   const loadValues = useCallback(() => {
     api.listTaglistValues(taglist.id).then(setValues).catch(console.error);
@@ -179,52 +179,6 @@ function TaglistGroup({
     }
   };
 
-  const handleSublistReorder = async (orderedValues: TaglistValue[]) => {
-    const nextValues = [...orderedValues];
-    if (noTagEntry) nextValues.push(noTagEntry);
-    setValues(nextValues);
-    try {
-      await api.reorderTaglistValues(
-        taglist.id,
-        orderedValues.map((entry) => entry.value!),
-      );
-    } catch (error) {
-      console.error(error);
-      loadValues();
-    }
-  };
-
-  const handleSublistDrop = (
-    targetIndex: number,
-    event: DragEvent,
-  ) => {
-    event.preventDefault();
-    event.stopPropagation();
-
-    if (dragIndex == null && !isSublistReorderDrag(event.dataTransfer)) {
-      clearReorderState();
-      return;
-    }
-
-    const fromIndex = dragIndex ?? getSublistReorderDragData(event.dataTransfer);
-    if (fromIndex == null || fromIndex === targetIndex) {
-      clearReorderState();
-      return;
-    }
-
-    const row = event.currentTarget.getBoundingClientRect();
-    const position: "before" | "after" =
-      event.clientY < row.top + row.height / 2 ? "before" : "after";
-    const reordered = reorderItemsByIndex(
-      taggedValues,
-      fromIndex,
-      targetIndex,
-      position,
-    );
-    void handleSublistReorder(reordered);
-    clearReorderState();
-  };
-
   const renderSublistRow = (
     entry: TaglistValue,
     index: number,
@@ -238,9 +192,10 @@ function TaglistGroup({
       view.taglistId === taglist.id &&
       view.value === entry.value;
     const isEditing = entry.value != null && editingValue === entry.value;
-    const isDragging = reorderable && dragIndex === index;
+    const isDragging = reorderable && activeIndex === index;
     const dropIndicator =
       reorderable && dropTarget?.index === index ? dropTarget.position : null;
+    const tagValueAttr = entry.value ?? "none";
 
     const handleNavigate = () => {
       if (isEditing) return;
@@ -295,22 +250,6 @@ function TaglistGroup({
       dragOverTarget?.taglistId === taglist.id &&
       dragOverTarget.value === entry.value;
 
-    const handleDrop = (event: DragEvent) => {
-      if (isSublistReorderDrag(event.dataTransfer)) {
-        if (reorderable) handleSublistDrop(index, event);
-        return;
-      }
-
-      event.preventDefault();
-      setDragOverTarget(null);
-      setDraggingTrackId(null);
-
-      const trackId = draggingTrackId ?? getTrackDragData(event.dataTransfer);
-      if (trackId == null) return;
-
-      onTagDrop(trackId, taglist, entry);
-    };
-
     const dropBarClass =
       dropIndicator === "before"
         ? "border-t-2 border-t-drop"
@@ -335,59 +274,13 @@ function TaglistGroup({
         tabIndex={0}
         onClick={handleNavigate}
         onKeyDown={handleKeyDown}
-        onDragOver={(event) => {
-          if (
-            reorderable &&
-            (dragIndex != null || isSublistReorderDrag(event.dataTransfer))
-          ) {
-            event.preventDefault();
-            event.stopPropagation();
-            event.dataTransfer.dropEffect = "move";
-            const row = event.currentTarget.getBoundingClientRect();
-            const position: "before" | "after" =
-              event.clientY < row.top + row.height / 2 ? "before" : "after";
-            setDropTarget({ index, position });
-            return;
-          }
-          if (!isTrackDragging) return;
-          event.preventDefault();
-          event.dataTransfer.dropEffect = "copy";
-          setDragOverTarget({ taglistId: taglist.id, value: entry.value });
+        {...(reorderable ? getRowProps(index) : {})}
+        {...{
+          [TRACK_DROP_ATTR]: "taglist",
+          "data-taglist-id": String(taglist.id),
+          "data-tag-value": tagValueAttr,
+          "data-tag-display-title": entry.display_title ?? "",
         }}
-        onDragEnter={(event) => {
-          if (
-            reorderable &&
-            (dragIndex != null || isSublistReorderDrag(event.dataTransfer))
-          ) {
-            event.preventDefault();
-            event.stopPropagation();
-            return;
-          }
-          if (!isTrackDragging) return;
-          event.preventDefault();
-          setDragOverTarget({ taglistId: taglist.id, value: entry.value });
-        }}
-        onDragLeave={(event) => {
-          if (
-            reorderable &&
-            (dragIndex != null || isSublistReorderDrag(event.dataTransfer))
-          ) {
-            if (event.currentTarget.contains(event.relatedTarget as Node)) return;
-            setDropTarget((current) =>
-              current?.index === index ? null : current,
-            );
-            return;
-          }
-          if (event.currentTarget.contains(event.relatedTarget as Node)) return;
-          const key = taglistDropTargetKey(taglist.id, entry.value);
-          setDragOverTarget((current) =>
-            current &&
-            taglistDropTargetKey(current.taglistId, current.value) === key
-              ? null
-              : current,
-          );
-        }}
-        onDrop={handleDrop}
         className={`group/sublist mb-0.5 flex w-full cursor-pointer items-center rounded-md py-1.5 pr-3 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-muted ${
           reorderable ? "pl-2" : "pl-6"
         } ${dropBarClass} ${isDragging ? "opacity-40" : ""} ${stateClass}`}
@@ -395,16 +288,10 @@ function TaglistGroup({
         {reorderable && entry.value != null ? (
           <button
             type="button"
-            draggable
             aria-label={`Reorder ${label}`}
             className="mr-1 flex shrink-0 cursor-grab items-center justify-center rounded p-0.5 text-muted hover:bg-surface-hover hover:text-foreground active:cursor-grabbing"
             onClick={(event) => event.stopPropagation()}
-            onDragStart={(event) => {
-              event.stopPropagation();
-              setSublistReorderDragData(event.dataTransfer, index);
-              setDragIndex(index);
-            }}
-            onDragEnd={() => clearReorderState()}
+            {...getGripProps(index)}
           >
             <SublistGripIcon />
           </button>
@@ -454,8 +341,10 @@ function TaglistGroup({
           </button>
         </div>
       </div>
-      {taggedValues.map((entry, index) => renderSublistRow(entry, index, true))}
-      {noTagEntry ? renderSublistRow(noTagEntry, taggedValues.length, false) : null}
+      <div ref={sublistContainerRef}>
+        {taggedValues.map((entry, index) => renderSublistRow(entry, index, true))}
+        {noTagEntry ? renderSublistRow(noTagEntry, taggedValues.length, false) : null}
+      </div>
     </div>
   );
 }
@@ -495,26 +384,13 @@ export function Sidebar({ width }: { width: number }) {
     useState<Collection | null>(null);
   const [deletingPlaylist, setDeletingPlaylist] = useState(false);
   const [deletingCollection, setDeletingCollection] = useState(false);
-  const [collectionDragIndex, setCollectionDragIndex] = useState<number | null>(null);
-  const [collectionDropTarget, setCollectionDropTarget] = useState<{
-    index: number;
-    position: "before" | "after";
-  } | null>(null);
-  const [playlistDragIndex, setPlaylistDragIndex] = useState<number | null>(null);
-  const [playlistDropTarget, setPlaylistDropTarget] = useState<{
-    index: number;
-    position: "before" | "after";
-  } | null>(null);
+  const collectionListRef = useRef<HTMLDivElement>(null);
+  const playlistListRef = useRef<HTMLDivElement>(null);
   const [editingPlaylistId, setEditingPlaylistId] = useState<number | null>(null);
   const [editingCollectionId, setEditingCollectionId] = useState<number | null>(null);
   const [editName, setEditName] = useState("");
   const renameSkipBlurRef = useRef(false);
   const { requestTagDrop, confirmDialog: tagDropConfirmDialog } = useTagDropConfirm();
-
-  const clearCollectionReorderState = useCallback(() => {
-    setCollectionDragIndex(null);
-    setCollectionDropTarget(null);
-  }, []);
 
   const handleCollectionReorder = async (orderedCollections: Collection[]) => {
     setCollections(orderedCollections);
@@ -524,38 +400,6 @@ export function Sidebar({ width }: { width: number }) {
       console.error(error);
       await refresh();
     }
-  };
-
-  const handleCollectionDrop = (targetIndex: number, event: DragEvent) => {
-    event.preventDefault();
-    event.stopPropagation();
-
-    if (
-      collectionDragIndex == null &&
-      !isCollectionReorderDrag(event.dataTransfer)
-    ) {
-      clearCollectionReorderState();
-      return;
-    }
-
-    const fromIndex =
-      collectionDragIndex ?? getCollectionReorderDragData(event.dataTransfer);
-    if (fromIndex == null || fromIndex === targetIndex) {
-      clearCollectionReorderState();
-      return;
-    }
-
-    const row = event.currentTarget.getBoundingClientRect();
-    const position: "before" | "after" =
-      event.clientY < row.top + row.height / 2 ? "before" : "after";
-    const reordered = reorderItemsByIndex(
-      collections,
-      fromIndex,
-      targetIndex,
-      position,
-    );
-    void handleCollectionReorder(reordered);
-    clearCollectionReorderState();
   };
 
   const cancelRename = () => {
@@ -627,11 +471,6 @@ export function Sidebar({ width }: { width: number }) {
     }
   };
 
-  const clearPlaylistReorderState = useCallback(() => {
-    setPlaylistDragIndex(null);
-    setPlaylistDropTarget(null);
-  }, []);
-
   const handlePlaylistReorder = async (orderedPlaylists: Playlist[]) => {
     setPlaylists(orderedPlaylists);
     try {
@@ -642,51 +481,52 @@ export function Sidebar({ width }: { width: number }) {
     }
   };
 
-  const handlePlaylistReorderDrop = (targetIndex: number, event: DragEvent) => {
-    event.preventDefault();
-    event.stopPropagation();
+  const collectionReorder = usePointerListReorder({
+    enabled: collections.length > 1,
+    containerRef: collectionListRef,
+    onCommit: (fromIndex, toIndex, position) => {
+      const reordered = reorderItemsByIndex(
+        collections,
+        fromIndex,
+        toIndex,
+        position,
+      );
+      void handleCollectionReorder(reordered);
+    },
+  });
 
-    if (
-      playlistDragIndex == null &&
-      !isPlaylistReorderDrag(event.dataTransfer)
-    ) {
-      clearPlaylistReorderState();
-      return;
-    }
-
-    const fromIndex =
-      playlistDragIndex ?? getPlaylistReorderDragData(event.dataTransfer);
-    if (fromIndex == null || fromIndex === targetIndex) {
-      clearPlaylistReorderState();
-      return;
-    }
-
-    const row = event.currentTarget.getBoundingClientRect();
-    const position: "before" | "after" =
-      event.clientY < row.top + row.height / 2 ? "before" : "after";
-    const reordered = reorderItemsByIndex(
-      playlists,
-      fromIndex,
-      targetIndex,
-      position,
-    );
-    void handlePlaylistReorder(reordered);
-    clearPlaylistReorderState();
-  };
+  const playlistReorder = usePointerListReorder({
+    enabled: playlists.length > 1,
+    containerRef: playlistListRef,
+    onCommit: (fromIndex, toIndex, position) => {
+      const reordered = reorderItemsByIndex(
+        playlists,
+        fromIndex,
+        toIndex,
+        position,
+      );
+      void handlePlaylistReorder(reordered);
+    },
+  });
 
   const isTrackDragging = draggingTrackId != null;
 
-  const handlePlaylistDrop = async (playlistId: number, event: DragEvent) => {
-    event.preventDefault();
-    setDragOverPlaylistId(null);
-    setDraggingTrackId(null);
-
-    const trackId = draggingTrackId ?? getTrackDragData(event.dataTransfer);
-    if (trackId == null) return;
-
-    await api.addTrackToPlaylist(playlistId, trackId);
-    await refresh();
-  };
+  usePointerTrackDrop({
+    draggingTrackId,
+    setDraggingTrackId,
+    taglists,
+    setDragOverTaglistTarget: setDragOverTaglistTarget,
+    setDragOverPlaylistId,
+    onTagDrop: (trackId, droppedTaglist, entry) => {
+      void requestTagDrop(trackId, droppedTaglist, entry);
+    },
+    onPlaylistDrop: (trackId, playlistId) => {
+      void (async () => {
+        await api.addTrackToPlaylist(playlistId, trackId);
+        await refresh();
+      })();
+    },
+  });
 
   const requestDeletePlaylist = (event: MouseEvent, playlist: Playlist) => {
     event.stopPropagation();
@@ -817,16 +657,17 @@ export function Sidebar({ width }: { width: number }) {
           Stored Collections
         </div>
 
+        <div ref={collectionListRef}>
         {collections.map((collection, index) => {
           const active =
             typeof view === "object" &&
             "collectionId" in view &&
             view.collectionId === collection.id;
           const isEditing = editingCollectionId === collection.id;
-          const isDragging = collectionDragIndex === index;
+          const isDragging = collectionReorder.activeIndex === index;
           const dropIndicator =
-            collectionDropTarget?.index === index
-              ? collectionDropTarget.position
+            collectionReorder.dropTarget?.index === index
+              ? collectionReorder.dropTarget.position
               : null;
           const dropBarClass =
             dropIndicator === "before"
@@ -852,33 +693,7 @@ export function Sidebar({ width }: { width: number }) {
                   setView({ collectionId: collection.id });
                 }
               }}
-              onDragOver={(event) => {
-                if (
-                  collectionDragIndex == null &&
-                  !isCollectionReorderDrag(event.dataTransfer)
-                ) {
-                  return;
-                }
-                event.preventDefault();
-                event.stopPropagation();
-                event.dataTransfer.dropEffect = "move";
-                const row = event.currentTarget.getBoundingClientRect();
-                const position: "before" | "after" =
-                  event.clientY < row.top + row.height / 2 ? "before" : "after";
-                setCollectionDropTarget({ index, position });
-              }}
-              onDragLeave={(event) => {
-                if (
-                  collectionDragIndex == null &&
-                  !isCollectionReorderDrag(event.dataTransfer)
-                ) {
-                  return;
-                }
-                setCollectionDropTarget((current) =>
-                  current?.index === index ? null : current,
-                );
-              }}
-              onDrop={(event) => handleCollectionDrop(index, event)}
+              {...collectionReorder.getRowProps(index)}
               className={`group/collection mb-1 flex w-full cursor-pointer items-center rounded-md py-2 pr-3 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-muted pl-2 ${dropBarClass} ${
                 isDragging ? "opacity-40" : ""
               } ${
@@ -889,16 +704,10 @@ export function Sidebar({ width }: { width: number }) {
             >
               <button
                 type="button"
-                draggable
                 aria-label={`Reorder ${collection.name}`}
                 className="mr-1 flex shrink-0 cursor-grab items-center justify-center rounded p-0.5 text-muted hover:bg-surface-hover hover:text-foreground active:cursor-grabbing"
                 onClick={(event) => event.stopPropagation()}
-                onDragStart={(event) => {
-                  event.stopPropagation();
-                  setCollectionReorderDragData(event.dataTransfer, index);
-                  setCollectionDragIndex(index);
-                }}
-                onDragEnd={() => clearCollectionReorderState()}
+                {...collectionReorder.getGripProps(index)}
               >
                 <SublistGripIcon />
               </button>
@@ -956,6 +765,7 @@ export function Sidebar({ width }: { width: number }) {
             </div>
           );
         })}
+        </div>
 
         {creatingCollection ? (
           <div className="mt-2 space-y-2 px-2">
@@ -998,6 +808,7 @@ export function Sidebar({ width }: { width: number }) {
           {isTrackDragging ? "Drop on a project library playlist or project library taglist" : "Project library playlists"}
         </div>
 
+        <div ref={playlistListRef}>
         {playlists.map((playlist, index) => {
           const active =
             typeof view === "object" &&
@@ -1005,9 +816,11 @@ export function Sidebar({ width }: { width: number }) {
             view.playlistId === playlist.id;
           const isEditing = editingPlaylistId === playlist.id;
           const isDragOver = dragOverPlaylistId === playlist.id;
-          const isDragging = playlistDragIndex === index;
+          const isDragging = playlistReorder.activeIndex === index;
           const dropIndicator =
-            playlistDropTarget?.index === index ? playlistDropTarget.position : null;
+            playlistReorder.dropTarget?.index === index
+              ? playlistReorder.dropTarget.position
+              : null;
           const dropBarClass =
             dropIndicator === "before"
               ? "border-t-2 border-t-drop"
@@ -1036,57 +849,10 @@ export function Sidebar({ width }: { width: number }) {
               tabIndex={0}
               onClick={handleNavigate}
               onKeyDown={handleKeyDown}
-              onDragOver={(event) => {
-                if (
-                  playlistDragIndex != null ||
-                  isPlaylistReorderDrag(event.dataTransfer)
-                ) {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  event.dataTransfer.dropEffect = "move";
-                  const row = event.currentTarget.getBoundingClientRect();
-                  const position: "before" | "after" =
-                    event.clientY < row.top + row.height / 2 ? "before" : "after";
-                  setPlaylistDropTarget({ index, position });
-                  return;
-                }
-                if (!isTrackDragging) return;
-                event.preventDefault();
-                event.dataTransfer.dropEffect = "copy";
-                setDragOverPlaylistId(playlist.id);
-              }}
-              onDragEnter={(event) => {
-                if (
-                  playlistDragIndex != null ||
-                  isPlaylistReorderDrag(event.dataTransfer)
-                ) {
-                  return;
-                }
-                if (!isTrackDragging) return;
-                event.preventDefault();
-                setDragOverPlaylistId(playlist.id);
-              }}
-              onDragLeave={(event) => {
-                if (
-                  playlistDragIndex != null ||
-                  isPlaylistReorderDrag(event.dataTransfer)
-                ) {
-                  setPlaylistDropTarget((current) =>
-                    current?.index === index ? null : current,
-                  );
-                  return;
-                }
-                if (event.currentTarget.contains(event.relatedTarget as Node)) return;
-                setDragOverPlaylistId((current) =>
-                  current === playlist.id ? null : current,
-                );
-              }}
-              onDrop={(event) => {
-                if (isPlaylistReorderDrag(event.dataTransfer)) {
-                  handlePlaylistReorderDrop(index, event);
-                  return;
-                }
-                void handlePlaylistDrop(playlist.id, event);
+              {...playlistReorder.getRowProps(index)}
+              {...{
+                [TRACK_DROP_ATTR]: "playlist",
+                "data-playlist-id": String(playlist.id),
               }}
               className={`group/playlist mb-1 flex w-full cursor-pointer items-center rounded-md py-2 pr-3 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-muted pl-2 ${dropBarClass} ${
                 isDragging ? "opacity-40" : ""
@@ -1104,16 +870,10 @@ export function Sidebar({ width }: { width: number }) {
             >
               <button
                 type="button"
-                draggable
                 aria-label={`Reorder ${playlist.name}`}
                 className="mr-1 flex shrink-0 cursor-grab items-center justify-center rounded p-0.5 text-muted hover:bg-surface-hover hover:text-foreground active:cursor-grabbing"
                 onClick={(event) => event.stopPropagation()}
-                onDragStart={(event) => {
-                  event.stopPropagation();
-                  setPlaylistReorderDragData(event.dataTransfer, index);
-                  setPlaylistDragIndex(index);
-                }}
-                onDragEnd={() => clearPlaylistReorderState()}
+                {...playlistReorder.getGripProps(index)}
               >
                 <SublistGripIcon />
               </button>
@@ -1171,6 +931,7 @@ export function Sidebar({ width }: { width: number }) {
             </div>
           );
         })}
+        </div>
 
         {creating ? (
           <div className="mt-2 space-y-2 px-2">
@@ -1220,13 +981,7 @@ export function Sidebar({ width }: { width: number }) {
             view={view}
             setView={setView}
             isTrackDragging={isTrackDragging}
-            draggingTrackId={draggingTrackId}
             dragOverTarget={dragOverTaglistTarget}
-            setDragOverTarget={setDragOverTaglistTarget}
-            setDraggingTrackId={setDraggingTrackId}
-            onTagDrop={(trackId, droppedTaglist, entry) => {
-              void requestTagDrop(trackId, droppedTaglist, entry);
-            }}
             supportsTitleImport={applicationConfig.supportsTitleImport}
             titleImportDialog={applicationConfig.titleImportDialog}
           />

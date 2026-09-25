@@ -1,12 +1,17 @@
-import type { CSSProperties, DragEvent } from "react";
+import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
 
-import { setTrackDragData } from "../lib/dragDrop";
+import { usePointerTrackDragRow } from "../hooks/usePointerTrackDrag";
 import type { Playlist, Track } from "../lib/tauri";
 import { formatDuration } from "../lib/tauri";
 import { useAppearance } from "../hooks/useAppearance";
-import { usePlayerStore } from "../store/playerStore";
 import { TrackRowMenu } from "./TrackRowMenu";
 import { useTrackTooltip } from "./TrackTooltip";
+
+interface ReorderGripProps {
+  "data-reorder-grip"?: boolean;
+  onPointerDown?: (event: ReactPointerEvent) => void;
+  style?: { touchAction: "none" };
+}
 
 interface TrackTableRowProps {
   track: Track;
@@ -29,10 +34,8 @@ interface TrackTableRowProps {
   reorderable?: boolean;
   isDragging?: boolean;
   dropIndicator?: "before" | "after" | null;
-  onReorderDragStart?: (event: DragEvent<HTMLButtonElement>) => void;
-  onReorderDragEnd?: () => void;
-  onReorderDragOver?: (event: DragEvent<HTMLTableRowElement>) => void;
-  onReorderDrop?: (event: DragEvent<HTMLTableRowElement>) => void;
+  reorderGripProps?: ReorderGripProps;
+  reorderRowProps?: Record<string, string>;
 }
 
 function rowStyle(
@@ -92,13 +95,11 @@ export function TrackTableRow({
   reorderable = false,
   isDragging = false,
   dropIndicator = null,
-  onReorderDragStart,
-  onReorderDragEnd,
-  onReorderDragOver,
-  onReorderDrop,
+  reorderGripProps,
+  reorderRowProps,
 }: TrackTableRowProps) {
   const { settings } = useAppearance();
-  const setDraggingTrackId = usePlayerStore((state) => state.setDraggingTrackId);
+  const { onRowPointerDown } = usePointerTrackDragRow(track.id, draggable);
   const { onMouseEnter, onMouseLeave, tooltip } = useTrackTooltip(track.id);
   const style = rowStyle(
     isPlaying,
@@ -112,17 +113,8 @@ export function TrackTableRow({
     <>
       <tr
         id={`track-row-${track.id}`}
-        draggable={draggable}
-        onDragStart={(event) => {
-          if (!draggable) return;
-          setTrackDragData(event.dataTransfer, track.id);
-          setDraggingTrackId(track.id);
-        }}
-        onDragEnd={() => {
-          setDraggingTrackId(null);
-        }}
-        onDragOver={reorderable ? onReorderDragOver : undefined}
-        onDrop={reorderable ? onReorderDrop : undefined}
+        {...reorderRowProps}
+        onPointerDown={onRowPointerDown}
         onClick={() => {
           onCursorChange(track.id);
           onFocusList();
@@ -139,18 +131,10 @@ export function TrackTableRow({
           <td className="w-8 px-1 py-2 text-muted">
             <button
               type="button"
-              draggable
               aria-label={`Reorder ${track.title}`}
               className="flex cursor-grab items-center justify-center rounded p-1 hover:bg-surface-hover hover:text-foreground active:cursor-grabbing"
               onClick={(event) => event.stopPropagation()}
-              onDragStart={(event) => {
-                event.stopPropagation();
-                onReorderDragStart?.(event);
-              }}
-              onDragEnd={(event) => {
-                event.stopPropagation();
-                onReorderDragEnd?.();
-              }}
+              {...reorderGripProps}
             >
               <GripIcon />
             </button>
