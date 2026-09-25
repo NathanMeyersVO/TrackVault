@@ -5,8 +5,10 @@ import {
 } from "react";
 
 import {
-  pointerExceededDragThreshold,
-} from "../lib/pointerDrag";
+  lockDocumentTextSelection,
+  unlockDocumentTextSelection,
+} from "../lib/documentTextSelectionLock";
+import { pointerExceededDragThreshold } from "../lib/pointerDrag";
 import { usePlayerStore } from "../store/playerStore";
 
 type Session = {
@@ -20,11 +22,6 @@ type Session = {
 export function usePointerTrackDragRow(trackId: number, enabled: boolean) {
   const setDraggingTrackId = usePlayerStore((state) => state.setDraggingTrackId);
   const sessionRef = useRef<Session | null>(null);
-
-  const clearSession = useCallback(() => {
-    sessionRef.current = null;
-    setDraggingTrackId(null);
-  }, [setDraggingTrackId]);
 
   const onWindowPointerMove = useCallback(
     (event: PointerEvent) => {
@@ -56,12 +53,24 @@ export function usePointerTrackDragRow(trackId: number, enabled: boolean) {
       const session = sessionRef.current;
       if (!session || event.pointerId !== session.pointerId) return;
       sessionRef.current = null;
+      unlockDocumentTextSelection();
       window.removeEventListener("pointermove", onWindowPointerMove);
       window.removeEventListener("pointerup", onWindowPointerUp);
       window.removeEventListener("pointercancel", onWindowPointerUp);
     },
     [onWindowPointerMove],
   );
+
+  const clearSession = useCallback(() => {
+    if (sessionRef.current) {
+      unlockDocumentTextSelection();
+      window.removeEventListener("pointermove", onWindowPointerMove);
+      window.removeEventListener("pointerup", onWindowPointerUp);
+      window.removeEventListener("pointercancel", onWindowPointerUp);
+    }
+    sessionRef.current = null;
+    setDraggingTrackId(null);
+  }, [onWindowPointerMove, onWindowPointerUp, setDraggingTrackId]);
 
   const onRowPointerDown = useCallback(
     (event: ReactPointerEvent<HTMLTableRowElement>) => {
@@ -70,6 +79,7 @@ export function usePointerTrackDragRow(trackId: number, enabled: boolean) {
       if (target.closest("[data-reorder-grip]")) return;
       if (target.closest("button")) return;
 
+      lockDocumentTextSelection();
       sessionRef.current = {
         pointerId: event.pointerId,
         trackId,
@@ -86,3 +96,4 @@ export function usePointerTrackDragRow(trackId: number, enabled: boolean) {
 
   return { onRowPointerDown, clearSession };
 }
+

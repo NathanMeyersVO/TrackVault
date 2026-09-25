@@ -85,6 +85,7 @@ export function usePointerTrackDrop(options: {
     };
 
     const onPointerMove = (event: PointerEvent) => {
+      event.preventDefault();
       updateHover(event.clientX, event.clientY);
     };
 

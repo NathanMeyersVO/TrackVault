@@ -7,6 +7,10 @@ import {
 } from "react";
 
 import {
+  lockDocumentTextSelection,
+  unlockDocumentTextSelection,
+} from "../lib/documentTextSelectionLock";
+import {
   findReorderIndexFromPoint,
   findScrollableAncestor,
   pointerExceededDragThreshold,
@@ -112,6 +116,9 @@ export function usePointerListReorder(options: {
 
   const clearSession = useCallback(() => {
     stopAutoScroll();
+    if (sessionRef.current) {
+      unlockDocumentTextSelection();
+    }
     sessionRef.current = null;
     scrollElRef.current = null;
     setActiveIndex(null);
@@ -190,6 +197,7 @@ export function usePointerListReorder(options: {
         if (!enabled || event.button !== 0) return;
         event.preventDefault();
         event.stopPropagation();
+        lockDocumentTextSelection();
         sessionRef.current = {
           pointerId: event.pointerId,
           fromIndex: index,

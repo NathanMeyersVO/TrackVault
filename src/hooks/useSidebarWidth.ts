@@ -1,5 +1,10 @@
 import { useCallback, useState } from "react";
 
+import {
+  lockDocumentTextSelection,
+  unlockDocumentTextSelection,
+} from "../lib/documentTextSelectionLock";
+
 const STORAGE_KEY = "trackvault.sidebarWidth";
 const DEFAULT_WIDTH = 224;
 const MIN_WIDTH = 180;
@@ -36,7 +41,7 @@ export function useSidebarWidth() {
     const startX = clientX;
     const startWidth = width;
 
-    document.body.style.userSelect = "none";
+    lockDocumentTextSelection();
     document.body.style.cursor = "col-resize";
 
     const onMouseMove = (event: MouseEvent) => {
@@ -47,7 +52,7 @@ export function useSidebarWidth() {
     const onMouseUp = (event: MouseEvent) => {
       document.removeEventListener("mousemove", onMouseMove);
       document.removeEventListener("mouseup", onMouseUp);
-      document.body.style.removeProperty("user-select");
+      unlockDocumentTextSelection();
       document.body.style.removeProperty("cursor");
       storeWidth(clampWidth(startWidth + (event.clientX - startX)));
     };
