@@ -1003,8 +1003,12 @@ export function Sidebar({ width }: { width: number }) {
           />
         ))}
 
+        <div className="mt-4 border-t border-border pt-4">
+          <div className="mb-2 px-3 text-xs font-medium uppercase tracking-wide text-muted">
+            Create new taglist
+          </div>
         {creatingTaglist ? (
-          <div className="mt-2 space-y-2 px-2">
+          <div className="space-y-2 px-2">
             <input
               autoFocus
               value={newTaglistName}
@@ -1068,11 +1072,12 @@ export function Sidebar({ width }: { width: number }) {
         ) : (
           <button
             onClick={() => setCreatingTaglist(true)}
-            className="mt-1 w-full rounded-md px-3 py-2 text-left text-sm text-muted hover:bg-surface-hover/60 hover:text-foreground"
+            className="w-full rounded-md px-3 py-2 text-left text-sm text-muted hover:bg-surface-hover/60 hover:text-foreground"
           >
             + New project taglist
           </button>
         )}
+        </div>
       </nav>
 
       {pendingDeletePlaylist ? (
