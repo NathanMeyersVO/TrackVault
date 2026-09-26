@@ -7,12 +7,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/NathanMeyersVO/TrackVault.git"
+    "url": "https://github.com/NathanMeyersVO/IceTrackVault.git"
   },
   "bugs": {
-    "url": "https://github.com/NathanMeyersVO/TrackVault/issues"
+    "url": "https://github.com/NathanMeyersVO/IceTrackVault/issues"
   },
-  "homepage": "https://github.com/NathanMeyersVO/TrackVault#readme",
+  "homepage": "https://github.com/NathanMeyersVO/IceTrackVault#readme",
   "type": "module",
   "scripts": {
     "brand:sync": "node scripts/sync-brand-assets.mjs",

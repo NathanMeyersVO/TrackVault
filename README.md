@@ -35,8 +35,8 @@ rustc --version
 ## Getting started
 
 ```bash
-git clone https://github.com/NathanMeyersVO/TrackVault.git
-cd TrackVault
+git clone https://github.com/NathanMeyersVO/IceTrackVault.git
+cd IceTrackVault
 npm install
 npm run tauri dev
 ```
