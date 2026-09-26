@@ -434,7 +434,7 @@ fn path_collision_message(
 
                 return Ok(Some(format!(
 
-                    "A file named \"{}\" already exists in this folder (indexed as \"{}\"). Choose a differently named file or resolve the folder outside TrackVault.",
+                    "A file named \"{}\" already exists in this folder (indexed as \"{}\"). Choose a differently named file or resolve the folder outside IceTrackVault.",
 
                     target_path
 
@@ -454,7 +454,7 @@ fn path_collision_message(
 
         return Ok(Some(format!(
 
-            "A file named \"{}\" already exists in this folder. Choose a differently named file or resolve the folder outside TrackVault.",
+            "A file named \"{}\" already exists in this folder. Choose a differently named file or resolve the folder outside IceTrackVault.",
 
             target_path
 

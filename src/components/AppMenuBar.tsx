@@ -7,6 +7,7 @@ import { KeyboardShortcutsModal } from "./KeyboardShortcutsModal";
 import { MenuBarStatus, MenuDropdown, type MenuEntry } from "./MenuDropdown";
 import { useProjectMenuActions } from "../hooks/useProjectMenuActions";
 import { AppLogo } from "./AppLogo";
+import { APP_NAME } from "../lib/appInfo";
 
 export function AppMenuBar() {
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
@@ -102,7 +103,7 @@ export function AppMenuBar() {
   const fileItems: MenuEntry[] = [
     {
       label: "Exit",
-      title: "Quit TrackVault.",
+      title: `Quit ${APP_NAME}.`,
       onClick: () => void getCurrentWindow().close(),
     },
   ];
@@ -128,7 +129,7 @@ export function AppMenuBar() {
       onClick: () => setShortcutsOpen(true),
     },
     {
-      label: "About TrackVault…",
+      label: `About ${APP_NAME}…`,
       title: "Version and application information.",
       onClick: () => setAboutOpen(true),
     },

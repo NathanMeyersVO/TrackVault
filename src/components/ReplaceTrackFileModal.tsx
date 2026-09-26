@@ -312,7 +312,7 @@ export function ReplaceTrackFileModal({ track, onClose }: ReplaceTrackFileModalP
                   project.
                 </p>
                 <p>
-                  TrackVault will verify the file, then show a confirmation step before the
+                  IceTrackVault will verify the file, then show a confirmation step before the
                   project copy is updated.
                 </p>
               </div>

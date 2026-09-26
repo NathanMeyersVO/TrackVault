@@ -11,6 +11,6 @@ export function collectionArchiveFileName(collectionName: string): string {
 }
 
 export const COLLECTION_ARCHIVE_DIALOG_FILTER = {
-  name: "TrackVault stored collection (.tvcollection.zip)",
+  name: "IceTrackVault stored collection (.tvcollection.zip)",
   extensions: ["zip"],
 };

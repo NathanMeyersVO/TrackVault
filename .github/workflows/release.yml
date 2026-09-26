@@ -32,7 +32,7 @@ jobs:
         with:
           projectPath: src-tauri
           tagName: ${{ github.ref_name }}
-          releaseName: TrackVault ${{ github.ref_name }}
+          releaseName: IceTrackVault ${{ github.ref_name }}
           releaseBody: See the assets below to download and install this version on Windows.
           releaseDraft: true
           prerelease: false

@@ -180,7 +180,7 @@ export function PhoneUploadSettingsModal({ onClose, onSaved }: PhoneUploadSettin
           </label>
 
           <label className="block text-xs text-muted">
-            Local port (TrackVault listens on 127.0.0.1; default {DEFAULT_LOCAL_PORT})
+            Local port (IceTrackVault listens on 127.0.0.1; default {DEFAULT_LOCAL_PORT})
             <input
               type="number"
               min={1024}

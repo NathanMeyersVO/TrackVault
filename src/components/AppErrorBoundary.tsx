@@ -26,7 +26,7 @@ export class AppErrorBoundary extends Component<
     if (this.state.error) {
       return (
         <div className="flex h-full flex-col items-center justify-center gap-3 bg-background p-6 text-foreground">
-          <h1 className="text-lg font-semibold">TrackVault failed to start</h1>
+          <h1 className="text-lg font-semibold">IceTrackVault failed to start</h1>
           <p className="max-w-lg text-center text-sm text-muted">
             {this.state.error.message}
           </p>

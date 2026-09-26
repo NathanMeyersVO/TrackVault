@@ -11,6 +11,6 @@ export function projectArchiveFileName(projectName: string): string {
 }
 
 export const PROJECT_ARCHIVE_DIALOG_FILTER = {
-  name: "TrackVault project archive (.tvproject.zip)",
+  name: "IceTrackVault project archive (.tvproject.zip)",
   extensions: ["zip"],
 };

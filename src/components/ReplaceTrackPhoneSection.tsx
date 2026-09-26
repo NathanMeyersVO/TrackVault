@@ -127,7 +127,7 @@ export function ReplaceTrackPhoneSection({
     <div className="space-y-3 text-sm text-foreground">
       <p className="text-xs text-muted">
         Send a replacement audio file from your phone (any network). When the upload finishes,
-        TrackVault will verify the file and show the confirmation step.
+        IceTrackVault will verify the file and show the confirmation step.
       </p>
       {remoteLogPath && (
         <p className="text-xs text-muted">

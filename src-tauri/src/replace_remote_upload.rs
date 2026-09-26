@@ -867,7 +867,7 @@ async fn receive_upload(
             return html_message(
                 StatusCode::GONE,
                 "Upload session ended",
-                "Return to TrackVault and start upload again.",
+                "Return to IceTrackVault and start upload again.",
             );
         };
         if matches!(record.kind, SessionKind::Replace { .. })
@@ -883,14 +883,14 @@ async fn receive_upload(
             return html_message(
                 StatusCode::GONE,
                 "Upload session failed",
-                "Return to TrackVault and start upload again.",
+                "Return to IceTrackVault and start upload again.",
             );
         }
         if now_ms() > record.expires_at_ms {
             return html_message(
                 StatusCode::GONE,
                 "Session expired",
-                "Return to TrackVault and start upload again.",
+                "Return to IceTrackVault and start upload again.",
             );
         }
         (record.kind.clone(), record.temp_dir.clone())
@@ -1032,7 +1032,7 @@ async fn receive_upload(
                     return html_message(
                         StatusCode::GONE,
                         "Upload session ended",
-                        "Return to TrackVault and start upload again.",
+                        "Return to IceTrackVault and start upload again.",
                     );
                 };
                 record.phase = SessionPhase::Ready;
@@ -1061,10 +1061,10 @@ async fn receive_upload(
                 let session = ctx.session.lock();
                 match session.as_ref().map(|r| &r.page_context) {
                     Some(UploadPageContext::Replace { title, .. }) => format!(
-                        "You can close this page and confirm replacing “{}” in TrackVault.",
+                        "You can close this page and confirm replacing “{}” in IceTrackVault.",
                         html_escape(title)
                     ),
-                    _ => "You can close this page and confirm the replacement in TrackVault."
+                    _ => "You can close this page and confirm the replacement in IceTrackVault."
                         .to_string(),
                 }
             };
@@ -1147,7 +1147,7 @@ async fn finish_import_upload(
             return html_message(
                 StatusCode::GONE,
                 "Upload session ended",
-                "Return to TrackVault and start upload again.",
+                "Return to IceTrackVault and start upload again.",
             );
         };
         record.received_paths.extend(saved_paths);
@@ -1185,7 +1185,7 @@ async fn finish_import_upload(
     html_message(
         StatusCode::OK,
         "Upload received",
-        "TrackVault is adding these files—you can close this page.",
+        "IceTrackVault is adding these files—you can close this page.",
     )
 }
 
@@ -1232,7 +1232,7 @@ fn set_session_failed(session: &Arc<Mutex<Option<SessionRecord>>>, message: Stri
 
 fn user_facing_panic_message(raw: String) -> String {
     if raw.contains("CryptoProvider") || raw.contains("install_default") {
-        return "TLS setup failed (crypto provider). Restart TrackVault and try again.".to_string();
+        return "TLS setup failed (crypto provider). Restart IceTrackVault and try again.".to_string();
     }
     if raw.len() > 240 {
         format!("{}…", &raw[..240])
@@ -1445,12 +1445,12 @@ fn render_replace_upload_page(ctx: &UploadPageContext) -> String {
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>TrackVault — Replace file</title>
+  <title>IceTrackVault — Replace file</title>
   <style>{UPLOAD_PAGE_STYLES}</style>
 </head>
 <body>
   <h1>Upload replacement audio</h1>
-  <p>Select one audio file to send to TrackVault (maximum 500 MB).</p>
+  <p>Select one audio file to send to IceTrackVault (maximum 500 MB).</p>
   <div class="context">
     <p class="context-title">Replacing: {title}</p>
     {meta_line}
@@ -1474,26 +1474,26 @@ fn render_import_upload_page(ctx: &UploadPageContext, allow_multiple: bool) -> S
             folder_label,
             folder_path,
         } => (
-            "TrackVault — Upload to library",
+            "IceTrackVault — Upload to library",
             format!("Upload to library: {}", html_escape(folder_label)),
             format!("Folder: {}", html_escape(folder_path)),
         ),
         UploadPageContext::Collection { name } => (
-            "TrackVault — Upload to collection",
+            "IceTrackVault — Upload to collection",
             format!("Upload to collection: {}", html_escape(name)),
             String::new(),
         ),
         UploadPageContext::Replace { .. } => (
-            "TrackVault — Upload tracks",
-            "Upload to TrackVault".to_string(),
+            "IceTrackVault — Upload tracks",
+            "Upload to IceTrackVault".to_string(),
             String::new(),
         ),
     };
 
     let instructions = if allow_multiple {
-        "Select one or more audio files (maximum 500 MB each). TrackVault will import them automatically."
+        "Select one or more audio files (maximum 500 MB each). IceTrackVault will import them automatically."
     } else {
-        "Select one audio file to send to TrackVault (maximum 500 MB)."
+        "Select one audio file to send to IceTrackVault (maximum 500 MB)."
     };
 
     let multiple_attr = if allow_multiple { " multiple" } else { "" };
@@ -1513,7 +1513,7 @@ fn render_import_upload_page(ctx: &UploadPageContext, allow_multiple: bool) -> S
   <style>{UPLOAD_PAGE_STYLES}</style>
 </head>
 <body>
-  <h1>Upload audio to TrackVault</h1>
+  <h1>Upload audio to IceTrackVault</h1>
   <p>{instructions}</p>
   <div class="context">
     <p class="context-title">{context_heading}</p>

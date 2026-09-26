@@ -127,7 +127,7 @@ fn public_probe_hint(error: &str) -> String {
         " Check that Public origin matches the tunnel hostname in Cloudflare and that this PC can reach the internet."
             .to_string()
     } else if lower.contains("404") {
-        " The tunnel connected but the path did not reach TrackVault — verify hostname and Service URL.".to_string()
+        " The tunnel connected but the path did not reach IceTrackVault — verify hostname and Service URL.".to_string()
     } else {
         String::new()
     }

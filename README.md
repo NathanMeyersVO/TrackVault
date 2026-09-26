@@ -1,4 +1,4 @@
-# TrackVault
+# IceTrackVault
 
 A cross-platform desktop music player (Windows and macOS) with an iTunes-like layout. Manage **projects** (each stores audio under a `library/` folder in app data), browse **project tracks**, manage project playlists and taglists, apply **EMS download** updates (for US Figure Skating EMS projects), and play audio with a waveform view powered by [wavesurfer.js](https://wavesurfer.xyz/).
 
@@ -83,7 +83,7 @@ Use tag names like `v0.9.0` that match the app version `0.9.0`.
 ## Usage
 
 1. Open **Project → Projects…** and create a project (name + application), or **Import EMS download…** from a folder of EMS downloads (ZIP archives and/or event schedule spreadsheet).
-2. Open a project. TrackVault scans project audio for MP3, FLAC, WAV, OGG, and M4A files and reads tags. Playlists and taglists load from `library/trackvault.json` (kept up to date automatically).
+2. Open a project. IceTrackVault scans project audio for MP3, FLAC, WAV, OGG, and M4A files and reads tags. Playlists and taglists load from `library/trackvault.json` (kept up to date automatically).
 3. Double-click a track (or select and press play) to start playback.
 4. Use **Project → Apply EMS Download…** to stage a folder of EMS downloads, preview changes, and apply updates to the open project.
 5. **Project → Export Project…** saves the open project to a `.tvproject.zip` archive. In the Projects hub, **Import from archive** (file picker or drop zone) restores a copy as a **new** project (new ID).

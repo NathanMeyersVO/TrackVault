@@ -34,7 +34,7 @@ const trackvault: AppearanceSettings = {
 export const COLOR_SCHEMES: ColorScheme[] = [
   {
     id: "trackvault",
-    name: "TrackVault",
+    name: "IceTrackVault",
     description: "Classic blue accent on dark gray",
     mode: "dark",
     colors: trackvault,
